@@ -19,10 +19,21 @@ const Index = () => {
   const [motionDetectionEnabled, setMotionDetectionEnabled] = useState(false);
   const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
+  const [notificationEmail, setNotificationEmail] = useState('');
   const [storageType, setStorageType] = useState<'cloud' | 'local'>('cloud');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
 
   console.log('Index component - user:', user?.email, 'loading:', loading);
+
+  // Load saved email from localStorage on component mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('cameraNotificationEmail');
+    if (savedEmail) {
+      setNotificationEmail(savedEmail);
+    } else if (user?.email) {
+      setNotificationEmail(user.email);
+    }
+  }, [user]);
 
   useEffect(() => {
     console.log('Index useEffect - user:', user?.email, 'loading:', loading);
@@ -53,6 +64,10 @@ const Index = () => {
 
   const toggleEmailNotifications = () => {
     setEmailEnabled(!emailEnabled);
+  };
+
+  const handleEmailChange = (email: string) => {
+    setNotificationEmail(email);
   };
 
   // Show loading state while checking auth
@@ -104,7 +119,7 @@ const Index = () => {
               motionDetectionEnabled={motionDetectionEnabled}
               onMotionDetected={handleMotionDetected}
               emailNotificationsEnabled={emailEnabled}
-              notificationEmail={user?.email || ""}
+              notificationEmail={notificationEmail}
             />
           </div>
           
@@ -131,7 +146,9 @@ const Index = () => {
             
             <NotificationSettings 
               emailEnabled={emailEnabled} 
-              onToggleEmail={toggleEmailNotifications} 
+              onToggleEmail={toggleEmailNotifications}
+              onEmailChange={handleEmailChange}
+              currentEmail={notificationEmail}
             />
           </div>
           

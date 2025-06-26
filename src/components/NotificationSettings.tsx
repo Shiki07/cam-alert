@@ -5,17 +5,36 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useMotionNotification } from "@/hooks/useMotionNotification";
 import { Bell } from "lucide-react";
 
 interface NotificationSettingsProps {
   emailEnabled: boolean;
   onToggleEmail: () => void;
+  onEmailChange?: (email: string) => void;
+  currentEmail?: string;
 }
 
-export const NotificationSettings = ({ emailEnabled, onToggleEmail }: NotificationSettingsProps) => {
-  const [email, setEmail] = useState("");
+export const NotificationSettings = ({ 
+  emailEnabled, 
+  onToggleEmail,
+  onEmailChange,
+  currentEmail = ""
+}: NotificationSettingsProps) => {
+  const [email, setEmail] = useState(currentEmail);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+
+  const motionNotification = useMotionNotification({
+    email: email,
+    enabled: emailEnabled,
+    includeAttachment: true
+  });
+
+  const handleEmailChange = (newEmail: string) => {
+    setEmail(newEmail);
+    onEmailChange?.(newEmail);
+  };
 
   const handleSaveSettings = async () => {
     if (!email) {
@@ -29,8 +48,8 @@ export const NotificationSettings = ({ emailEnabled, onToggleEmail }: Notificati
 
     setIsLoading(true);
     
-    // Simulate saving settings
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Save to localStorage for persistence
+    localStorage.setItem('cameraNotificationEmail', email);
     
     toast({
       title: "Settings Saved",
@@ -50,15 +69,32 @@ export const NotificationSettings = ({ emailEnabled, onToggleEmail }: Notificati
       return;
     }
 
+    if (!emailEnabled) {
+      toast({
+        title: "Error",
+        description: "Please enable email notifications first",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     
-    // Simulate sending test email
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    toast({
-      title: "Test Email Sent",
-      description: `Test notification sent to ${email}`,
-    });
+    try {
+      // Send a test motion alert
+      await motionNotification.sendMotionAlert(undefined, 85.5);
+      
+      toast({
+        title: "Test Email Sent",
+        description: `Test motion alert sent to ${email}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Test Failed",
+        description: "Failed to send test email. Please check your settings.",
+        variant: "destructive",
+      });
+    }
     
     setIsLoading(false);
   };
@@ -93,7 +129,7 @@ export const NotificationSettings = ({ emailEnabled, onToggleEmail }: Notificati
             type="email"
             placeholder="your.email@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => handleEmailChange(e.target.value)}
             className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
             disabled={!emailEnabled}
           />
@@ -137,10 +173,10 @@ export const NotificationSettings = ({ emailEnabled, onToggleEmail }: Notificati
           </Button>
         </div>
 
-        {/* Note about backend */}
-        <div className="bg-yellow-600 bg-opacity-20 border border-yellow-600 rounded p-3 mt-4">
-          <p className="text-yellow-200 text-sm">
-            📧 To enable actual email sending, connect this project to Supabase for backend functionality.
+        {/* Status Display */}
+        <div className="bg-green-600 bg-opacity-20 border border-green-600 rounded p-3 mt-4">
+          <p className="text-green-200 text-sm">
+            ✅ Email notifications are ready! Motion alerts will be sent with screenshots when motion is detected.
           </p>
         </div>
       </div>
