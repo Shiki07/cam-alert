@@ -1,9 +1,9 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, Video, Square, Play } from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
 import { useMotionDetection } from "@/hooks/useMotionDetection";
+import { useMotionNotification } from "@/hooks/useMotionNotification";
 
 interface LiveFeedProps {
   isRecording: boolean;
@@ -12,6 +12,8 @@ interface LiveFeedProps {
   quality: 'high' | 'medium' | 'low';
   motionDetectionEnabled: boolean;
   onMotionDetected: (detected: boolean) => void;
+  emailNotificationsEnabled?: boolean;
+  notificationEmail?: string;
 }
 
 export const LiveFeed = ({ 
@@ -20,7 +22,9 @@ export const LiveFeed = ({
   storageType, 
   quality,
   motionDetectionEnabled,
-  onMotionDetected
+  onMotionDetected,
+  emailNotificationsEnabled = false,
+  notificationEmail = ""
 }: LiveFeedProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,12 +34,24 @@ export const LiveFeed = ({
   
   const recording = useRecording();
 
+  const motionNotification = useMotionNotification({
+    email: notificationEmail,
+    enabled: emailNotificationsEnabled,
+    includeAttachment: true
+  });
+
   const motionDetection = useMotionDetection({
     sensitivity: 70, // Medium sensitivity
     threshold: 0.5, // 0.5% of pixels changed
     enabled: motionDetectionEnabled && isConnected,
-    onMotionDetected: () => {
+    onMotionDetected: (motionLevel) => {
       onMotionDetected(true);
+      
+      // Send email notification with screenshot
+      if (videoRef.current) {
+        motionNotification.sendMotionAlert(videoRef.current, motionLevel);
+      }
+      
       // Auto-start recording on motion detection
       if (!recording.isRecording && streamRef.current && videoRef.current) {
         recording.startRecording(streamRef.current, {
@@ -173,6 +189,19 @@ export const LiveFeed = ({
               <span className="text-xs text-gray-400">
                 {motionDetection.motionDetected ? 'Motion' : 'Watching'}
               </span>
+              {motionDetection.currentMotionLevel > 0 && (
+                <span className="text-xs text-orange-400">
+                  {motionDetection.currentMotionLevel.toFixed(1)}%
+                </span>
+              )}
+            </div>
+          )}
+          
+          {/* Email Notification Status */}
+          {emailNotificationsEnabled && notificationEmail && (
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+              <span className="text-xs text-gray-400">Email alerts</span>
             </div>
           )}
           
@@ -308,6 +337,12 @@ export const LiveFeed = ({
             <span className="text-sm text-gray-300">Motion Detection:</span>
             <span className="text-sm text-gray-400">
               {motionDetectionEnabled ? 'Enabled' : 'Disabled'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-gray-300">Email Alerts:</span>
+            <span className="text-sm text-gray-400">
+              {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
           <div className="flex justify-between items-center">

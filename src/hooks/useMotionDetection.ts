@@ -6,7 +6,7 @@ export interface MotionDetectionConfig {
   sensitivity: number; // 0-100
   threshold: number; // minimum pixels changed to trigger motion
   enabled: boolean;
-  onMotionDetected?: () => void;
+  onMotionDetected?: (motionLevel: number) => void;
   onMotionCleared?: () => void;
 }
 
@@ -14,6 +14,7 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
   const [isDetecting, setIsDetecting] = useState(false);
   const [motionDetected, setMotionDetected] = useState(false);
   const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
+  const [currentMotionLevel, setCurrentMotionLevel] = useState(0);
   
   const previousFrameRef = useRef<ImageData | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -80,6 +81,8 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
       const changedPixels = calculateMotion(currentFrame, previousFrameRef.current);
       const motionLevel = (changedPixels / (canvas.width * canvas.height)) * 100;
       
+      setCurrentMotionLevel(motionLevel);
+      
       console.log('Motion level:', motionLevel.toFixed(2) + '%', 'Threshold:', config.threshold);
       
       if (motionLevel > config.threshold) {
@@ -87,7 +90,7 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
           console.log('Motion detected!');
           setMotionDetected(true);
           setLastMotionTime(new Date());
-          config.onMotionDetected?.();
+          config.onMotionDetected?.(motionLevel);
           
           toast({
             title: "Motion Detected!",
@@ -105,6 +108,7 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
         motionTimeoutRef.current = setTimeout(() => {
           console.log('Motion cleared');
           setMotionDetected(false);
+          setCurrentMotionLevel(0);
           config.onMotionCleared?.();
         }, 3000);
       }
@@ -129,6 +133,7 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
     console.log('Stopping motion detection');
     setIsDetecting(false);
     setMotionDetected(false);
+    setCurrentMotionLevel(0);
     
     if (detectionIntervalRef.current) {
       clearInterval(detectionIntervalRef.current);
@@ -154,6 +159,7 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
     isDetecting,
     motionDetected,
     lastMotionTime,
+    currentMotionLevel,
     startDetection,
     stopDetection
   };
