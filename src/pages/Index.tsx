@@ -23,6 +23,10 @@ const Index = () => {
     startHour,
     endHour,
     motionEventsToday,
+    detectionZonesEnabled,
+    cooldownPeriod,
+    minMotionDuration,
+    noiseReduction,
     
     // Setters
     setIsRecording,
@@ -38,7 +42,11 @@ const Index = () => {
     toggleMotionDetection,
     toggleEmailNotifications,
     handleEmailChange,
-    handleScheduleChange
+    handleScheduleChange,
+    toggleDetectionZones,
+    handleCooldownChange,
+    handleMinDurationChange,
+    toggleNoiseReduction
   } = useCameraSettings();
 
   // Initialize email settings
@@ -77,6 +85,14 @@ const Index = () => {
             onScheduleChange={handleScheduleChange}
             onToggleEmail={toggleEmailNotifications}
             onEmailChange={handleEmailChange}
+            detectionZonesEnabled={detectionZonesEnabled}
+            onDetectionZonesToggle={toggleDetectionZones}
+            cooldownPeriod={cooldownPeriod}
+            onCooldownChange={handleCooldownChange}
+            minMotionDuration={minMotionDuration}
+            onMinDurationChange={handleMinDurationChange}
+            noiseReduction={noiseReduction}
+            onNoiseReductionToggle={toggleNoiseReduction}
           />
           
           {/* Recording History - Full width */}
