@@ -8,6 +8,7 @@ export interface RecordingOptions {
   storageType: 'cloud' | 'local';
   fileType: 'video' | 'image';
   quality?: 'high' | 'medium' | 'low';
+  motionDetected?: boolean;
 }
 
 export const useRecording = () => {
@@ -46,7 +47,7 @@ export const useRecording = () => {
       };
       
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start(1000); // Collect data every second
+      mediaRecorder.start(1000);
       setIsRecording(true);
       
       toast({
@@ -131,34 +132,46 @@ export const useRecording = () => {
   };
 
   const handleVideoSave = async (blob: Blob, options: RecordingOptions) => {
-    const filename = `recording_${Date.now()}.webm`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `recording_${timestamp}.webm`;
     
     if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'video');
+      await saveToCloud(blob, filename, 'video', options.motionDetected);
     } else {
-      await saveToLocal(blob, filename, 'video');
+      await saveToLocal(blob, filename, 'video', options.motionDetected);
     }
   };
 
   const handleImageSave = async (blob: Blob, options: RecordingOptions) => {
-    const filename = `snapshot_${Date.now()}.jpg`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `snapshot_${timestamp}.jpg`;
     
     if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'image');
+      await saveToCloud(blob, filename, 'image', options.motionDetected);
     } else {
-      await saveToLocal(blob, filename, 'image');
+      await saveToLocal(blob, filename, 'image', options.motionDetected);
     }
   };
 
-  const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image') => {
+  const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean) => {
     try {
       const filePath = `${user!.id}/${filename}`;
       
+      console.log('Uploading to cloud:', { filePath, size: blob.size, type: blob.type });
+      
       const { error: uploadError } = await supabase.storage
         .from('recordings')
-        .upload(filePath, blob);
+        .upload(filePath, blob, {
+          contentType: fileType === 'video' ? 'video/webm' : 'image/jpeg',
+          upsert: false
+        });
       
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
+      
+      console.log('Upload successful, saving metadata to database');
       
       const { error: dbError } = await supabase
         .from('recordings')
@@ -168,24 +181,32 @@ export const useRecording = () => {
           file_type: fileType,
           storage_type: 'cloud',
           file_path: filePath,
-          file_size: blob.size
+          file_size: blob.size,
+          motion_detected: motionDetected || false
         });
       
-      if (dbError) throw dbError;
+      if (dbError) {
+        console.error('Database error:', dbError);
+        throw dbError;
+      }
       
       toast({
         title: "Saved to cloud",
-        description: `${fileType} saved successfully`
+        description: `${fileType} saved successfully to Supabase Storage`
       });
     } catch (error) {
       console.error('Error saving to cloud:', error);
+      toast({
+        title: "Cloud save failed",
+        description: error instanceof Error ? error.message : "Could not save to cloud storage",
+        variant: "destructive"
+      });
       throw error;
     }
   };
 
-  const saveToLocal = async (blob: Blob, filename: string, fileType: 'video' | 'image') => {
+  const saveToLocal = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean) => {
     try {
-      // For local storage, we'll download the file and save metadata
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -195,7 +216,6 @@ export const useRecording = () => {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       
-      // Save metadata to database
       const { error } = await supabase
         .from('recordings')
         .insert({
@@ -203,8 +223,9 @@ export const useRecording = () => {
           filename,
           file_type: fileType,
           storage_type: 'local',
-          file_path: `/sdcard/recordings/${filename}`, // Raspberry Pi SD card path
-          file_size: blob.size
+          file_path: `/downloads/${filename}`,
+          file_size: blob.size,
+          motion_detected: motionDetected || false
         });
       
       if (error) throw error;

@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, Video, Square, Play } from "lucide-react";
@@ -58,6 +59,7 @@ export const LiveFeed = ({
     startHour,
     endHour,
     onMotionDetected: (motionLevel) => {
+      console.log('Motion detected with level:', motionLevel);
       onMotionDetected(true);
       
       if (videoRef.current) {
@@ -65,10 +67,12 @@ export const LiveFeed = ({
       }
       
       if (!recording.isRecording && streamRef.current && videoRef.current) {
+        console.log('Auto-starting recording due to motion detection');
         recording.startRecording(streamRef.current, {
           storageType,
           fileType: 'video',
-          quality
+          quality,
+          motionDetected: true
         });
         onRecordingChange(true);
       }
@@ -148,7 +152,8 @@ export const LiveFeed = ({
       recording.startRecording(streamRef.current, {
         storageType,
         fileType: 'video',
-        quality
+        quality,
+        motionDetected: false
       });
       onRecordingChange(true);
     }
@@ -160,7 +165,8 @@ export const LiveFeed = ({
     recording.takeSnapshot(videoRef.current, {
       storageType,
       fileType: 'image',
-      quality
+      quality,
+      motionDetected: motionDetection.motionDetected
     });
   };
 
@@ -205,6 +211,16 @@ export const LiveFeed = ({
             </div>
           )}
           
+          {/* Storage Type Indicator */}
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${
+              storageType === 'cloud' ? 'bg-blue-500' : 'bg-green-500'
+            }`}></span>
+            <span className="text-xs text-gray-400">
+              {storageType === 'cloud' ? 'Cloud' : 'Local'}
+            </span>
+          </div>
+          
           {/* Email Notification Status */}
           {emailNotificationsEnabled && notificationEmail && (
             <div className="flex items-center gap-2">
@@ -239,7 +255,7 @@ export const LiveFeed = ({
             {(recording.isRecording || isRecording) && (
               <div className="absolute top-4 left-4 flex items-center gap-2 bg-red-600 text-white px-3 py-1 rounded-full text-sm">
                 <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-                REC
+                REC • {storageType.toUpperCase()}
               </div>
             )}
             
@@ -259,8 +275,8 @@ export const LiveFeed = ({
             
             {/* Processing Indicator */}
             {recording.isProcessing && (
-              <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
-                Processing...
+              <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm animate-pulse">
+                {storageType === 'cloud' ? 'Uploading to Cloud...' : 'Processing...'}
               </div>
             )}
             
@@ -276,6 +292,7 @@ export const LiveFeed = ({
                 size="sm"
                 disabled={recording.isProcessing}
                 className={recording.isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}
+                title={recording.isRecording ? 'Stop recording' : 'Start recording'}
               >
                 {recording.isRecording ? <Square className="w-4 h-4" /> : <Video className="w-4 h-4" />}
               </Button>
@@ -285,6 +302,7 @@ export const LiveFeed = ({
                 size="sm"
                 disabled={recording.isProcessing}
                 className="bg-green-600 hover:bg-green-700"
+                title="Take snapshot"
               >
                 <Camera className="w-4 h-4" />
               </Button>
@@ -297,6 +315,7 @@ export const LiveFeed = ({
                 size="sm"
                 variant="outline"
                 className="bg-gray-800 bg-opacity-80 border-gray-600 hover:bg-gray-700"
+                title="Disconnect camera"
               >
                 <CameraOff className="w-4 h-4" />
               </Button>
@@ -336,41 +355,47 @@ export const LiveFeed = ({
       {/* Camera Info */}
       {isConnected && (
         <div className="mt-4 bg-gray-700 rounded p-3">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-300">Resolution:</span>
-            <span className="text-sm text-gray-400">
-              {quality === 'high' ? '1080p' : quality === 'medium' ? '720p' : '480p'}
-            </span>
-          </div>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-300">Storage:</span>
-            <span className="text-sm text-gray-400">
-              {storageType === 'cloud' ? 'Supabase Cloud' : 'SD Card'}
-            </span>
-          </div>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-300">Motion Detection:</span>
-            <span className="text-sm text-gray-400">
-              {motionDetectionEnabled ? `${motionSensitivity}% sensitivity` : 'Disabled'}
-            </span>
-          </div>
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-gray-300">Email Alerts:</span>
-            <span className="text-sm text-gray-400">
-              {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
-            </span>
-          </div>
-          {scheduleEnabled && (
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm text-gray-300">Schedule:</span>
-              <span className="text-sm text-gray-400">
-                {String(startHour).padStart(2, '0')}:00 - {String(endHour).padStart(2, '0')}:00
-              </span>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-300">Resolution:</span>
+                <span className="text-gray-400">
+                  {quality === 'high' ? '1080p' : quality === 'medium' ? '720p' : '480p'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-300">Storage:</span>
+                <span className="text-gray-400">
+                  {storageType === 'cloud' ? 'Supabase Cloud' : 'Local Download'}
+                </span>
+              </div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-300">Motion Detection:</span>
+                <span className="text-gray-400">
+                  {motionDetectionEnabled ? `${motionSensitivity}% sensitivity` : 'Disabled'}
+                </span>
+              </div>
             </div>
-          )}
-          <div className="flex justify-between items-center">
-            <span className="text-sm text-gray-300">Source:</span>
-            <span className="text-sm text-gray-400">Webcam</span>
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-gray-300">Email Alerts:</span>
+                <span className="text-gray-400">
+                  {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
+                </span>
+              </div>
+              {scheduleEnabled && (
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-gray-300">Schedule:</span>
+                  <span className="text-gray-400">
+                    {String(startHour).padStart(2, '0')}:00 - {String(endHour).padStart(2, '0')}:00
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-gray-300">Source:</span>
+                <span className="text-gray-400">Webcam</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
