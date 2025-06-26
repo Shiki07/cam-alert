@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,8 +17,12 @@ const Index = () => {
   const [motionDetected, setMotionDetected] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
 
+  console.log('Index component - user:', user?.email, 'loading:', loading);
+
   useEffect(() => {
+    console.log('Index useEffect - user:', user?.email, 'loading:', loading);
     if (!loading && !user) {
+      console.log('Redirecting to auth page');
       navigate("/auth");
     }
   }, [user, loading, navigate]);
@@ -36,15 +41,17 @@ const Index = () => {
 
   // Show loading state while checking auth
   if (loading) {
+    console.log('Showing loading state');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-white">Loading...</div>
+        <div className="text-white text-xl">Loading your camera system...</div>
       </div>
     );
   }
 
   // Show auth prompt if not authenticated
   if (!user) {
+    console.log('Showing auth prompt');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="text-center">
@@ -62,6 +69,8 @@ const Index = () => {
       </div>
     );
   }
+
+  console.log('Showing main dashboard for user:', user.email);
 
   return (
     <div className="min-h-screen bg-gray-900">
