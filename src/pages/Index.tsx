@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +7,8 @@ import { MotionDetection } from "@/components/MotionDetection";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { StorageSettings } from "@/components/StorageSettings";
 import { RecordingHistory } from "@/components/RecordingHistory";
+import { MotionSettings } from "@/components/MotionSettings";
+import { SystemStatus } from "@/components/SystemStatus";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Camera } from "lucide-react";
@@ -23,6 +24,14 @@ const Index = () => {
   const [notificationEmail, setNotificationEmail] = useState('');
   const [storageType, setStorageType] = useState<'cloud' | 'local'>('cloud');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
+  
+  // Enhanced motion detection settings
+  const [motionSensitivity, setMotionSensitivity] = useState(70);
+  const [motionThreshold, setMotionThreshold] = useState(0.5);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [startHour, setStartHour] = useState(22);
+  const [endHour, setEndHour] = useState(6);
+  const [motionEventsToday, setMotionEventsToday] = useState(0);
 
   console.log('Index component - user:', user?.email, 'loading:', loading);
 
@@ -70,13 +79,13 @@ const Index = () => {
     setMotionDetected(detected);
     if (detected) {
       setLastMotionTime(new Date());
+      setMotionEventsToday(prev => prev + 1);
     }
   };
 
   const toggleMotionDetection = () => {
     setMotionDetectionEnabled(!motionDetectionEnabled);
     if (!motionDetectionEnabled) {
-      // Reset motion state when enabling
       setMotionDetected(false);
     }
   };
@@ -87,6 +96,11 @@ const Index = () => {
 
   const handleEmailChange = (email: string) => {
     setNotificationEmail(email);
+  };
+
+  const handleScheduleChange = (start: number, end: number) => {
+    setStartHour(start);
+    setEndHour(end);
   };
 
   // Show loading state while checking auth (but not in restricted environments)
@@ -139,11 +153,24 @@ const Index = () => {
               onMotionDetected={handleMotionDetected}
               emailNotificationsEnabled={emailEnabled}
               notificationEmail={notificationEmail}
+              motionSensitivity={motionSensitivity}
+              motionThreshold={motionThreshold}
+              scheduleEnabled={scheduleEnabled}
+              startHour={startHour}
+              endHour={endHour}
             />
           </div>
           
           {/* Controls Column */}
           <div className="lg:col-span-1 space-y-6">
+            <SystemStatus
+              isConnected={true}
+              motionEventsToday={motionEventsToday}
+              storageUsed={256}
+              storageTotal={1024}
+              lastMotionTime={lastMotionTime}
+            />
+            
             <StorageSettings
               storageType={storageType}
               onStorageTypeChange={setStorageType}
@@ -161,6 +188,18 @@ const Index = () => {
               motionEnabled={motionDetectionEnabled}
               onToggleMotionDetection={toggleMotionDetection}
               lastMotionTime={lastMotionTime}
+            />
+            
+            <MotionSettings
+              sensitivity={motionSensitivity}
+              onSensitivityChange={setMotionSensitivity}
+              threshold={motionThreshold}
+              onThresholdChange={setMotionThreshold}
+              scheduleEnabled={scheduleEnabled}
+              onScheduleToggle={() => setScheduleEnabled(!scheduleEnabled)}
+              startHour={startHour}
+              endHour={endHour}
+              onScheduleChange={handleScheduleChange}
             />
             
             <NotificationSettings 

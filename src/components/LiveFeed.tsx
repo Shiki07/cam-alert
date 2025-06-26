@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, Video, Square, Play } from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
-import { useMotionDetection } from "@/hooks/useMotionDetection";
+import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
 import { useMotionNotification } from "@/hooks/useMotionNotification";
 
 interface LiveFeedProps {
@@ -14,6 +14,11 @@ interface LiveFeedProps {
   onMotionDetected: (detected: boolean) => void;
   emailNotificationsEnabled?: boolean;
   notificationEmail?: string;
+  motionSensitivity: number;
+  motionThreshold: number;
+  scheduleEnabled: boolean;
+  startHour: number;
+  endHour: number;
 }
 
 export const LiveFeed = ({ 
@@ -24,7 +29,12 @@ export const LiveFeed = ({
   motionDetectionEnabled,
   onMotionDetected,
   emailNotificationsEnabled = false,
-  notificationEmail = ""
+  notificationEmail = "",
+  motionSensitivity,
+  motionThreshold,
+  scheduleEnabled,
+  startHour,
+  endHour
 }: LiveFeedProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,19 +50,20 @@ export const LiveFeed = ({
     includeAttachment: true
   });
 
-  const motionDetection = useMotionDetection({
-    sensitivity: 70, // Medium sensitivity
-    threshold: 0.5, // 0.5% of pixels changed
+  const motionDetection = useEnhancedMotionDetection({
+    sensitivity: motionSensitivity,
+    threshold: motionThreshold,
     enabled: motionDetectionEnabled && isConnected,
+    scheduleEnabled,
+    startHour,
+    endHour,
     onMotionDetected: (motionLevel) => {
       onMotionDetected(true);
       
-      // Send email notification with screenshot
       if (videoRef.current) {
         motionNotification.sendMotionAlert(videoRef.current, motionLevel);
       }
       
-      // Auto-start recording on motion detection
       if (!recording.isRecording && streamRef.current && videoRef.current) {
         recording.startRecording(streamRef.current, {
           storageType,
@@ -95,7 +106,6 @@ export const LiveFeed = ({
         streamRef.current = stream;
         setIsConnected(true);
         
-        // Start motion detection once video is loaded
         videoRef.current.onloadedmetadata = () => {
           if (motionDetectionEnabled && videoRef.current) {
             motionDetection.startDetection(videoRef.current);
@@ -154,7 +164,6 @@ export const LiveFeed = ({
     });
   };
 
-  // Update motion detection when settings change
   useEffect(() => {
     if (isConnected && videoRef.current) {
       if (motionDetectionEnabled) {
@@ -163,10 +172,9 @@ export const LiveFeed = ({
         motionDetection.stopDetection();
       }
     }
-  }, [motionDetectionEnabled, isConnected]);
+  }, [motionDetectionEnabled, isConnected, motionSensitivity, motionThreshold, scheduleEnabled, startHour, endHour]);
 
   useEffect(() => {
-    // Cleanup on unmount
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
@@ -187,7 +195,7 @@ export const LiveFeed = ({
                 motionDetection.motionDetected ? 'bg-red-500 animate-pulse' : 'bg-gray-500'
               }`}></span>
               <span className="text-xs text-gray-400">
-                {motionDetection.motionDetected ? 'Motion' : 'Watching'}
+                {motionDetection.motionDetected ? 'Motion' : scheduleEnabled && !motionDetection.isWithinSchedule ? 'Scheduled' : 'Watching'}
               </span>
               {motionDetection.currentMotionLevel > 0 && (
                 <span className="text-xs text-orange-400">
@@ -239,6 +247,13 @@ export const LiveFeed = ({
             {motionDetection.motionDetected && (
               <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-orange-600 text-white px-3 py-1 rounded-full text-sm animate-pulse">
                 MOTION DETECTED
+              </div>
+            )}
+            
+            {/* Schedule Status */}
+            {scheduleEnabled && !motionDetection.isWithinSchedule && (
+              <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+                SCHEDULED MODE
               </div>
             )}
             
@@ -336,7 +351,7 @@ export const LiveFeed = ({
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-gray-300">Motion Detection:</span>
             <span className="text-sm text-gray-400">
-              {motionDetectionEnabled ? 'Enabled' : 'Disabled'}
+              {motionDetectionEnabled ? `${motionSensitivity}% sensitivity` : 'Disabled'}
             </span>
           </div>
           <div className="flex justify-between items-center mb-2">
@@ -345,6 +360,14 @@ export const LiveFeed = ({
               {emailNotificationsEnabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
+          {scheduleEnabled && (
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-gray-300">Schedule:</span>
+              <span className="text-sm text-gray-400">
+                {String(startHour).padStart(2, '0')}:00 - {String(endHour).padStart(2, '0')}:00
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-300">Source:</span>
             <span className="text-sm text-gray-400">Webcam</span>
