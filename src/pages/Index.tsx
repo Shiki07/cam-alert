@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -72,7 +71,7 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Live Feed - Takes up full width on mobile, half on desktop */}
           <div className="lg:col-span-1">
-            <LiveFeed />
+            <LiveFeed isRecording={isRecording} />
           </div>
           
           {/* Controls Column */}
@@ -84,7 +83,7 @@ const Index = () => {
             
             <MotionDetection 
               motionDetected={motionDetected} 
-              onToggleDetection={toggleMotionDetection} 
+              onToggleMotion={toggleMotionDetection} 
             />
             
             <NotificationSettings 
