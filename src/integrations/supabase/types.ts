@@ -33,6 +33,48 @@ export type Database = {
         }
         Relationships: []
       }
+      recordings: {
+        Row: {
+          duration_seconds: number | null
+          file_path: string
+          file_size: number | null
+          file_type: string
+          filename: string
+          id: string
+          motion_detected: boolean | null
+          recorded_at: string
+          storage_type: string
+          thumbnail_path: string | null
+          user_id: string
+        }
+        Insert: {
+          duration_seconds?: number | null
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          filename: string
+          id?: string
+          motion_detected?: boolean | null
+          recorded_at?: string
+          storage_type: string
+          thumbnail_path?: string | null
+          user_id: string
+        }
+        Update: {
+          duration_seconds?: number | null
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          filename?: string
+          id?: string
+          motion_detected?: boolean | null
+          recorded_at?: string
+          storage_type?: string
+          thumbnail_path?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

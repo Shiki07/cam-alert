@@ -6,6 +6,8 @@ import { LiveFeed } from "@/components/LiveFeed";
 import { CameraControls } from "@/components/CameraControls";
 import { MotionDetection } from "@/components/MotionDetection";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { StorageSettings } from "@/components/StorageSettings";
+import { RecordingHistory } from "@/components/RecordingHistory";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Camera } from "lucide-react";
@@ -16,6 +18,8 @@ const Index = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [motionDetected, setMotionDetected] = useState(false);
   const [emailEnabled, setEmailEnabled] = useState(false);
+  const [storageType, setStorageType] = useState<'cloud' | 'local'>('cloud');
+  const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
 
   console.log('Index component - user:', user?.email, 'loading:', loading);
 
@@ -77,14 +81,26 @@ const Index = () => {
       <Header />
       
       <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Live Feed - Takes up full width on mobile, half on desktop */}
-          <div className="lg:col-span-1">
-            <LiveFeed isRecording={isRecording} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Live Feed - Takes up 2 columns on desktop */}
+          <div className="lg:col-span-2">
+            <LiveFeed 
+              isRecording={isRecording} 
+              onRecordingChange={setIsRecording}
+              storageType={storageType}
+              quality={quality}
+            />
           </div>
           
           {/* Controls Column */}
           <div className="lg:col-span-1 space-y-6">
+            <StorageSettings
+              storageType={storageType}
+              onStorageTypeChange={setStorageType}
+              quality={quality}
+              onQualityChange={setQuality}
+            />
+            
             <CameraControls 
               isRecording={isRecording} 
               onToggleRecording={toggleRecording} 
@@ -99,6 +115,11 @@ const Index = () => {
               emailEnabled={emailEnabled} 
               onToggleEmail={toggleEmailNotifications} 
             />
+          </div>
+          
+          {/* Recording History - Full width */}
+          <div className="lg:col-span-3">
+            <RecordingHistory />
           </div>
         </div>
       </div>
