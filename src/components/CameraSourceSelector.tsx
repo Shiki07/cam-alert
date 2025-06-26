@@ -1,0 +1,254 @@
+
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Camera, Wifi, Plus, Trash2, TestTube } from 'lucide-react';
+import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
+
+export type CameraSource = 'webcam' | 'network';
+
+interface CameraSourceSelectorProps {
+  currentSource: CameraSource;
+  onSourceChange: (source: CameraSource) => void;
+  networkCameras: NetworkCameraConfig[];
+  onAddNetworkCamera: (config: NetworkCameraConfig) => void;
+  onRemoveNetworkCamera: (index: number) => void;
+  onConnectNetworkCamera: (config: NetworkCameraConfig) => void;
+  onTestConnection: (config: NetworkCameraConfig) => Promise<boolean>;
+  selectedNetworkCamera: NetworkCameraConfig | null;
+}
+
+export const CameraSourceSelector = ({
+  currentSource,
+  onSourceChange,
+  networkCameras,
+  onAddNetworkCamera,
+  onRemoveNetworkCamera,
+  onConnectNetworkCamera,
+  onTestConnection,
+  selectedNetworkCamera
+}: CameraSourceSelectorProps) => {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCamera, setNewCamera] = useState<Partial<NetworkCameraConfig>>({
+    type: 'mjpeg',
+    name: '',
+    url: ''
+  });
+  const [testingConnections, setTestingConnections] = useState<Set<number>>(new Set());
+
+  const handleAddCamera = () => {
+    if (newCamera.name && newCamera.url && newCamera.type) {
+      onAddNetworkCamera(newCamera as NetworkCameraConfig);
+      setNewCamera({ type: 'mjpeg', name: '', url: '' });
+      setShowAddForm(false);
+    }
+  };
+
+  const handleTestConnection = async (config: NetworkCameraConfig, index: number) => {
+    setTestingConnections(prev => new Set(prev).add(index));
+    try {
+      const success = await onTestConnection(config);
+      console.log(`Connection test ${success ? 'passed' : 'failed'} for ${config.name}`);
+    } finally {
+      setTestingConnections(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
+
+  return (
+    <Card className="bg-gray-800 border-gray-700">
+      <CardHeader>
+        <CardTitle className="text-white flex items-center gap-2">
+          <Camera className="w-5 h-5" />
+          Camera Source
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Source Selection */}
+        <div className="space-y-2">
+          <Label className="text-gray-300">Source Type</Label>
+          <Select value={currentSource} onValueChange={(value: CameraSource) => onSourceChange(value)}>
+            <SelectTrigger className="bg-gray-700 border-gray-600 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-700 border-gray-600">
+              <SelectItem value="webcam" className="text-white">
+                <div className="flex items-center gap-2">
+                  <Camera className="w-4 h-4" />
+                  Local Webcam
+                </div>
+              </SelectItem>
+              <SelectItem value="network" className="text-white">
+                <div className="flex items-center gap-2">
+                  <Wifi className="w-4 h-4" />
+                  Network Camera
+                </div>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Network Camera Selection */}
+        {currentSource === 'network' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-gray-300">Network Cameras</Label>
+              <Button
+                size="sm"
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add
+              </Button>
+            </div>
+
+            {/* Add Camera Form */}
+            {showAddForm && (
+              <div className="bg-gray-700 rounded-lg p-4 space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Camera Name</Label>
+                  <Input
+                    value={newCamera.name || ''}
+                    onChange={(e) => setNewCamera(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g., Raspberry Pi Camera"
+                    className="bg-gray-600 border-gray-500 text-white"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Stream Type</Label>
+                  <Select 
+                    value={newCamera.type} 
+                    onValueChange={(value: 'rtsp' | 'mjpeg' | 'hls') => 
+                      setNewCamera(prev => ({ ...prev, type: value }))
+                    }
+                  >
+                    <SelectTrigger className="bg-gray-600 border-gray-500 text-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-gray-700 border-gray-600">
+                      <SelectItem value="mjpeg" className="text-white">MJPEG Stream</SelectItem>
+                      <SelectItem value="hls" className="text-white">HLS Stream</SelectItem>
+                      <SelectItem value="rtsp" className="text-white">RTSP (Limited)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-gray-300">Stream URL</Label>
+                  <Input
+                    value={newCamera.url || ''}
+                    onChange={(e) => setNewCamera(prev => ({ ...prev, url: e.target.value }))}
+                    placeholder="http://192.168.1.100:8080/stream"
+                    className="bg-gray-600 border-gray-500 text-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Username (optional)</Label>
+                    <Input
+                      value={newCamera.username || ''}
+                      onChange={(e) => setNewCamera(prev => ({ ...prev, username: e.target.value }))}
+                      placeholder="admin"
+                      className="bg-gray-600 border-gray-500 text-white"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-gray-300">Password (optional)</Label>
+                    <Input
+                      type="password"
+                      value={newCamera.password || ''}
+                      onChange={(e) => setNewCamera(prev => ({ ...prev, password: e.target.value }))}
+                      placeholder="password"
+                      className="bg-gray-600 border-gray-500 text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button onClick={handleAddCamera} className="bg-green-600 hover:bg-green-700">
+                    Add Camera
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowAddForm(false)}
+                    className="border-gray-600 text-gray-300 hover:bg-gray-700"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Camera List */}
+            <div className="space-y-2">
+              {networkCameras.map((camera, index) => (
+                <div key={index} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-medium">{camera.name}</span>
+                      <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
+                        {camera.type.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">{camera.url}</div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleTestConnection(camera, index)}
+                      disabled={testingConnections.has(index)}
+                      className="border-gray-600 text-gray-300 hover:bg-gray-600"
+                    >
+                      <TestTube className="w-4 h-4" />
+                    </Button>
+                    
+                    <Button
+                      size="sm"
+                      onClick={() => onConnectNetworkCamera(camera)}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Connect
+                    </Button>
+                    
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onRemoveNetworkCamera(index)}
+                      className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              
+              {networkCameras.length === 0 && !showAddForm && (
+                <div className="text-center text-gray-400 py-4">
+                  No network cameras configured
+                </div>
+              )}
+            </div>
+
+            {selectedNetworkCamera && (
+              <div className="bg-green-900 border border-green-700 rounded-lg p-3">
+                <div className="text-green-400 font-medium">Connected to: {selectedNetworkCamera.name}</div>
+                <div className="text-green-300 text-sm">{selectedNetworkCamera.url}</div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
