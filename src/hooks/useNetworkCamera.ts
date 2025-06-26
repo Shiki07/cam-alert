@@ -29,14 +29,29 @@ export const useNetworkCamera = () => {
             ? config.url.replace('://', `://${config.username}:${config.password}@`)
             : config.url;
           
-          videoRef.current.src = authUrl;
+          // Add timestamp to prevent caching
+          const streamUrl = authUrl + (authUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+          
+          videoRef.current.src = streamUrl;
+          videoRef.current.crossOrigin = 'anonymous';
+          
           videoRef.current.onloadstart = () => {
+            console.log('MJPEG stream started successfully');
             setIsConnected(true);
             setCurrentConfig(config);
           };
-          videoRef.current.onerror = () => {
-            throw new Error('Failed to connect to MJPEG stream');
+          
+          videoRef.current.onload = () => {
+            console.log('MJPEG stream loaded');
           };
+          
+          videoRef.current.onerror = (e) => {
+            console.error('MJPEG stream error:', e);
+            throw new Error('Failed to connect to MJPEG stream. Check if the stream URL is accessible and supports CORS.');
+          };
+          
+          // Force load
+          videoRef.current.load();
         } 
         // For RTSP, we'd need a different approach (WebRTC or conversion)
         else if (config.type === 'rtsp') {
@@ -47,6 +62,7 @@ export const useNetworkCamera = () => {
         else if (config.type === 'hls') {
           if (videoRef.current.canPlayType('application/vnd.apple.mpegurl')) {
             videoRef.current.src = config.url;
+            videoRef.current.crossOrigin = 'anonymous';
             videoRef.current.onloadstart = () => {
               setIsConnected(true);
               setCurrentConfig(config);
@@ -81,12 +97,15 @@ export const useNetworkCamera = () => {
 
   const testConnection = useCallback(async (config: NetworkCameraConfig): Promise<boolean> => {
     try {
+      console.log('Testing connection to:', config.url);
       const response = await fetch(config.url, { 
         method: 'HEAD',
-        mode: 'no-cors'
+        mode: 'cors'
       });
-      return true;
-    } catch {
+      console.log('Connection test response:', response.status);
+      return response.ok;
+    } catch (error) {
+      console.error('Connection test failed:', error);
       return false;
     }
   }, []);
