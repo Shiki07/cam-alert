@@ -39,6 +39,16 @@ interface CameraGridProps {
   onScheduleChange: (start: number, end: number) => void;
   onToggleEmail: () => void;
   onEmailChange: (email: string) => void;
+  
+  // Advanced Motion Detection Props
+  detectionZonesEnabled: boolean;
+  onDetectionZonesToggle: (enabled: boolean) => void;
+  cooldownPeriod: number;
+  onCooldownChange: (value: number) => void;
+  minMotionDuration: number;
+  onMinDurationChange: (value: number) => void;
+  noiseReduction: boolean;
+  onNoiseReductionToggle: (enabled: boolean) => void;
 }
 
 export const CameraGrid = ({
@@ -67,7 +77,15 @@ export const CameraGrid = ({
   onScheduleToggle,
   onScheduleChange,
   onToggleEmail,
-  onEmailChange
+  onEmailChange,
+  detectionZonesEnabled,
+  onDetectionZonesToggle,
+  cooldownPeriod,
+  onCooldownChange,
+  minMotionDuration,
+  onMinDurationChange,
+  noiseReduction,
+  onNoiseReductionToggle
 }: CameraGridProps) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -129,6 +147,14 @@ export const CameraGrid = ({
           startHour={startHour}
           endHour={endHour}
           onScheduleChange={onScheduleChange}
+          detectionZonesEnabled={detectionZonesEnabled}
+          onDetectionZonesToggle={onDetectionZonesToggle}
+          cooldownPeriod={cooldownPeriod}
+          onCooldownChange={onCooldownChange}
+          minMotionDuration={minMotionDuration}
+          onMinDurationChange={onMinDurationChange}
+          noiseReduction={noiseReduction}
+          onNoiseReductionToggle={onNoiseReductionToggle}
         />
         
         <NotificationSettings 
