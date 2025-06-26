@@ -168,7 +168,7 @@ const Index = () => {
               motionEventsToday={motionEventsToday}
               storageUsed={256}
               storageTotal={1024}
-              lastEventTime={lastMotionTime}
+              lastMotionTime={lastMotionTime}
             />
             
             <StorageSettings
