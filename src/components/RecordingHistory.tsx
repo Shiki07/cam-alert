@@ -233,7 +233,7 @@ export const RecordingHistory = () => {
                     <HardDrive className="w-4 h-4 text-green-300" />
                   )}
                   {recording.motion_detected && (
-                    <AlertCircle className="w-4 h-4 text-orange-400" title="Motion detected" />
+                    <AlertCircle className="w-4 h-4 text-orange-400" />
                   )}
                 </div>
                 
@@ -260,7 +260,7 @@ export const RecordingHistory = () => {
                       variant="outline"
                       onClick={() => viewInBrowser(recording)}
                       className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                      title="View in browser"
+                      aria-label="View in browser"
                     >
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -269,7 +269,7 @@ export const RecordingHistory = () => {
                       variant="outline"
                       onClick={() => downloadFromCloud(recording)}
                       className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                      title="Download file"
+                      aria-label="Download file"
                     >
                       <Download className="w-4 h-4" />
                     </Button>
@@ -281,7 +281,7 @@ export const RecordingHistory = () => {
                   variant="outline"
                   onClick={() => deleteRecording(recording)}
                   className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                  title="Delete recording"
+                  aria-label="Delete recording"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
