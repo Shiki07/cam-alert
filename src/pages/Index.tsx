@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,23 +26,41 @@ const Index = () => {
 
   console.log('Index component - user:', user?.email, 'loading:', loading);
 
-  // Load saved email from localStorage on component mount
+  // Check if we're in a restricted environment (iframe)
+  const isRestrictedEnvironment = window.location !== window.parent.location;
+
+  // Load saved email from localStorage on component mount (with error handling)
   useEffect(() => {
-    const savedEmail = localStorage.getItem('cameraNotificationEmail');
-    if (savedEmail) {
-      setNotificationEmail(savedEmail);
-    } else if (user?.email) {
-      setNotificationEmail(user.email);
+    try {
+      const savedEmail = localStorage.getItem('cameraNotificationEmail');
+      if (savedEmail) {
+        setNotificationEmail(savedEmail);
+      } else if (user?.email) {
+        setNotificationEmail(user.email);
+      }
+    } catch (error) {
+      console.error('Error accessing localStorage:', error);
+      // Fallback to user email if localStorage is not available
+      if (user?.email) {
+        setNotificationEmail(user.email);
+      }
     }
   }, [user]);
 
   useEffect(() => {
     console.log('Index useEffect - user:', user?.email, 'loading:', loading);
+    
+    // In restricted environments, skip auth redirect
+    if (isRestrictedEnvironment) {
+      console.log('Running in restricted environment, allowing demo access');
+      return;
+    }
+    
     if (!loading && !user) {
       console.log('Redirecting to auth page');
       navigate("/auth");
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, isRestrictedEnvironment]);
 
   const toggleRecording = () => {
     setIsRecording(!isRecording);
@@ -70,8 +89,8 @@ const Index = () => {
     setNotificationEmail(email);
   };
 
-  // Show loading state while checking auth
-  if (loading) {
+  // Show loading state while checking auth (but not in restricted environments)
+  if (loading && !isRestrictedEnvironment) {
     console.log('Showing loading state');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -80,8 +99,8 @@ const Index = () => {
     );
   }
 
-  // Show auth prompt if not authenticated
-  if (!user) {
+  // Show auth prompt if not authenticated (but not in restricted environments)
+  if (!user && !isRestrictedEnvironment) {
     console.log('Showing auth prompt');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -101,7 +120,7 @@ const Index = () => {
     );
   }
 
-  console.log('Showing main dashboard for user:', user.email);
+  console.log('Showing main dashboard for user:', user?.email || 'demo user');
 
   return (
     <div className="min-h-screen bg-gray-900">

@@ -29,22 +29,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
+    let subscription: any;
 
-    // Get initial session with error handling
-    const getInitialSession = async () => {
+    const initializeAuth = async () => {
       try {
+        // Skip session initialization in restricted environments
+        const isRestrictedEnvironment = window.location !== window.parent.location;
+        
+        if (isRestrictedEnvironment) {
+          console.log('Running in restricted environment, skipping session initialization');
+          if (mounted) {
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Try to get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
+        
         if (error) {
           console.error('Error getting session:', error);
-          // Don't throw error, just log it and continue
         }
+        
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
         }
+
+        // Set up auth state listener
+        const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
+          (event, session) => {
+            console.log('Auth state changed:', event, session?.user?.email);
+            if (mounted) {
+              setSession(session);
+              setUser(session?.user ?? null);
+            }
+          }
+        );
+        subscription = authSubscription;
+
       } catch (error) {
-        console.error('Error in getInitialSession:', error);
-        // In case of security errors, we'll just set to null and continue
+        console.error('Error initializing auth:', error);
+        // In case of any errors, just set defaults and continue
         if (mounted) {
           setSession(null);
           setUser(null);
@@ -56,29 +82,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
-    getInitialSession();
-
-    // Set up auth state listener with error handling
-    let subscription: any;
-    try {
-      const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
-        (event, session) => {
-          console.log('Auth state changed:', event, session?.user?.email);
-          if (mounted) {
-            setSession(session);
-            setUser(session?.user ?? null);
-            setLoading(false);
-          }
-        }
-      );
-      subscription = authSubscription;
-    } catch (error) {
-      console.error('Error setting up auth listener:', error);
-      // If we can't set up the listener, we'll just rely on the initial session
-      if (mounted) {
-        setLoading(false);
-      }
-    }
+    initializeAuth();
 
     return () => {
       mounted = false;
@@ -86,7 +90,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           subscription.unsubscribe();
         } catch (error) {
-          console.error('Error unsubscribing from auth listener:', error);
+          console.error('Error unsubscribing:', error);
         }
       }
     };
