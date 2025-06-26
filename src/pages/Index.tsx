@@ -17,6 +17,8 @@ const Index = () => {
   const navigate = useNavigate();
   const [isRecording, setIsRecording] = useState(false);
   const [motionDetected, setMotionDetected] = useState(false);
+  const [motionDetectionEnabled, setMotionDetectionEnabled] = useState(false);
+  const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [storageType, setStorageType] = useState<'cloud' | 'local'>('cloud');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
@@ -35,8 +37,19 @@ const Index = () => {
     setIsRecording(!isRecording);
   };
 
+  const handleMotionDetected = (detected: boolean) => {
+    setMotionDetected(detected);
+    if (detected) {
+      setLastMotionTime(new Date());
+    }
+  };
+
   const toggleMotionDetection = () => {
-    setMotionDetected(!motionDetected);
+    setMotionDetectionEnabled(!motionDetectionEnabled);
+    if (!motionDetectionEnabled) {
+      // Reset motion state when enabling
+      setMotionDetected(false);
+    }
   };
 
   const toggleEmailNotifications = () => {
@@ -89,6 +102,8 @@ const Index = () => {
               onRecordingChange={setIsRecording}
               storageType={storageType}
               quality={quality}
+              motionDetectionEnabled={motionDetectionEnabled}
+              onMotionDetected={handleMotionDetected}
             />
           </div>
           
@@ -107,8 +122,10 @@ const Index = () => {
             />
             
             <MotionDetection 
-              motionDetected={motionDetected} 
-              onToggleMotion={toggleMotionDetection} 
+              motionDetected={motionDetected}
+              motionEnabled={motionDetectionEnabled}
+              onToggleMotionDetection={toggleMotionDetection}
+              lastMotionTime={lastMotionTime}
             />
             
             <NotificationSettings 

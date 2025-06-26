@@ -3,15 +3,25 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Camera, CameraOff, Video, Square, Play } from "lucide-react";
 import { useRecording } from "@/hooks/useRecording";
+import { useMotionDetection } from "@/hooks/useMotionDetection";
 
 interface LiveFeedProps {
   isRecording: boolean;
   onRecordingChange: (recording: boolean) => void;
   storageType: 'cloud' | 'local';
   quality: 'high' | 'medium' | 'low';
+  motionDetectionEnabled: boolean;
+  onMotionDetected: (detected: boolean) => void;
 }
 
-export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality }: LiveFeedProps) => {
+export const LiveFeed = ({ 
+  isRecording, 
+  onRecordingChange, 
+  storageType, 
+  quality,
+  motionDetectionEnabled,
+  onMotionDetected
+}: LiveFeedProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +29,27 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
   const streamRef = useRef<MediaStream | null>(null);
   
   const recording = useRecording();
+
+  const motionDetection = useMotionDetection({
+    sensitivity: 70, // Medium sensitivity
+    threshold: 0.5, // 0.5% of pixels changed
+    enabled: motionDetectionEnabled && isConnected,
+    onMotionDetected: () => {
+      onMotionDetected(true);
+      // Auto-start recording on motion detection
+      if (!recording.isRecording && streamRef.current && videoRef.current) {
+        recording.startRecording(streamRef.current, {
+          storageType,
+          fileType: 'video',
+          quality
+        });
+        onRecordingChange(true);
+      }
+    },
+    onMotionCleared: () => {
+      onMotionDetected(false);
+    }
+  });
 
   const getVideoConstraints = () => {
     switch (quality) {
@@ -47,6 +78,13 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsConnected(true);
+        
+        // Start motion detection once video is loaded
+        videoRef.current.onloadedmetadata = () => {
+          if (motionDetectionEnabled && videoRef.current) {
+            motionDetection.startDetection(videoRef.current);
+          }
+        };
       }
     } catch (err) {
       console.error('Error accessing camera:', err);
@@ -61,6 +99,8 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
       recording.stopRecording();
       onRecordingChange(false);
     }
+    
+    motionDetection.stopDetection();
     
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -98,12 +138,24 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
     });
   };
 
+  // Update motion detection when settings change
+  useEffect(() => {
+    if (isConnected && videoRef.current) {
+      if (motionDetectionEnabled) {
+        motionDetection.startDetection(videoRef.current);
+      } else {
+        motionDetection.stopDetection();
+      }
+    }
+  }, [motionDetectionEnabled, isConnected]);
+
   useEffect(() => {
     // Cleanup on unmount
     return () => {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
+      motionDetection.stopDetection();
     };
   }, []);
 
@@ -111,11 +163,26 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-white">Live Feed</h2>
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
-          <span className="text-sm text-gray-400">
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </span>
+        <div className="flex items-center gap-4">
+          {/* Motion Detection Status */}
+          {motionDetectionEnabled && (
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${
+                motionDetection.motionDetected ? 'bg-red-500 animate-pulse' : 'bg-gray-500'
+              }`}></span>
+              <span className="text-xs text-gray-400">
+                {motionDetection.motionDetected ? 'Motion' : 'Watching'}
+              </span>
+            </div>
+          )}
+          
+          {/* Connection Status */}
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className="text-sm text-gray-400">
+              {isConnected ? 'Connected' : 'Disconnected'}
+            </span>
+          </div>
         </div>
       </div>
       
@@ -139,9 +206,16 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
               </div>
             )}
             
+            {/* Motion Detection Indicator */}
+            {motionDetection.motionDetected && (
+              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-orange-600 text-white px-3 py-1 rounded-full text-sm animate-pulse">
+                MOTION DETECTED
+              </div>
+            )}
+            
             {/* Processing Indicator */}
             {recording.isProcessing && (
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
+              <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm">
                 Processing...
               </div>
             )}
@@ -228,6 +302,12 @@ export const LiveFeed = ({ isRecording, onRecordingChange, storageType, quality 
             <span className="text-sm text-gray-300">Storage:</span>
             <span className="text-sm text-gray-400">
               {storageType === 'cloud' ? 'Supabase Cloud' : 'SD Card'}
+            </span>
+          </div>
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm text-gray-300">Motion Detection:</span>
+            <span className="text-sm text-gray-400">
+              {motionDetectionEnabled ? 'Enabled' : 'Disabled'}
             </span>
           </div>
           <div className="flex justify-between items-center">
