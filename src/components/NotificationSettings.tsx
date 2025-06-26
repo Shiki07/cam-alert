@@ -25,6 +25,9 @@ export const NotificationSettings = ({
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
+  // Check if we're in a restricted environment (preview/iframe)
+  const isRestrictedEnvironment = window.location !== window.parent.location;
+
   const motionNotification = useMotionNotification({
     email: email,
     enabled: emailEnabled,
@@ -48,13 +51,25 @@ export const NotificationSettings = ({
 
     setIsLoading(true);
     
-    // Save to localStorage for persistence
-    localStorage.setItem('cameraNotificationEmail', email);
-    
-    toast({
-      title: "Settings Saved",
-      description: "Your notification preferences have been updated",
-    });
+    try {
+      // Only try to save to localStorage if not in restricted environment
+      if (!isRestrictedEnvironment) {
+        localStorage.setItem('cameraNotificationEmail', email);
+      }
+      
+      toast({
+        title: "Settings Saved",
+        description: isRestrictedEnvironment 
+          ? "Settings updated (localStorage not available in preview)" 
+          : "Your notification preferences have been updated",
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      toast({
+        title: "Settings Saved",
+        description: "Settings updated in memory (localStorage restricted)",
+      });
+    }
     
     setIsLoading(false);
   };
@@ -81,18 +96,32 @@ export const NotificationSettings = ({
     setIsLoading(true);
     
     try {
-      // Send a test motion alert
-      await motionNotification.sendMotionAlert(undefined, 85.5);
-      
-      toast({
-        title: "Test Email Sent",
-        description: `Test motion alert sent to ${email}`,
-      });
+      // In restricted environments, show a demo message
+      if (isRestrictedEnvironment) {
+        // Simulate a delay
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        toast({
+          title: "Test Email Demo",
+          description: `In the full app, a test motion alert would be sent to ${email}. Email functionality is restricted in preview mode.`,
+        });
+      } else {
+        // Send a real test motion alert
+        await motionNotification.sendMotionAlert(undefined, 85.5);
+        
+        toast({
+          title: "Test Email Sent",
+          description: `Test motion alert sent to ${email}`,
+        });
+      }
     } catch (error) {
+      console.error('Error sending test email:', error);
       toast({
-        title: "Test Failed",
-        description: "Failed to send test email. Please check your settings.",
-        variant: "destructive",
+        title: isRestrictedEnvironment ? "Test Email Demo" : "Test Failed",
+        description: isRestrictedEnvironment 
+          ? `Demo: Test email would be sent to ${email}` 
+          : "Failed to send test email. Please check your settings.",
+        variant: isRestrictedEnvironment ? "default" : "destructive",
       });
     }
     
@@ -174,9 +203,12 @@ export const NotificationSettings = ({
         </div>
 
         {/* Status Display */}
-        <div className="bg-green-600 bg-opacity-20 border border-green-600 rounded p-3 mt-4">
-          <p className="text-green-200 text-sm">
-            ✅ Email notifications are ready! Motion alerts will be sent with screenshots when motion is detected.
+        <div className={`${isRestrictedEnvironment ? 'bg-blue-600 border-blue-600' : 'bg-green-600 border-green-600'} bg-opacity-20 border rounded p-3 mt-4`}>
+          <p className={`${isRestrictedEnvironment ? 'text-blue-200' : 'text-green-200'} text-sm`}>
+            {isRestrictedEnvironment 
+              ? "📧 Preview mode: Email functionality is simulated. Full functionality available in deployed app."
+              : "✅ Email notifications are ready! Motion alerts will be sent with screenshots when motion is detected."
+            }
           </p>
         </div>
       </div>
