@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useRecording } from "@/hooks/useRecording";
 import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
@@ -203,12 +202,31 @@ export const LiveFeed = ({
   };
 
   const handleConnectNetworkCamera = async (config: NetworkCameraConfig) => {
-    await networkCamera.connectToCamera(config);
-    if (networkCamera.isConnected) {
-      setIsConnected(true);
-      setError(null);
-    } else {
-      setError(networkCamera.connectionError);
+    console.log('LiveFeed: Attempting to connect to network camera:', config);
+    setError(null);
+    setIsLoading(true);
+    
+    try {
+      await networkCamera.connectToCamera(config);
+      
+      console.log('LiveFeed: Connection result - isConnected:', networkCamera.isConnected);
+      console.log('LiveFeed: Connection error:', networkCamera.connectionError);
+      
+      if (networkCamera.isConnected) {
+        setIsConnected(true);
+        setError(null);
+        console.log('LiveFeed: Successfully connected to network camera');
+      } else {
+        setError(networkCamera.connectionError || 'Failed to connect to network camera');
+        setIsConnected(false);
+        console.error('LiveFeed: Failed to connect:', networkCamera.connectionError);
+      }
+    } catch (error) {
+      console.error('LiveFeed: Connection error:', error);
+      setError(error instanceof Error ? error.message : 'Connection failed');
+      setIsConnected(false);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -234,6 +252,14 @@ export const LiveFeed = ({
     };
   }, []);
 
+  // Monitor network camera connection state
+  useEffect(() => {
+    if (cameraSource === 'network') {
+      setIsConnected(networkCamera.isConnected);
+      setError(networkCamera.connectionError);
+    }
+  }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource]);
+
   return (
     <div className="space-y-6">
       {/* Camera Source Selector */}
@@ -241,7 +267,10 @@ export const LiveFeed = ({
         currentSource={cameraSource}
         onSourceChange={handleSourceChange}
         networkCameras={networkCameras}
-        onAddNetworkCamera={(config) => setNetworkCameras(prev => [...prev, config])}
+        onAddNetworkCamera={(config) => {
+          console.log('LiveFeed: Adding network camera:', config);
+          setNetworkCameras(prev => [...prev, config]);
+        }}
         onRemoveNetworkCamera={(index) => setNetworkCameras(prev => prev.filter((_, i) => i !== index))}
         onConnectNetworkCamera={handleConnectNetworkCamera}
         onTestConnection={networkCamera.testConnection}

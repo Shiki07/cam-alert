@@ -38,6 +38,7 @@ export const CameraSourceSelector = ({
     url: ''
   });
   const [testingConnections, setTestingConnections] = useState<Set<number>>(new Set());
+  const [connectingCameras, setConnectingCameras] = useState<Set<number>>(new Set());
 
   const handleAddCamera = () => {
     if (newCamera.name && newCamera.url && newCamera.type) {
@@ -54,6 +55,24 @@ export const CameraSourceSelector = ({
       console.log(`Connection test ${success ? 'passed' : 'failed'} for ${config.name}`);
     } finally {
       setTestingConnections(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
+
+  const handleConnectCamera = async (config: NetworkCameraConfig, index: number) => {
+    console.log('Connect button clicked for camera:', config.name, config.url);
+    setConnectingCameras(prev => new Set(prev).add(index));
+    
+    try {
+      await onConnectNetworkCamera(config);
+      console.log('Connection attempt completed for:', config.name);
+    } catch (error) {
+      console.error('Connection failed:', error);
+    } finally {
+      setConnectingCameras(prev => {
         const newSet = new Set(prev);
         newSet.delete(index);
         return newSet;
@@ -146,7 +165,7 @@ export const CameraSourceSelector = ({
                   <Input
                     value={newCamera.url || ''}
                     onChange={(e) => setNewCamera(prev => ({ ...prev, url: e.target.value }))}
-                    placeholder="http://192.168.1.100:8080/stream"
+                    placeholder="http://192.168.178.108:8081/stream.mjpg"
                     className="bg-gray-600 border-gray-500 text-white"
                   />
                 </div>
@@ -215,10 +234,11 @@ export const CameraSourceSelector = ({
                     
                     <Button
                       size="sm"
-                      onClick={() => onConnectNetworkCamera(camera)}
+                      onClick={() => handleConnectCamera(camera, index)}
+                      disabled={connectingCameras.has(index)}
                       className="bg-blue-600 hover:bg-blue-700"
                     >
-                      Connect
+                      {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
                     </Button>
                     
                     <Button
