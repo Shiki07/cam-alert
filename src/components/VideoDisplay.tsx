@@ -42,7 +42,7 @@ export const VideoDisplay = ({
 }: VideoDisplayProps) => {
   return (
     <div className="aspect-video bg-gray-900 rounded-lg border border-gray-600 flex items-center justify-center relative overflow-hidden">
-      {/* Always render both video elements, but only show the active one */}
+      {/* Webcam video element */}
       <video
         ref={videoRef}
         autoPlay
@@ -51,6 +51,7 @@ export const VideoDisplay = ({
         className={`w-full h-full object-cover ${cameraSource === 'webcam' && isConnected ? 'block' : 'hidden'}`}
       />
       
+      {/* Network camera video element - always rendered */}
       <video
         ref={networkVideoRef}
         autoPlay
