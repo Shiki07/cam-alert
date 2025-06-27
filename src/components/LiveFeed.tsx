@@ -9,6 +9,7 @@ import { VideoDisplay } from "@/components/VideoDisplay";
 import { CameraStatus } from "@/components/CameraStatus";
 import { CameraOverlays } from "@/components/CameraOverlays";
 import { CameraInfo } from "@/components/CameraInfo";
+import { useToast } from "@/components/ui/use-toast";
 
 interface LiveFeedProps {
   isRecording: boolean;
@@ -49,6 +50,7 @@ export const LiveFeed = ({
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const { toast } = useToast();
   
   const recording = useRecording();
   const networkCamera = useNetworkCamera();
@@ -207,24 +209,49 @@ export const LiveFeed = ({
     setIsLoading(true);
     
     try {
+      toast({
+        title: "Connecting to camera...",
+        description: `Attempting to connect to ${config.name}`,
+      });
+
       await networkCamera.connectToCamera(config);
       
       console.log('LiveFeed: Connection result - isConnected:', networkCamera.isConnected);
       console.log('LiveFeed: Connection error:', networkCamera.connectionError);
       
-      if (networkCamera.isConnected) {
-        setIsConnected(true);
-        setError(null);
-        console.log('LiveFeed: Successfully connected to network camera');
-      } else {
-        setError(networkCamera.connectionError || 'Failed to connect to network camera');
-        setIsConnected(false);
-        console.error('LiveFeed: Failed to connect:', networkCamera.connectionError);
-      }
+      // Wait a moment for state to update
+      setTimeout(() => {
+        if (networkCamera.isConnected) {
+          setIsConnected(true);
+          setError(null);
+          console.log('LiveFeed: Successfully connected to network camera');
+          toast({
+            title: "Camera connected!",
+            description: `Successfully connected to ${config.name}`,
+          });
+        } else {
+          const errorMsg = networkCamera.connectionError || 'Failed to connect to network camera';
+          setError(errorMsg);
+          setIsConnected(false);
+          console.error('LiveFeed: Failed to connect:', networkCamera.connectionError);
+          toast({
+            title: "Connection failed",
+            description: errorMsg,
+            variant: "destructive",
+          });
+        }
+      }, 1000);
+      
     } catch (error) {
       console.error('LiveFeed: Connection error:', error);
-      setError(error instanceof Error ? error.message : 'Connection failed');
+      const errorMsg = error instanceof Error ? error.message : 'Connection failed';
+      setError(errorMsg);
       setIsConnected(false);
+      toast({
+        title: "Connection error",
+        description: errorMsg,
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -257,8 +284,15 @@ export const LiveFeed = ({
     if (cameraSource === 'network') {
       setIsConnected(networkCamera.isConnected);
       setError(networkCamera.connectionError);
+      
+      if (networkCamera.isConnected && !isConnected) {
+        toast({
+          title: "Camera connected!",
+          description: `Successfully connected to ${networkCamera.currentConfig?.name}`,
+        });
+      }
     }
-  }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource]);
+  }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast]);
 
   return (
     <div className="space-y-6">
