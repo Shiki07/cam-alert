@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -23,6 +22,16 @@ export const useNetworkCamera = () => {
     setConnectionError(null);
 
     try {
+      // Wait a bit for the video element to be available if needed
+      let attempts = 0;
+      const maxAttempts = 10;
+      
+      while (!videoRef.current && attempts < maxAttempts) {
+        console.log(`useNetworkCamera: Waiting for video element, attempt ${attempts + 1}`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+
       if (videoRef.current) {
         console.log('useNetworkCamera: Video element found, proceeding with connection');
         
@@ -39,12 +48,11 @@ export const useNetworkCamera = () => {
           console.log('useNetworkCamera: Final stream URL:', streamUrl);
           
           // Clear any existing src
-          videoRef.current.src = '';
-          videoRef.current.srcObject = null;
+          const video = videoRef.current;
+          video.src = '';
+          video.srcObject = null;
           
           // Set up event handlers before setting src
-          const video = videoRef.current;
-          
           const handleLoadStart = () => {
             console.log('useNetworkCamera: MJPEG stream loadstart event');
           };
@@ -53,6 +61,7 @@ export const useNetworkCamera = () => {
             console.log('useNetworkCamera: MJPEG stream metadata loaded');
             setIsConnected(true);
             setCurrentConfig(config);
+            setConnectionError(null);
             console.log('useNetworkCamera: Connection successful, state updated');
           };
           
@@ -60,10 +69,13 @@ export const useNetworkCamera = () => {
             console.log('useNetworkCamera: MJPEG stream can play');
             setIsConnected(true);
             setCurrentConfig(config);
+            setConnectionError(null);
           };
           
           const handleError = (e: Event) => {
             console.error('useNetworkCamera: MJPEG stream error:', e);
+            const target = e.target as HTMLVideoElement;
+            console.error('useNetworkCamera: Video error details:', target.error);
             const errorMsg = 'Failed to connect to MJPEG stream. Check if the stream URL is accessible and supports CORS.';
             setConnectionError(errorMsg);
             setIsConnected(false);
@@ -73,7 +85,15 @@ export const useNetworkCamera = () => {
             console.log('useNetworkCamera: MJPEG stream loaded');
             setIsConnected(true);
             setCurrentConfig(config);
+            setConnectionError(null);
           };
+          
+          // Clean up previous event listeners
+          video.removeEventListener('loadstart', handleLoadStart);
+          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          video.removeEventListener('canplay', handleCanPlay);
+          video.removeEventListener('error', handleError);
+          video.removeEventListener('load', handleLoad);
           
           // Add event listeners
           video.addEventListener('loadstart', handleLoadStart);
@@ -106,9 +126,13 @@ export const useNetworkCamera = () => {
                 console.log('useNetworkCamera: Video has metadata, setting connected');
                 setIsConnected(true);
                 setCurrentConfig(config);
+                setConnectionError(null);
+              } else if (video.error) {
+                console.log('useNetworkCamera: Video has error, connection failed');
+                setConnectionError('Failed to load video stream');
               }
             }
-          }, 3000);
+          }, 5000);
           
         } else if (config.type === 'rtsp') {
           throw new Error('RTSP support requires additional setup. Please use MJPEG for now.');
@@ -119,13 +143,14 @@ export const useNetworkCamera = () => {
             videoRef.current.onloadstart = () => {
               setIsConnected(true);
               setCurrentConfig(config);
+              setConnectionError(null);
             };
           } else {
             throw new Error('HLS not supported in this browser');
           }
         }
       } else {
-        console.error('useNetworkCamera: Video element not found');
+        console.error('useNetworkCamera: Video element not found after waiting');
         throw new Error('Video element not available');
       }
     } catch (error) {
