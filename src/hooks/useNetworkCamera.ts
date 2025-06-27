@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -16,6 +15,15 @@ export const useNetworkCamera = () => {
   const [currentConfig, setCurrentConfig] = useState<NetworkCameraConfig | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const getProxiedUrl = (originalUrl: string) => {
+    // If the URL is HTTP and we're on HTTPS, use our proxy
+    if (originalUrl.startsWith('http://') && window.location.protocol === 'https:') {
+      const proxyUrl = `${window.location.origin}/functions/v1/camera-proxy`;
+      return `${proxyUrl}?url=${encodeURIComponent(originalUrl)}`;
+    }
+    return originalUrl;
+  };
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('useNetworkCamera: Starting connection to:', config);
@@ -42,7 +50,9 @@ export const useNetworkCamera = () => {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
         }
 
-        console.log('useNetworkCamera: Final stream URL:', streamUrl);
+        // Use proxy for HTTP URLs when on HTTPS
+        const finalUrl = getProxiedUrl(streamUrl);
+        console.log('useNetworkCamera: Final stream URL:', finalUrl);
 
         // Set up event handlers
         const handleSuccess = () => {
@@ -54,7 +64,7 @@ export const useNetworkCamera = () => {
 
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error:', e);
-          setConnectionError('Failed to connect to MJPEG stream');
+          setConnectionError('Failed to connect to MJPEG stream. Check camera URL and network connection.');
           setIsConnected(false);
         };
 
@@ -75,7 +85,7 @@ export const useNetworkCamera = () => {
         video.muted = true;
 
         // Set the source
-        video.src = streamUrl;
+        video.src = finalUrl;
         video.load();
 
       } else {
@@ -109,7 +119,8 @@ export const useNetworkCamera = () => {
   const testConnection = useCallback(async (config: NetworkCameraConfig): Promise<boolean> => {
     try {
       console.log('useNetworkCamera: Testing connection to:', config.url);
-      const response = await fetch(config.url, { 
+      const testUrl = getProxiedUrl(config.url);
+      const response = await fetch(testUrl, { 
         method: 'HEAD',
         mode: 'cors'
       });
