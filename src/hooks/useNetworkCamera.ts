@@ -18,17 +18,19 @@ export const useNetworkCamera = () => {
   const streamRef = useRef<MediaStream | null>(null);
 
   const getProxiedUrl = (originalUrl: string) => {
+    console.log('getProxiedUrl - START');
     console.log('getProxiedUrl - originalUrl:', originalUrl);
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
+    console.log('getProxiedUrl - originalUrl.startsWith("http://"):', originalUrl.startsWith('http://'));
     
     // Always use proxy for HTTP URLs when on HTTPS
     if (originalUrl.startsWith('http://') && window.location.protocol === 'https:') {
       const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy`;
       const finalUrl = `${proxyUrl}?url=${encodeURIComponent(originalUrl)}`;
-      console.log('getProxiedUrl - using proxy:', finalUrl);
+      console.log('getProxiedUrl - USING PROXY - finalUrl:', finalUrl);
       return finalUrl;
     }
-    console.log('getProxiedUrl - using original URL:', originalUrl);
+    console.log('getProxiedUrl - NOT USING PROXY - returning original URL:', originalUrl);
     return originalUrl;
   };
 
@@ -53,13 +55,17 @@ export const useNetworkCamera = () => {
         
         // Build the stream URL with auth if needed
         let streamUrl = config.url;
+        console.log('useNetworkCamera: Original stream URL:', streamUrl);
+        
         if (config.username && config.password) {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
+          console.log('useNetworkCamera: Stream URL with auth:', streamUrl);
         }
 
         // ALWAYS use proxy for HTTP URLs
         const finalUrl = getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL being set:', finalUrl);
+        console.log('useNetworkCamera: About to set video.src to:', finalUrl);
 
         // Set up event handlers
         const handleSuccess = () => {
@@ -72,20 +78,27 @@ export const useNetworkCamera = () => {
 
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error:', e);
+          console.error('useNetworkCamera: Video element src at error time:', video.src);
           setConnectionError('Failed to connect to MJPEG stream. The camera might be unreachable or the stream format is not supported.');
           setIsConnected(false);
           setIsConnecting(false);
+        };
+
+        const handleLoadStart = () => {
+          console.log('useNetworkCamera: Video load started, src:', video.src);
         };
 
         // Remove existing listeners to avoid duplicates
         video.removeEventListener('loadedmetadata', handleSuccess);
         video.removeEventListener('canplay', handleSuccess);
         video.removeEventListener('error', handleError);
+        video.removeEventListener('loadstart', handleLoadStart);
 
         // Add new listeners
         video.addEventListener('loadedmetadata', handleSuccess, { once: true });
         video.addEventListener('canplay', handleSuccess, { once: true });
         video.addEventListener('error', handleError);
+        video.addEventListener('loadstart', handleLoadStart);
 
         // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
@@ -94,11 +107,13 @@ export const useNetworkCamera = () => {
         video.muted = true;
 
         // Set the proxied source directly
-        console.log('useNetworkCamera: Setting video.src to:', finalUrl);
+        console.log('useNetworkCamera: SETTING video.src to:', finalUrl);
         video.src = finalUrl;
+        console.log('useNetworkCamera: AFTER SETTING - video.src is now:', video.src);
         
         // Force load the video
         video.load();
+        console.log('useNetworkCamera: Called video.load()');
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);
