@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -20,9 +21,8 @@ export const useNetworkCamera = () => {
     console.log('getProxiedUrl - originalUrl:', originalUrl);
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
     
-    // If the URL is HTTP and we're on HTTPS, use our proxy
+    // Always use proxy for HTTP URLs when on HTTPS
     if (originalUrl.startsWith('http://') && window.location.protocol === 'https:') {
-      // Use the full Supabase project URL for the edge function
       const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy`;
       const finalUrl = `${proxyUrl}?url=${encodeURIComponent(originalUrl)}`;
       console.log('getProxiedUrl - using proxy:', finalUrl);
@@ -57,9 +57,9 @@ export const useNetworkCamera = () => {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
         }
 
-        // Use proxy for HTTP URLs when on HTTPS
+        // ALWAYS use proxy for HTTP URLs
         const finalUrl = getProxiedUrl(streamUrl);
-        console.log('useNetworkCamera: Final stream URL:', finalUrl);
+        console.log('useNetworkCamera: Final stream URL being set:', finalUrl);
 
         // Set up event handlers
         const handleSuccess = () => {
@@ -67,32 +67,37 @@ export const useNetworkCamera = () => {
           setIsConnected(true);
           setCurrentConfig(config);
           setConnectionError(null);
+          setIsConnecting(false);
         };
 
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error:', e);
-          setConnectionError('Failed to connect to MJPEG stream. Check camera URL and network connection.');
+          setConnectionError('Failed to connect to MJPEG stream. The camera might be unreachable or the stream format is not supported.');
           setIsConnected(false);
+          setIsConnecting(false);
         };
 
-        // Remove existing listeners
+        // Remove existing listeners to avoid duplicates
         video.removeEventListener('loadedmetadata', handleSuccess);
         video.removeEventListener('canplay', handleSuccess);
         video.removeEventListener('error', handleError);
 
         // Add new listeners
-        video.addEventListener('loadedmetadata', handleSuccess);
-        video.addEventListener('canplay', handleSuccess);
+        video.addEventListener('loadedmetadata', handleSuccess, { once: true });
+        video.addEventListener('canplay', handleSuccess, { once: true });
         video.addEventListener('error', handleError);
 
-        // Configure video element
+        // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
         video.autoplay = true;
         video.playsInline = true;
         video.muted = true;
 
-        // Set the source
+        // Set the proxied source directly
+        console.log('useNetworkCamera: Setting video.src to:', finalUrl);
         video.src = finalUrl;
+        
+        // Force load the video
         video.load();
 
       } else {
@@ -103,7 +108,6 @@ export const useNetworkCamera = () => {
       console.error('useNetworkCamera: Connection error:', error);
       setConnectionError(error instanceof Error ? error.message : 'Connection failed');
       setIsConnected(false);
-    } finally {
       setIsConnecting(false);
     }
   }, []);
@@ -127,6 +131,7 @@ export const useNetworkCamera = () => {
     try {
       console.log('useNetworkCamera: Testing connection to:', config.url);
       const testUrl = getProxiedUrl(config.url);
+      console.log('useNetworkCamera: Testing with URL:', testUrl);
       const response = await fetch(testUrl, { 
         method: 'HEAD',
         mode: 'cors'
