@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -19,7 +20,8 @@ export const useNetworkCamera = () => {
   const getProxiedUrl = (originalUrl: string) => {
     // If the URL is HTTP and we're on HTTPS, use our proxy
     if (originalUrl.startsWith('http://') && window.location.protocol === 'https:') {
-      const proxyUrl = `${window.location.origin}/functions/v1/camera-proxy`;
+      // Use the full Supabase project URL for the edge function
+      const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy`;
       return `${proxyUrl}?url=${encodeURIComponent(originalUrl)}`;
     }
     return originalUrl;
