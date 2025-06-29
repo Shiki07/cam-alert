@@ -18,7 +18,7 @@ serve(async (req) => {
     let method = 'GET';
 
     if (req.method === 'GET') {
-      // Handle GET requests with URL parameter (legacy support)
+      // Handle GET requests with URL parameter (for streaming)
       const url = new URL(req.url);
       const urlParam = url.searchParams.get('url');
       if (!urlParam) {

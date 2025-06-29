@@ -18,7 +18,7 @@ export const useNetworkCamera = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const getProxiedUrl = async (originalUrl: string) => {
+  const getProxiedUrl = (originalUrl: string) => {
     console.log('=== getProxiedUrl - START ===');
     console.log('getProxiedUrl - originalUrl:', originalUrl);
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
@@ -29,35 +29,11 @@ export const useNetworkCamera = () => {
     console.log('getProxiedUrl - shouldUseProxy:', shouldUseProxy);
     
     if (shouldUseProxy) {
-      // Get the current session to include auth headers
-      const { data: { session } } = await supabase.auth.getSession();
-      const headers: Record<string, string> = {};
-      
-      if (session?.access_token) {
-        headers['Authorization'] = `Bearer ${session.access_token}`;
-      }
-      
-      // Use the Supabase client to call the edge function
-      const { data, error } = await supabase.functions.invoke('camera-proxy', {
-        body: { url: originalUrl },
-        headers
-      });
-      
-      if (error) {
-        console.error('getProxiedUrl - Edge function error:', error);
-        throw new Error(`Proxy request failed: ${error.message}`);
-      }
-      
-      // For streaming, we need to create a blob URL from the response
-      if (data) {
-        console.log('getProxiedUrl - Got response from edge function');
-        // Create a blob URL for the stream
-        const blob = new Blob([data], { type: 'multipart/x-mixed-replace' });
-        const blobUrl = URL.createObjectURL(blob);
-        console.log('getProxiedUrl - Created blob URL:', blobUrl);
-        console.log('=== getProxiedUrl - END (PROXY WITH BLOB) ===');
-        return blobUrl;
-      }
+      // For MJPEG streams, we need to use the proxy URL directly
+      const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`;
+      console.log('getProxiedUrl - USING PROXY - proxyUrl:', proxyUrl);
+      console.log('=== getProxiedUrl - END (PROXY) ===');
+      return proxyUrl;
     }
     
     console.log('getProxiedUrl - NOT USING PROXY - returning original URL:', originalUrl);
@@ -96,9 +72,9 @@ export const useNetworkCamera = () => {
           console.log('useNetworkCamera: Stream URL with auth:', streamUrl);
         }
 
-        // IMPORTANT: Always get the proxied URL for HTTP streams on HTTPS
+        // Get the proxied URL
         console.log('useNetworkCamera: Calling getProxiedUrl with streamUrl:', streamUrl);
-        const finalUrl = await getProxiedUrl(streamUrl);
+        const finalUrl = getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
         // Set up event handlers
