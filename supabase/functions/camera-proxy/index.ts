@@ -4,7 +4,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
 };
 
 serve(async (req) => {
@@ -14,21 +14,43 @@ serve(async (req) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const targetUrl = url.searchParams.get('url');
-    
-    if (!targetUrl) {
-      return new Response('Missing url parameter', { 
-        status: 400, 
+    let targetUrl: string;
+    let method = 'GET';
+
+    if (req.method === 'GET') {
+      // Handle GET requests with URL parameter (legacy support)
+      const url = new URL(req.url);
+      const urlParam = url.searchParams.get('url');
+      if (!urlParam) {
+        return new Response('Missing url parameter', { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      targetUrl = urlParam;
+    } else if (req.method === 'POST') {
+      // Handle POST requests with JSON body
+      const body = await req.json();
+      if (!body.url) {
+        return new Response('Missing url in request body', { 
+          status: 400, 
+          headers: corsHeaders 
+        });
+      }
+      targetUrl = body.url;
+      method = body.method || 'GET';
+    } else {
+      return new Response('Method not allowed', { 
+        status: 405, 
         headers: corsHeaders 
       });
     }
 
-    console.log('Proxying request to:', targetUrl);
+    console.log('Proxying request to:', targetUrl, 'with method:', method);
 
-    // Fetch the stream from the Raspberry Pi
+    // Fetch the stream from the camera
     const response = await fetch(targetUrl, {
-      method: 'GET',
+      method: method,
       headers: {
         'User-Agent': 'Camera-Proxy/1.0',
       },
@@ -37,6 +59,14 @@ serve(async (req) => {
     if (!response.ok) {
       console.error('Failed to fetch from target:', response.status, response.statusText);
       return new Response(`Failed to fetch stream: ${response.statusText}`, {
+        status: response.status,
+        headers: corsHeaders,
+      });
+    }
+
+    // For HEAD requests, just return the status
+    if (method === 'HEAD') {
+      return new Response(null, {
         status: response.status,
         headers: corsHeaders,
       });
