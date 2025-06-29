@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -77,7 +76,7 @@ export const useNetworkCamera = () => {
         const finalUrl = getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
-        // Set up event handlers
+        // Set up event handlers with better error reporting
         const handleSuccess = () => {
           console.log('useNetworkCamera: MJPEG stream connected successfully!');
           console.log('useNetworkCamera: Video src at success:', video.src);
@@ -96,7 +95,27 @@ export const useNetworkCamera = () => {
           console.error('  - networkState:', video.networkState);
           console.error('  - error:', video.error);
           
-          const errorMsg = 'Failed to connect to MJPEG stream. Please check that your camera is accessible and the URL is correct.';
+          let errorMsg = 'Failed to connect to camera stream';
+          if (video.error) {
+            switch (video.error.code) {
+              case 1: // MEDIA_ERR_ABORTED
+                errorMsg = 'Camera stream was aborted';
+                break;
+              case 2: // MEDIA_ERR_NETWORK
+                errorMsg = 'Network error while loading camera stream';
+                break;
+              case 3: // MEDIA_ERR_DECODE
+                errorMsg = 'Camera stream format not supported';
+                break;
+              case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
+                errorMsg = 'Camera stream source not supported or not accessible';
+                break;
+              default:
+                errorMsg = `Camera stream error (code: ${video.error.code})`;
+            }
+            console.error('useNetworkCamera: Detailed error:', errorMsg);
+          }
+          
           setConnectionError(errorMsg);
           setIsConnected(false);
           setIsConnecting(false);
@@ -115,6 +134,10 @@ export const useNetworkCamera = () => {
           console.log('useNetworkCamera: Video stalled');
         };
 
+        const handleProgress = () => {
+          console.log('useNetworkCamera: Video loading progress');
+        };
+
         // Remove existing listeners to avoid duplicates
         video.removeEventListener('loadedmetadata', handleSuccess);
         video.removeEventListener('canplay', handleSuccess);
@@ -122,6 +145,7 @@ export const useNetworkCamera = () => {
         video.removeEventListener('loadstart', handleLoadStart);
         video.removeEventListener('abort', handleAbort);
         video.removeEventListener('stalled', handleStalled);
+        video.removeEventListener('progress', handleProgress);
 
         // Add new listeners
         video.addEventListener('loadedmetadata', handleSuccess, { once: true });
@@ -130,6 +154,7 @@ export const useNetworkCamera = () => {
         video.addEventListener('loadstart', handleLoadStart);
         video.addEventListener('abort', handleAbort);
         video.addEventListener('stalled', handleStalled);
+        video.addEventListener('progress', handleProgress);
 
         // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
