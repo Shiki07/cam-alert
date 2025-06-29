@@ -72,10 +72,10 @@ export const useNetworkCamera = () => {
           console.log('useNetworkCamera: Stream URL with auth:', streamUrl);
         }
 
-        // Get the proxied URL
-        console.log('useNetworkCamera: Calling getProxiedUrl...');
+        // IMPORTANT: Always get the proxied URL for HTTP streams on HTTPS
+        console.log('useNetworkCamera: Calling getProxiedUrl with streamUrl:', streamUrl);
         const finalUrl = getProxiedUrl(streamUrl);
-        console.log('useNetworkCamera: Final stream URL received from getProxiedUrl:', finalUrl);
+        console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
         // Verify the URL is actually proxied if it should be
         if (streamUrl.startsWith('http://') && window.location.protocol === 'https:') {
@@ -83,6 +83,7 @@ export const useNetworkCamera = () => {
             console.error('useNetworkCamera: ERROR - Proxy should be used but finalUrl does not contain camera-proxy!');
             console.error('useNetworkCamera: streamUrl:', streamUrl);
             console.error('useNetworkCamera: finalUrl:', finalUrl);
+            throw new Error('Failed to apply proxy URL for HTTP stream');
           } else {
             console.log('useNetworkCamera: SUCCESS - Proxy URL correctly applied');
           }
