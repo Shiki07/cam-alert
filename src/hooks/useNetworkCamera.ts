@@ -76,6 +76,24 @@ export const useNetworkCamera = () => {
         const finalUrl = getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
+        // Test the connection first
+        console.log('useNetworkCamera: Testing connection...');
+        try {
+          const testResponse = await fetch(finalUrl, { 
+            method: 'HEAD',
+            signal: AbortSignal.timeout(5000) // 5 second timeout
+          });
+          
+          if (!testResponse.ok) {
+            throw new Error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
+          }
+          
+          console.log('useNetworkCamera: Connection test successful');
+        } catch (testError) {
+          console.error('useNetworkCamera: Connection test failed:', testError);
+          throw new Error(`Cannot reach camera: ${testError.message}`);
+        }
+
         // Set up event handlers
         const handleSuccess = () => {
           console.log('useNetworkCamera: MJPEG stream connected successfully!');
@@ -95,7 +113,6 @@ export const useNetworkCamera = () => {
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error occurred!');
           console.error('useNetworkCamera: Error event:', e);
-          console.error('useNetworkCamera: Video element src at error time:', video.src);
           console.error('useNetworkCamera: Video element current properties:');
           console.error('  - readyState:', video.readyState);
           console.error('  - networkState:', video.networkState);
@@ -119,7 +136,7 @@ export const useNetworkCamera = () => {
                 errorMsg = 'Camera stream format not supported or corrupted';
                 break;
               case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                errorMsg = 'Camera stream source not supported or not accessible';
+                errorMsg = 'Camera stream source not supported - MJPEG format may be incompatible with this browser';
                 break;
               default:
                 errorMsg = `Camera stream error (code: ${video.error.code})`;
@@ -134,12 +151,6 @@ export const useNetworkCamera = () => {
 
         const handleLoadStart = () => {
           console.log('useNetworkCamera: Video load started');
-          console.log('useNetworkCamera: Video src during load start:', video.src);
-        };
-
-        const handleProgress = () => {
-          console.log('useNetworkCamera: Video loading progress');
-          console.log('useNetworkCamera: Video buffered ranges:', video.buffered.length);
         };
 
         const handleCanPlay = () => {
@@ -152,15 +163,13 @@ export const useNetworkCamera = () => {
         video.removeEventListener('canplay', handleSuccess);
         video.removeEventListener('error', handleError);
         video.removeEventListener('loadstart', handleLoadStart);
-        video.removeEventListener('progress', handleProgress);
         video.removeEventListener('canplay', handleCanPlay);
 
         // Add new listeners
         video.addEventListener('loadedmetadata', handleSuccess, { once: true });
-        video.addEventListener('canplay', handleCanPlay);
         video.addEventListener('error', handleError);
         video.addEventListener('loadstart', handleLoadStart);
-        video.addEventListener('progress', handleProgress);
+        video.addEventListener('canplay', handleCanPlay);
 
         // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
@@ -181,11 +190,11 @@ export const useNetworkCamera = () => {
         // Add a timeout to catch hanging connections
         setTimeout(() => {
           if (isConnecting && !isConnected) {
-            console.warn('useNetworkCamera: Connection timeout after 15 seconds');
-            setConnectionError('Connection timeout - camera may not be responding');
+            console.warn('useNetworkCamera: Connection timeout after 10 seconds');
+            setConnectionError('Connection timeout - camera may not be responding or MJPEG format is not supported');
             setIsConnecting(false);
           }
-        }, 15000);
+        }, 10000);
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);
@@ -224,20 +233,14 @@ export const useNetworkCamera = () => {
         testUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
       }
       
-      // Use the public proxy endpoint for testing
+      // Use the proxy endpoint for testing
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
-        // Test using the public proxy endpoint
-        const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            url: testUrl, 
-            method: 'HEAD' 
-          })
+        // Test using the proxy endpoint with HEAD method
+        const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(testUrl)}`, {
+          method: 'HEAD',
+          signal: AbortSignal.timeout(5000)
         });
         
         console.log('useNetworkCamera: Connection test result:', response.ok, response.status);
@@ -246,7 +249,8 @@ export const useNetworkCamera = () => {
         // Direct connection test
         const response = await fetch(testUrl, { 
           method: 'HEAD',
-          mode: 'cors'
+          mode: 'cors',
+          signal: AbortSignal.timeout(5000)
         });
         console.log('useNetworkCamera: Connection test response:', response.status);
         return response.ok;

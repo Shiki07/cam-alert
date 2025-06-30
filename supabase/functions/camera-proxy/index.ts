@@ -20,10 +20,8 @@ serve(async (req) => {
     console.log(`=== Camera Proxy Request ===`);
     console.log(`Method: ${req.method}`);
     console.log(`URL: ${req.url}`);
-    console.log(`Headers:`, Object.fromEntries(req.headers.entries()));
 
     if (req.method === 'GET') {
-      // Handle GET requests with URL parameter (for streaming)
       const url = new URL(req.url);
       const urlParam = url.searchParams.get('url');
       if (!urlParam) {
@@ -35,7 +33,6 @@ serve(async (req) => {
       }
       targetUrl = urlParam;
     } else if (req.method === 'POST') {
-      // Handle POST requests with JSON body
       const body = await req.json();
       if (!body.url) {
         console.error('Missing url in POST request body');
@@ -58,11 +55,32 @@ serve(async (req) => {
     // Add timeout and better error handling
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log('Request timeout after 30 seconds');
+      console.log('Request timeout after 10 seconds');
       controller.abort();
-    }, 30000); // 30 second timeout
+    }, 10000); // Reduced to 10 second timeout
 
     try {
+      // Test connection first with a shorter timeout
+      console.log('Testing connection to camera...');
+      const testResponse = await fetch(targetUrl, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Camera-Proxy/1.0',
+          'Accept': '*/*',
+        },
+        signal: AbortSignal.timeout(5000), // 5 second timeout for test
+      });
+
+      if (!testResponse.ok) {
+        console.error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
+        return new Response(`Camera not accessible: ${testResponse.status} ${testResponse.statusText}`, {
+          status: 502,
+          headers: corsHeaders,
+        });
+      }
+
+      console.log('Connection test successful, fetching stream...');
+
       // Fetch the stream from the camera
       const response = await fetch(targetUrl, {
         method: method,
@@ -124,11 +142,14 @@ serve(async (req) => {
       headers.set('pragma', 'no-cache');
       headers.set('expires', '0');
 
-      // For MJPEG streams, we need to handle the multipart response
+      // For MJPEG streams, we need to handle the multipart response properly
       if (contentType && (contentType.includes('multipart') || contentType.includes('mjpeg'))) {
         console.log('Handling MJPEG multipart stream');
         
         // For MJPEG streams, we pass through the response body directly
+        // but ensure proper headers for browser compatibility
+        headers.set('content-type', 'multipart/x-mixed-replace; boundary=--jpgboundary');
+        
         return new Response(response.body, {
           status: response.status,
           headers: headers,
@@ -150,7 +171,7 @@ serve(async (req) => {
       console.error('Error message:', fetchError.message);
       
       if (fetchError.name === 'AbortError') {
-        console.error('Request timeout after 30 seconds');
+        console.error('Request timeout');
         return new Response('Camera connection timeout - please check if your camera is accessible and responding', {
           status: 408,
           headers: corsHeaders,
@@ -160,7 +181,7 @@ serve(async (req) => {
       // Provide more specific error messages based on the error
       let errorMessage = 'Camera connection failed';
       if (fetchError.message.includes('NetworkError') || fetchError.message.includes('Failed to fetch')) {
-        errorMessage = 'Network error - please check if your camera is online and accessible from this server';
+        errorMessage = 'Network error - please check if your camera is online and accessible';
       } else if (fetchError.message.includes('TypeError')) {
         errorMessage = 'Invalid camera URL or connection refused - please verify the camera URL';
       } else if (fetchError.message.includes('ECONNREFUSED')) {
