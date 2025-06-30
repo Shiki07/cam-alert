@@ -1,5 +1,5 @@
+
 import { useState, useRef, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface NetworkCameraConfig {
   url: string;
@@ -79,6 +79,13 @@ export const useNetworkCamera = () => {
         // Set up event handlers
         const handleSuccess = () => {
           console.log('useNetworkCamera: MJPEG stream connected successfully!');
+          console.log('useNetworkCamera: Video element properties at success:');
+          console.log('  - readyState:', video.readyState);
+          console.log('  - networkState:', video.networkState);
+          console.log('  - videoWidth:', video.videoWidth);
+          console.log('  - videoHeight:', video.videoHeight);
+          console.log('  - duration:', video.duration);
+          
           setIsConnected(true);
           setCurrentConfig(config);
           setConnectionError(null);
@@ -88,6 +95,7 @@ export const useNetworkCamera = () => {
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error occurred!');
           console.error('useNetworkCamera: Error event:', e);
+          console.error('useNetworkCamera: Video element src at error time:', video.src);
           console.error('useNetworkCamera: Video element current properties:');
           console.error('  - readyState:', video.readyState);
           console.error('  - networkState:', video.networkState);
@@ -95,6 +103,11 @@ export const useNetworkCamera = () => {
           
           let errorMsg = 'Failed to connect to camera stream';
           if (video.error) {
+            console.error('useNetworkCamera: MediaError details:', {
+              code: video.error.code,
+              message: video.error.message
+            });
+            
             switch (video.error.code) {
               case 1: // MEDIA_ERR_ABORTED
                 errorMsg = 'Camera stream was aborted';
@@ -103,14 +116,15 @@ export const useNetworkCamera = () => {
                 errorMsg = 'Network error while loading camera stream - please check if your camera is accessible';
                 break;
               case 3: // MEDIA_ERR_DECODE
-                errorMsg = 'Camera stream format not supported';
+                errorMsg = 'Camera stream format not supported or corrupted';
                 break;
               case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                errorMsg = 'Camera stream source not accessible - please verify the URL and camera status';
+                errorMsg = 'Camera stream source not supported or not accessible';
                 break;
               default:
                 errorMsg = `Camera stream error (code: ${video.error.code})`;
             }
+            console.error('useNetworkCamera: Detailed error:', errorMsg);
           }
           
           setConnectionError(errorMsg);
@@ -118,21 +132,42 @@ export const useNetworkCamera = () => {
           setIsConnecting(false);
         };
 
-        // Remove existing listeners
+        const handleLoadStart = () => {
+          console.log('useNetworkCamera: Video load started');
+          console.log('useNetworkCamera: Video src during load start:', video.src);
+        };
+
+        const handleProgress = () => {
+          console.log('useNetworkCamera: Video loading progress');
+          console.log('useNetworkCamera: Video buffered ranges:', video.buffered.length);
+        };
+
+        const handleCanPlay = () => {
+          console.log('useNetworkCamera: Video can play');
+          console.log('useNetworkCamera: Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+        };
+
+        // Remove existing listeners to avoid duplicates
         video.removeEventListener('loadedmetadata', handleSuccess);
         video.removeEventListener('canplay', handleSuccess);
         video.removeEventListener('error', handleError);
+        video.removeEventListener('loadstart', handleLoadStart);
+        video.removeEventListener('progress', handleProgress);
+        video.removeEventListener('canplay', handleCanPlay);
 
         // Add new listeners
         video.addEventListener('loadedmetadata', handleSuccess, { once: true });
-        video.addEventListener('canplay', handleSuccess, { once: true });
+        video.addEventListener('canplay', handleCanPlay);
         video.addEventListener('error', handleError);
+        video.addEventListener('loadstart', handleLoadStart);
+        video.addEventListener('progress', handleProgress);
 
         // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
         video.autoplay = true;
         video.playsInline = true;
         video.muted = true;
+        video.controls = false;
 
         // Set the source and load
         console.log('useNetworkCamera: About to set video.src to:', finalUrl);
@@ -142,6 +177,15 @@ export const useNetworkCamera = () => {
         console.log('useNetworkCamera: Calling video.load()');
         video.load();
         console.log('useNetworkCamera: video.load() called');
+
+        // Add a timeout to catch hanging connections
+        setTimeout(() => {
+          if (isConnecting && !isConnected) {
+            console.warn('useNetworkCamera: Connection timeout after 15 seconds');
+            setConnectionError('Connection timeout - camera may not be responding');
+            setIsConnecting(false);
+          }
+        }, 15000);
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);
@@ -153,7 +197,7 @@ export const useNetworkCamera = () => {
       setIsConnected(false);
       setIsConnecting(false);
     }
-  }, []);
+  }, [isConnecting, isConnected]);
 
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
@@ -180,7 +224,7 @@ export const useNetworkCamera = () => {
         testUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
       }
       
-      // Use the edge function to test the connection
+      // Use the public proxy endpoint for testing
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
@@ -196,7 +240,7 @@ export const useNetworkCamera = () => {
           })
         });
         
-        console.log('useNetworkCamera: Connection test result:', response.ok);
+        console.log('useNetworkCamera: Connection test result:', response.ok, response.status);
         return response.ok;
       } else {
         // Direct connection test

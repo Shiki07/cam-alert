@@ -57,7 +57,10 @@ serve(async (req) => {
 
     // Add timeout and better error handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for streams
+    const timeoutId = setTimeout(() => {
+      console.log('Request timeout after 30 seconds');
+      controller.abort();
+    }, 30000); // 30 second timeout
 
     try {
       // Fetch the stream from the camera
@@ -67,24 +70,37 @@ serve(async (req) => {
           'User-Agent': 'Camera-Proxy/1.0',
           'Accept': '*/*',
           'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
         },
         signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
 
+      console.log(`Response status: ${response.status} ${response.statusText}`);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         console.error(`Failed to fetch from target: ${response.status} ${response.statusText}`);
-        console.error('Response headers:', Object.fromEntries(response.headers.entries()));
         
-        return new Response(`Camera connection failed: ${response.status} ${response.statusText}`, {
+        let errorMessage = `Camera connection failed: ${response.status} ${response.statusText}`;
+        if (response.status === 404) {
+          errorMessage = 'Camera stream not found - please check the URL';
+        } else if (response.status === 401) {
+          errorMessage = 'Camera authentication required - please check credentials';
+        } else if (response.status >= 500) {
+          errorMessage = 'Camera server error - please check if the camera is running';
+        }
+        
+        return new Response(errorMessage, {
           status: response.status,
           headers: corsHeaders,
         });
       }
 
       console.log(`Successfully connected to camera. Status: ${response.status}`);
-      console.log('Response content-type:', response.headers.get('content-type'));
+      const contentType = response.headers.get('content-type');
+      console.log('Response content-type:', contentType);
 
       // For HEAD requests, just return the status
       if (method === 'HEAD') {
@@ -98,23 +114,21 @@ serve(async (req) => {
       const headers = new Headers(corsHeaders);
       
       // Copy important headers from the original response
-      const contentType = response.headers.get('content-type');
       if (contentType) {
         headers.set('content-type', contentType);
         console.log('Forwarding content-type:', contentType);
       }
       
-      const cacheControl = response.headers.get('cache-control');
-      if (cacheControl) {
-        headers.set('cache-control', cacheControl);
-      } else {
-        headers.set('cache-control', 'no-cache');
-      }
+      // Set appropriate cache headers for streaming
+      headers.set('cache-control', 'no-cache, no-store, must-revalidate');
+      headers.set('pragma', 'no-cache');
+      headers.set('expires', '0');
 
       // For MJPEG streams, we need to handle the multipart response
-      if (contentType?.includes('multipart') || contentType?.includes('mjpeg')) {
+      if (contentType && (contentType.includes('multipart') || contentType.includes('mjpeg'))) {
         console.log('Handling MJPEG multipart stream');
         
+        // For MJPEG streams, we pass through the response body directly
         return new Response(response.body, {
           status: response.status,
           headers: headers,
@@ -131,34 +145,33 @@ serve(async (req) => {
     } catch (fetchError) {
       clearTimeout(timeoutId);
       
+      console.error('Network error connecting to camera:', fetchError);
+      console.error('Error name:', fetchError.name);
+      console.error('Error message:', fetchError.message);
+      
       if (fetchError.name === 'AbortError') {
         console.error('Request timeout after 30 seconds');
-        return new Response('Camera connection timeout - please check if your camera is accessible', {
+        return new Response('Camera connection timeout - please check if your camera is accessible and responding', {
           status: 408,
           headers: corsHeaders,
         });
       }
       
-      console.error('Network error connecting to camera:', fetchError);
-      console.error('Error details:', {
-        name: fetchError.name,
-        message: fetchError.message,
-        cause: fetchError.cause
-      });
-      
-      // Provide more specific error messages
+      // Provide more specific error messages based on the error
       let errorMessage = 'Camera connection failed';
-      if (fetchError.message.includes('NetworkError')) {
-        errorMessage = 'Network error - please check if your camera is online and accessible';
+      if (fetchError.message.includes('NetworkError') || fetchError.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error - please check if your camera is online and accessible from this server';
       } else if (fetchError.message.includes('TypeError')) {
-        errorMessage = 'Invalid camera URL or connection refused';
+        errorMessage = 'Invalid camera URL or connection refused - please verify the camera URL';
       } else if (fetchError.message.includes('ECONNREFUSED')) {
-        errorMessage = 'Connection refused - camera may be offline';
+        errorMessage = 'Connection refused - camera may be offline or port blocked';
       } else if (fetchError.message.includes('EHOSTUNREACH')) {
-        errorMessage = 'Host unreachable - check network connectivity';
+        errorMessage = 'Host unreachable - check network connectivity to camera';
       } else if (fetchError.message.includes('ETIMEDOUT')) {
         errorMessage = 'Connection timed out - camera may be slow to respond';
       }
+      
+      console.error('Final error message:', errorMessage);
       
       return new Response(errorMessage, {
         status: 502,
@@ -168,6 +181,11 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Proxy error:', error);
+    console.error('Proxy error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     return new Response(`Proxy error: ${error.message}`, {
       status: 500,
       headers: corsHeaders,
