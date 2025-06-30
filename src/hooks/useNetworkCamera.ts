@@ -68,7 +68,7 @@ export const useNetworkCamera = () => {
         
         if (config.username && config.password) {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
-          console.log('useNetworkCamera: Stream URL with auth:', streamUrl);
+          console.log('useNetworkCamera: Stream URL with auth (hidden for security)');
         }
 
         // Get the proxied URL
@@ -76,10 +76,9 @@ export const useNetworkCamera = () => {
         const finalUrl = getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
-        // Set up event handlers with better error reporting
+        // Set up event handlers
         const handleSuccess = () => {
           console.log('useNetworkCamera: MJPEG stream connected successfully!');
-          console.log('useNetworkCamera: Video src at success:', video.src);
           setIsConnected(true);
           setCurrentConfig(config);
           setConnectionError(null);
@@ -89,7 +88,6 @@ export const useNetworkCamera = () => {
         const handleError = (e: Event) => {
           console.error('useNetworkCamera: MJPEG stream error occurred!');
           console.error('useNetworkCamera: Error event:', e);
-          console.error('useNetworkCamera: Video element src at error time:', video.src);
           console.error('useNetworkCamera: Video element current properties:');
           console.error('  - readyState:', video.readyState);
           console.error('  - networkState:', video.networkState);
@@ -102,18 +100,17 @@ export const useNetworkCamera = () => {
                 errorMsg = 'Camera stream was aborted';
                 break;
               case 2: // MEDIA_ERR_NETWORK
-                errorMsg = 'Network error while loading camera stream';
+                errorMsg = 'Network error while loading camera stream - please check if your camera is accessible';
                 break;
               case 3: // MEDIA_ERR_DECODE
                 errorMsg = 'Camera stream format not supported';
                 break;
               case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                errorMsg = 'Camera stream source not supported or not accessible';
+                errorMsg = 'Camera stream source not accessible - please verify the URL and camera status';
                 break;
               default:
                 errorMsg = `Camera stream error (code: ${video.error.code})`;
             }
-            console.error('useNetworkCamera: Detailed error:', errorMsg);
           }
           
           setConnectionError(errorMsg);
@@ -121,40 +118,15 @@ export const useNetworkCamera = () => {
           setIsConnecting(false);
         };
 
-        const handleLoadStart = () => {
-          console.log('useNetworkCamera: Video load started');
-          console.log('useNetworkCamera: Video src during load start:', video.src);
-        };
-
-        const handleAbort = () => {
-          console.log('useNetworkCamera: Video load aborted');
-        };
-
-        const handleStalled = () => {
-          console.log('useNetworkCamera: Video stalled');
-        };
-
-        const handleProgress = () => {
-          console.log('useNetworkCamera: Video loading progress');
-        };
-
-        // Remove existing listeners to avoid duplicates
+        // Remove existing listeners
         video.removeEventListener('loadedmetadata', handleSuccess);
         video.removeEventListener('canplay', handleSuccess);
         video.removeEventListener('error', handleError);
-        video.removeEventListener('loadstart', handleLoadStart);
-        video.removeEventListener('abort', handleAbort);
-        video.removeEventListener('stalled', handleStalled);
-        video.removeEventListener('progress', handleProgress);
 
         // Add new listeners
         video.addEventListener('loadedmetadata', handleSuccess, { once: true });
         video.addEventListener('canplay', handleSuccess, { once: true });
         video.addEventListener('error', handleError);
-        video.addEventListener('loadstart', handleLoadStart);
-        video.addEventListener('abort', handleAbort);
-        video.addEventListener('stalled', handleStalled);
-        video.addEventListener('progress', handleProgress);
 
         // Configure video element for MJPEG streaming
         video.crossOrigin = 'anonymous';
@@ -162,19 +134,11 @@ export const useNetworkCamera = () => {
         video.playsInline = true;
         video.muted = true;
 
-        // Set the proxied source
+        // Set the source and load
         console.log('useNetworkCamera: About to set video.src to:', finalUrl);
         video.src = finalUrl;
         console.log('useNetworkCamera: video.src has been set to:', video.src);
         
-        // Verify the src was set correctly
-        if (video.src !== finalUrl) {
-          console.error('useNetworkCamera: ERROR - video.src was not set correctly!');
-          console.error('useNetworkCamera: Expected:', finalUrl);
-          console.error('useNetworkCamera: Actual:', video.src);
-        }
-        
-        // Force load the video
         console.log('useNetworkCamera: Calling video.load()');
         video.load();
         console.log('useNetworkCamera: video.load() called');
@@ -194,10 +158,6 @@ export const useNetworkCamera = () => {
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
     if (videoRef.current) {
-      // Revoke blob URL if it exists
-      if (videoRef.current.src.startsWith('blob:')) {
-        URL.revokeObjectURL(videoRef.current.src);
-      }
       videoRef.current.src = '';
       videoRef.current.srcObject = null;
     }
@@ -224,20 +184,20 @@ export const useNetworkCamera = () => {
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
-        const { data: { session } } = await supabase.auth.getSession();
-        const headers: Record<string, string> = {};
-        
-        if (session?.access_token) {
-          headers['Authorization'] = `Bearer ${session.access_token}`;
-        }
-        
-        const { error } = await supabase.functions.invoke('camera-proxy', {
-          body: { url: testUrl, method: 'HEAD' },
-          headers
+        // Test using the public proxy endpoint
+        const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            url: testUrl, 
+            method: 'HEAD' 
+          })
         });
         
-        console.log('useNetworkCamera: Connection test result:', !error);
-        return !error;
+        console.log('useNetworkCamera: Connection test result:', response.ok);
+        return response.ok;
       } else {
         // Direct connection test
         const response = await fetch(testUrl, { 

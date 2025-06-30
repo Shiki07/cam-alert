@@ -17,6 +17,11 @@ serve(async (req) => {
     let targetUrl: string;
     let method = 'GET';
 
+    console.log(`=== Camera Proxy Request ===`);
+    console.log(`Method: ${req.method}`);
+    console.log(`URL: ${req.url}`);
+    console.log(`Headers:`, Object.fromEntries(req.headers.entries()));
+
     if (req.method === 'GET') {
       // Handle GET requests with URL parameter (for streaming)
       const url = new URL(req.url);
@@ -52,7 +57,7 @@ serve(async (req) => {
 
     // Add timeout and better error handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout for streams
 
     try {
       // Fetch the stream from the camera
@@ -61,6 +66,7 @@ serve(async (req) => {
         headers: {
           'User-Agent': 'Camera-Proxy/1.0',
           'Accept': '*/*',
+          'Cache-Control': 'no-cache',
         },
         signal: controller.signal,
       });
@@ -101,6 +107,8 @@ serve(async (req) => {
       const cacheControl = response.headers.get('cache-control');
       if (cacheControl) {
         headers.set('cache-control', cacheControl);
+      } else {
+        headers.set('cache-control', 'no-cache');
       }
 
       // For MJPEG streams, we need to handle the multipart response
@@ -124,7 +132,7 @@ serve(async (req) => {
       clearTimeout(timeoutId);
       
       if (fetchError.name === 'AbortError') {
-        console.error('Request timeout after 10 seconds');
+        console.error('Request timeout after 30 seconds');
         return new Response('Camera connection timeout - please check if your camera is accessible', {
           status: 408,
           headers: corsHeaders,
@@ -132,6 +140,11 @@ serve(async (req) => {
       }
       
       console.error('Network error connecting to camera:', fetchError);
+      console.error('Error details:', {
+        name: fetchError.name,
+        message: fetchError.message,
+        cause: fetchError.cause
+      });
       
       // Provide more specific error messages
       let errorMessage = 'Camera connection failed';
@@ -139,6 +152,12 @@ serve(async (req) => {
         errorMessage = 'Network error - please check if your camera is online and accessible';
       } else if (fetchError.message.includes('TypeError')) {
         errorMessage = 'Invalid camera URL or connection refused';
+      } else if (fetchError.message.includes('ECONNREFUSED')) {
+        errorMessage = 'Connection refused - camera may be offline';
+      } else if (fetchError.message.includes('EHOSTUNREACH')) {
+        errorMessage = 'Host unreachable - check network connectivity';
+      } else if (fetchError.message.includes('ETIMEDOUT')) {
+        errorMessage = 'Connection timed out - camera may be slow to respond';
       }
       
       return new Response(errorMessage, {
