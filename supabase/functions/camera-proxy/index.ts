@@ -15,17 +15,17 @@ serve(async (req) => {
 
   try {
     let targetUrl: string;
-    let method = 'GET';
+    let method = req.method; // Use the actual request method
 
     console.log(`=== Camera Proxy Request ===`);
     console.log(`Method: ${req.method}`);
     console.log(`URL: ${req.url}`);
 
-    if (req.method === 'GET') {
+    if (req.method === 'GET' || req.method === 'HEAD') {
       const url = new URL(req.url);
       const urlParam = url.searchParams.get('url');
       if (!urlParam) {
-        console.error('Missing url parameter in GET request');
+        console.error(`Missing url parameter in ${req.method} request`);
         return new Response('Missing url parameter', { 
           status: 400, 
           headers: corsHeaders 
@@ -57,31 +57,12 @@ serve(async (req) => {
     const timeoutId = setTimeout(() => {
       console.log('Request timeout after 10 seconds');
       controller.abort();
-    }, 10000); // Reduced to 10 second timeout
+    }, 10000);
 
     try {
-      // Test connection first with a shorter timeout
-      console.log('Testing connection to camera...');
-      const testResponse = await fetch(targetUrl, {
-        method: 'HEAD',
-        headers: {
-          'User-Agent': 'Camera-Proxy/1.0',
-          'Accept': '*/*',
-        },
-        signal: AbortSignal.timeout(5000), // 5 second timeout for test
-      });
-
-      if (!testResponse.ok) {
-        console.error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
-        return new Response(`Camera not accessible: ${testResponse.status} ${testResponse.statusText}`, {
-          status: 502,
-          headers: corsHeaders,
-        });
-      }
-
-      console.log('Connection test successful, fetching stream...');
-
-      // Fetch the stream from the camera
+      console.log(`Making ${method} request to camera...`);
+      
+      // Make the actual request with the specified method
       const response = await fetch(targetUrl, {
         method: method,
         headers: {
@@ -120,15 +101,20 @@ serve(async (req) => {
       const contentType = response.headers.get('content-type');
       console.log('Response content-type:', contentType);
 
-      // For HEAD requests, just return the status
+      // For HEAD requests, just return the status with headers
       if (method === 'HEAD') {
+        console.log('Returning HEAD response with status:', response.status);
+        const headers = new Headers(corsHeaders);
+        if (contentType) {
+          headers.set('content-type', contentType);
+        }
         return new Response(null, {
           status: response.status,
-          headers: corsHeaders,
+          headers: headers,
         });
       }
 
-      // Forward the response with CORS headers
+      // Forward the response with CORS headers for GET requests
       const headers = new Headers(corsHeaders);
       
       // Copy important headers from the original response
