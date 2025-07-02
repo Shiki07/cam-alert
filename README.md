@@ -1,4 +1,4 @@
-
+This project is under construction, please wait until it's finished to use it!!!
 # CamAlert - Remote Camera Monitoring System
 
 A comprehensive web-based camera monitoring system built with React, TypeScript, and Supabase. Monitor multiple network cameras, detect motion, receive alerts, and manage recordings from anywhere.
