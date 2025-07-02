@@ -1,5 +1,3 @@
-
-
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -102,35 +100,38 @@ export const useNetworkCamera = () => {
         const isLocal = isLocalNetwork(config.url);
         console.log('useNetworkCamera: Is local network camera:', isLocal);
 
-        // Only test connection for non-local cameras or if not using proxy
-        if (!isLocal && finalUrl !== streamUrl) {
-          console.log('useNetworkCamera: Testing connection...');
-          try {
-            const testResponse = await fetch(finalUrl, { 
-              method: 'HEAD',
-              signal: AbortSignal.timeout(5000) // 5 second timeout
-            });
-            
-            if (!testResponse.ok) {
-              throw new Error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
-            }
-            
-            console.log('useNetworkCamera: Connection test successful');
-          } catch (testError) {
-            console.error('useNetworkCamera: Connection test failed:', testError);
-            
-            if (isLocal) {
-              console.warn('useNetworkCamera: Local network camera detected - this is expected to fail from cloud proxy');
-              setConnectionError('Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet or use HTTPS.');
-              setIsConnecting(false);
-              return;
-            }
-            
-            throw new Error(`Cannot reach camera: ${testError.message}`);
+        // Test connection for all cameras with increased timeout
+        console.log('useNetworkCamera: Testing connection...');
+        try {
+          const testResponse = await fetch(finalUrl, { 
+            method: 'HEAD',
+            signal: AbortSignal.timeout(15000) // Increased to 15 seconds
+          });
+          
+          if (!testResponse.ok) {
+            throw new Error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
           }
-        } else if (isLocal) {
-          console.log('useNetworkCamera: Skipping connection test for local network camera');
-          setConnectionError('Warning: Local network camera detected. Connection may fail due to network restrictions.');
+          
+          console.log('useNetworkCamera: Connection test successful');
+        } catch (testError) {
+          console.error('useNetworkCamera: Connection test failed:', testError);
+          
+          let errorMsg = 'Cannot reach camera';
+          if (testError.name === 'TimeoutError' || testError.message.includes('timeout')) {
+            if (isLocal) {
+              errorMsg = 'Local network camera timeout - this is expected when accessing from cloud. Try connecting from the same network.';
+            } else {
+              errorMsg = 'Camera connection timeout. Please check: 1) Camera is running, 2) Port forwarding is configured on your router, 3) Public IP is correct, 4) No firewall blocking access.';
+            }
+          } else if (isLocal) {
+            errorMsg = 'Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet or access this site from the same network.';
+          } else {
+            errorMsg = `Cannot reach camera at ${config.url}. Please verify: 1) Camera is online and accessible, 2) Router port forwarding is configured, 3) No firewall blocking access.`;
+          }
+          
+          setConnectionError(errorMsg);
+          setIsConnecting(false);
+          return;
         }
 
         // Set up event handlers
@@ -170,23 +171,23 @@ export const useNetworkCamera = () => {
                 break;
               case 2: // MEDIA_ERR_NETWORK
                 if (isLocal) {
-                  errorMsg = 'Cannot reach local network camera from cloud proxy. Your camera needs to be accessible from the internet or use HTTPS.';
+                  errorMsg = 'Cannot reach local network camera from cloud proxy. Your camera needs to be accessible from the internet.';
                 } else {
-                  errorMsg = 'Network error while loading camera stream - please check if your camera is accessible';
+                  errorMsg = 'Network error while loading camera stream. Please check: 1) Camera is online, 2) Port forwarding configured, 3) No firewall blocking access.';
                 }
                 break;
               case 3: // MEDIA_ERR_DECODE
-                errorMsg = 'Camera stream format not supported or corrupted';
+                errorMsg = 'Camera stream format not supported or corrupted. Please check your camera\'s MJPEG output format.';
                 break;
               case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
                 if (isLocal) {
                   errorMsg = 'Local network camera cannot be accessed from this HTTPS site. Please use an HTTPS camera URL or access this site over HTTP.';
                 } else {
-                  errorMsg = 'Camera stream source not supported - MJPEG format may be incompatible with this browser';
+                  errorMsg = 'Camera stream source not supported. Please verify: 1) MJPEG format is correct, 2) Camera is accessible from internet, 3) Router configuration is correct.';
                 }
                 break;
               default:
-                errorMsg = `Camera stream error (code: ${video.error.code})`;
+                errorMsg = `Camera stream error (code: ${video.error.code}). Please check camera configuration and network connectivity.`;
             }
             console.error('useNetworkCamera: Detailed error:', errorMsg);
           }
@@ -238,14 +239,14 @@ export const useNetworkCamera = () => {
         // Add a timeout to catch hanging connections
         setTimeout(() => {
           if (isConnecting && !isConnected) {
-            console.warn('useNetworkCamera: Connection timeout after 15 seconds');
+            console.warn('useNetworkCamera: Connection timeout after 20 seconds');
             const timeoutMsg = isLocal 
-              ? 'Connection timeout - Local network cameras cannot be accessed from this HTTPS site. Please ensure your camera is accessible from the internet or use an HTTPS camera URL.'
-              : 'Connection timeout - camera may not be responding or MJPEG format is not supported';
+              ? 'Connection timeout - Local network cameras cannot be accessed from this HTTPS site. Please ensure your camera is accessible from the internet.'
+              : 'Connection timeout - Please check: 1) Camera is responding, 2) Router port forwarding is configured, 3) No firewall blocking access, 4) Camera URL is correct.';
             setConnectionError(timeoutMsg);
             setIsConnecting(false);
           }
-        }, 15000);
+        }, 20000); // Increased to 20 seconds
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);
@@ -297,10 +298,10 @@ export const useNetworkCamera = () => {
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
-        // Test using the proxy endpoint with HEAD method
+        // Test using the proxy endpoint with HEAD method and longer timeout
         const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(testUrl)}`, {
           method: 'HEAD',
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(15000) // Increased timeout
         });
         
         console.log('useNetworkCamera: Connection test result:', response.ok, response.status);
@@ -310,7 +311,7 @@ export const useNetworkCamera = () => {
         const response = await fetch(testUrl, { 
           method: 'HEAD',
           mode: 'cors',
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(15000) // Increased timeout
         });
         console.log('useNetworkCamera: Connection test response:', response.status);
         return response.ok;
@@ -333,4 +334,3 @@ export const useNetworkCamera = () => {
     testConnection
   };
 };
-

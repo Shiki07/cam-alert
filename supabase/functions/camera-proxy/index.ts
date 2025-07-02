@@ -15,7 +15,7 @@ serve(async (req) => {
 
   try {
     let targetUrl: string;
-    let method = req.method; // Use the actual request method
+    let method = req.method;
 
     console.log(`=== Camera Proxy Request ===`);
     console.log(`Method: ${req.method}`);
@@ -52,12 +52,12 @@ serve(async (req) => {
 
     console.log(`Proxying ${method} request to:`, targetUrl);
 
-    // Add timeout and better error handling
+    // Increased timeout for better connection handling
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log('Request timeout after 10 seconds');
+      console.log('Request timeout after 20 seconds');
       controller.abort();
-    }, 10000);
+    }, 20000); // Increased to 20 seconds
 
     try {
       console.log(`Making ${method} request to camera...`);
@@ -70,6 +70,7 @@ serve(async (req) => {
           'Accept': '*/*',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
+          'Accept-Encoding': 'identity', // Prevent compression issues
         },
         signal: controller.signal,
       });
@@ -84,11 +85,15 @@ serve(async (req) => {
         
         let errorMessage = `Camera connection failed: ${response.status} ${response.statusText}`;
         if (response.status === 404) {
-          errorMessage = 'Camera stream not found - please check the URL';
+          errorMessage = 'Camera stream not found - please check the URL and ensure the camera is running';
         } else if (response.status === 401) {
           errorMessage = 'Camera authentication required - please check credentials';
+        } else if (response.status === 403) {
+          errorMessage = 'Camera access forbidden - check firewall or camera permissions';
         } else if (response.status >= 500) {
-          errorMessage = 'Camera server error - please check if the camera is running';
+          errorMessage = 'Camera server error - please check if the camera is running properly';
+        } else if (response.status === 0) {
+          errorMessage = 'Network error - camera may be unreachable or blocked by firewall';
         }
         
         return new Response(errorMessage, {
@@ -108,6 +113,7 @@ serve(async (req) => {
         if (contentType) {
           headers.set('content-type', contentType);
         }
+        headers.set('cache-control', 'no-cache');
         return new Response(null, {
           status: response.status,
           headers: headers,
@@ -127,14 +133,24 @@ serve(async (req) => {
       headers.set('cache-control', 'no-cache, no-store, must-revalidate');
       headers.set('pragma', 'no-cache');
       headers.set('expires', '0');
+      
+      // Add headers to prevent buffering
+      headers.set('x-accel-buffering', 'no');
 
-      // For MJPEG streams, we need to handle the multipart response properly
+      // For MJPEG streams, handle the multipart response properly
       if (contentType && (contentType.includes('multipart') || contentType.includes('mjpeg'))) {
         console.log('Handling MJPEG multipart stream');
         
-        // For MJPEG streams, we pass through the response body directly
-        // but ensure proper headers for browser compatibility
-        headers.set('content-type', 'multipart/x-mixed-replace; boundary=--jpgboundary');
+        // Detect boundary from content-type or use default
+        let boundary = '--jpgboundary';
+        const boundaryMatch = contentType.match(/boundary=([^;]+)/);
+        if (boundaryMatch) {
+          boundary = boundaryMatch[1];
+          console.log('Detected boundary:', boundary);
+        }
+        
+        // Set proper MJPEG content type with detected boundary
+        headers.set('content-type', `multipart/x-mixed-replace; boundary=${boundary}`);
         
         return new Response(response.body, {
           status: response.status,
@@ -157,8 +173,8 @@ serve(async (req) => {
       console.error('Error message:', fetchError.message);
       
       if (fetchError.name === 'AbortError') {
-        console.error('Request timeout');
-        return new Response('Camera connection timeout - please check if your camera is accessible and responding', {
+        console.error('Request timeout after 20 seconds');
+        return new Response('Camera connection timeout - please check if your camera is accessible from the internet. This could be due to: 1) Router port forwarding not configured, 2) ISP blocking the connection, 3) Camera not responding, or 4) Firewall blocking access', {
           status: 408,
           headers: corsHeaders,
         });
@@ -167,15 +183,15 @@ serve(async (req) => {
       // Provide more specific error messages based on the error
       let errorMessage = 'Camera connection failed';
       if (fetchError.message.includes('NetworkError') || fetchError.message.includes('Failed to fetch')) {
-        errorMessage = 'Network error - please check if your camera is online and accessible';
+        errorMessage = 'Network error - your camera at ' + targetUrl + ' is not reachable from the internet. Please check: 1) Router port forwarding configuration, 2) Camera is running, 3) No firewall blocking access';
       } else if (fetchError.message.includes('TypeError')) {
-        errorMessage = 'Invalid camera URL or connection refused - please verify the camera URL';
+        errorMessage = 'Invalid camera URL or connection refused - please verify the camera URL and port forwarding';
       } else if (fetchError.message.includes('ECONNREFUSED')) {
-        errorMessage = 'Connection refused - camera may be offline or port blocked';
+        errorMessage = 'Connection refused - camera may be offline, port blocked, or not properly forwarded through router';
       } else if (fetchError.message.includes('EHOSTUNREACH')) {
-        errorMessage = 'Host unreachable - check network connectivity to camera';
+        errorMessage = 'Host unreachable - check network connectivity and router configuration';
       } else if (fetchError.message.includes('ETIMEDOUT')) {
-        errorMessage = 'Connection timed out - camera may be slow to respond';
+        errorMessage = 'Connection timed out - camera may be slow to respond or blocked by ISP/firewall';
       }
       
       console.error('Final error message:', errorMessage);
