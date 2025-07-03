@@ -78,7 +78,7 @@ export const LiveFeed = ({
       onMotionDetected(true);
       
       const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
-      if (currentVideoRef) {
+      if (currentVideoRef && currentVideoRef instanceof HTMLVideoElement) {
         motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
       }
       
@@ -186,7 +186,7 @@ export const LiveFeed = ({
 
   const handleSnapshot = () => {
     const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
-    if (!currentVideoRef) return;
+    if (!currentVideoRef || !(currentVideoRef instanceof HTMLVideoElement)) return;
     
     recording.takeSnapshot(currentVideoRef, {
       storageType,
@@ -260,7 +260,7 @@ export const LiveFeed = ({
   useEffect(() => {
     const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
     
-    if (isConnected && currentVideoRef) {
+    if (isConnected && currentVideoRef && currentVideoRef instanceof HTMLVideoElement) {
       if (motionDetectionEnabled) {
         motionDetection.startDetection(currentVideoRef);
       } else {

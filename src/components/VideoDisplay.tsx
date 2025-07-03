@@ -7,7 +7,7 @@ interface VideoDisplayProps {
   isConnected: boolean;
   cameraSource: 'webcam' | 'network';
   videoRef: React.RefObject<HTMLVideoElement>;
-  networkVideoRef: React.RefObject<HTMLVideoElement>;
+  networkVideoRef: React.RefObject<HTMLVideoElement | HTMLImageElement>;
   isLoading: boolean;
   isConnecting: boolean;
   error: string | null;
@@ -54,14 +54,14 @@ export const VideoDisplay = ({
       {/* Network camera - use img element for MJPEG streams */}
       {cameraSource === 'network' && isConnected ? (
         <img
-          ref={networkVideoRef}
+          ref={networkVideoRef as React.RefObject<HTMLImageElement>}
           className="w-full h-full object-cover"
           style={{ display: 'block' }}
           alt="Network Camera Stream"
         />
       ) : (
         <video
-          ref={networkVideoRef}
+          ref={networkVideoRef as React.RefObject<HTMLVideoElement>}
           autoPlay
           playsInline
           muted
