@@ -65,7 +65,11 @@ export const useNetworkCamera = () => {
     setConnectionError(null);
 
     try {
+      console.log('useNetworkCamera: videoRef.current:', videoRef.current);
+      console.log('useNetworkCamera: videoRef:', videoRef);
+      
       if (!videoRef.current) {
+        console.error('useNetworkCamera: Video element not available - videoRef.current is null');
         throw new Error('Video element not available');
       }
 
