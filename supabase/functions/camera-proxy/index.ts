@@ -57,12 +57,11 @@ serve(async (req) => {
     const timeoutId = setTimeout(() => {
       console.log('Request timeout after 20 seconds');
       controller.abort();
-    }, 20000); // Increased to 20 seconds
+    }, 20000);
 
     try {
       console.log(`Making ${method} request to camera...`);
       
-      // Make the actual request with the specified method
       const response = await fetch(targetUrl, {
         method: method,
         headers: {
@@ -70,7 +69,7 @@ serve(async (req) => {
           'Accept': '*/*',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'Accept-Encoding': 'identity', // Prevent compression issues
+          'Accept-Encoding': 'identity',
         },
         signal: controller.signal,
       });
@@ -137,22 +136,54 @@ serve(async (req) => {
       // Add headers to prevent buffering
       headers.set('x-accel-buffering', 'no');
 
-      // For MJPEG streams, handle the multipart response properly
+      // For MJPEG streams, we need to handle them specially
       if (contentType && (contentType.includes('multipart') || contentType.includes('mjpeg'))) {
-        console.log('Handling MJPEG multipart stream');
+        console.log('Handling MJPEG multipart stream - converting to streamable format');
         
-        // Detect boundary from content-type or use default
-        let boundary = '--jpgboundary';
-        const boundaryMatch = contentType.match(/boundary=([^;]+)/);
-        if (boundaryMatch) {
-          boundary = boundaryMatch[1];
-          console.log('Detected boundary:', boundary);
-        }
-        
-        // Set proper MJPEG content type with detected boundary
-        headers.set('content-type', `multipart/x-mixed-replace; boundary=${boundary}`);
-        
-        return new Response(response.body, {
+        // Create a readable stream that processes the MJPEG data
+        const stream = new ReadableStream({
+          async start(controller) {
+            const reader = response.body?.getReader();
+            if (!reader) {
+              controller.close();
+              return;
+            }
+
+            try {
+              let buffer = new Uint8Array();
+              
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                // Append new data to buffer
+                const newBuffer = new Uint8Array(buffer.length + value.length);
+                newBuffer.set(buffer);
+                newBuffer.set(value, buffer.length);
+                buffer = newBuffer;
+                
+                // Send data in chunks to prevent browser buffering issues
+                const chunkSize = 8192; // 8KB chunks
+                while (buffer.length >= chunkSize) {
+                  controller.enqueue(buffer.slice(0, chunkSize));
+                  buffer = buffer.slice(chunkSize);
+                }
+              }
+              
+              // Send remaining data
+              if (buffer.length > 0) {
+                controller.enqueue(buffer);
+              }
+              
+              controller.close();
+            } catch (error) {
+              console.error('Stream processing error:', error);
+              controller.error(error);
+            }
+          }
+        });
+
+        return new Response(stream, {
           status: response.status,
           headers: headers,
         });
@@ -180,7 +211,6 @@ serve(async (req) => {
         });
       }
       
-      // Provide more specific error messages based on the error
       let errorMessage = 'Camera connection failed';
       if (fetchError.message.includes('NetworkError') || fetchError.message.includes('Failed to fetch')) {
         errorMessage = 'Network error - your camera at ' + targetUrl + ' is not reachable from the internet. Please check: 1) Router port forwarding configuration, 2) Camera is running, 3) No firewall blocking access';

@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 
 export interface NetworkCameraConfig {
@@ -13,7 +14,7 @@ export const useNetworkCamera = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<NetworkCameraConfig | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const isLocalNetwork = (url: string) => {
@@ -21,7 +22,6 @@ export const useNetworkCamera = () => {
       const urlObj = new URL(url);
       const hostname = urlObj.hostname;
       
-      // Check for local network IP ranges
       if (hostname === 'localhost' || hostname === '127.0.0.1') return true;
       if (hostname.startsWith('192.168.')) return true;
       if (hostname.startsWith('10.')) return true;
@@ -43,12 +43,10 @@ export const useNetworkCamera = () => {
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
     console.log('getProxiedUrl - originalUrl.startsWith("http://"):', originalUrl.startsWith('http://'));
     
-    // Always use proxy for HTTP URLs when on HTTPS
     const shouldUseProxy = originalUrl.startsWith('http://') && window.location.protocol === 'https:';
     console.log('getProxiedUrl - shouldUseProxy:', shouldUseProxy);
     
     if (shouldUseProxy) {
-      // For MJPEG streams, we need to use the proxy URL directly
       const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`;
       console.log('getProxiedUrl - USING PROXY - proxyUrl:', proxyUrl);
       console.log('=== getProxiedUrl - END (PROXY) ===');
@@ -71,16 +69,10 @@ export const useNetworkCamera = () => {
         throw new Error('Video element not available');
       }
 
-      const video = videoRef.current;
+      const element = videoRef.current;
       
       if (config.type === 'mjpeg') {
-        console.log('useNetworkCamera: Setting up MJPEG stream');
-        
-        // Clear any existing source first
-        console.log('useNetworkCamera: Clearing existing video sources');
-        video.src = '';
-        video.srcObject = null;
-        video.load(); // Force clear
+        console.log('useNetworkCamera: Setting up MJPEG stream with IMG element');
         
         // Build the stream URL with auth if needed
         let streamUrl = config.url;
@@ -100,12 +92,12 @@ export const useNetworkCamera = () => {
         const isLocal = isLocalNetwork(config.url);
         console.log('useNetworkCamera: Is local network camera:', isLocal);
 
-        // Test connection for all cameras with increased timeout
+        // Test connection first
         console.log('useNetworkCamera: Testing connection...');
         try {
           const testResponse = await fetch(finalUrl, { 
             method: 'HEAD',
-            signal: AbortSignal.timeout(15000) // Increased to 15 seconds
+            signal: AbortSignal.timeout(15000)
           });
           
           if (!testResponse.ok) {
@@ -134,107 +126,40 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // Set up event handlers
-        const handleSuccess = () => {
-          console.log('useNetworkCamera: MJPEG stream connected successfully!');
-          console.log('useNetworkCamera: Video element properties at success:');
-          console.log('  - readyState:', video.readyState);
-          console.log('  - networkState:', video.networkState);
-          console.log('  - videoWidth:', video.videoWidth);
-          console.log('  - videoHeight:', video.videoHeight);
-          console.log('  - duration:', video.duration);
+        // For MJPEG, use img element
+        if (element instanceof HTMLImageElement) {
+          console.log('useNetworkCamera: Setting up IMG element for MJPEG stream');
           
-          setIsConnected(true);
-          setCurrentConfig(config);
-          setConnectionError(null);
-          setIsConnecting(false);
-        };
+          const handleLoad = () => {
+            console.log('useNetworkCamera: IMG element loaded successfully!');
+            setIsConnected(true);
+            setCurrentConfig(config);
+            setConnectionError(null);
+            setIsConnecting(false);
+          };
 
-        const handleError = (e: Event) => {
-          console.error('useNetworkCamera: MJPEG stream error occurred!');
-          console.error('useNetworkCamera: Error event:', e);
-          console.error('useNetworkCamera: Video element current properties:');
-          console.error('  - readyState:', video.readyState);
-          console.error('  - networkState:', video.networkState);
-          console.error('  - error:', video.error);
+          const handleError = (e: Event) => {
+            console.error('useNetworkCamera: IMG element error:', e);
+            setConnectionError('Failed to load MJPEG stream. Please check camera configuration.');
+            setIsConnected(false);
+            setIsConnecting(false);
+          };
+
+          // Remove existing listeners
+          element.removeEventListener('load', handleLoad);
+          element.removeEventListener('error', handleError);
+
+          // Add new listeners
+          element.addEventListener('load', handleLoad, { once: true });
+          element.addEventListener('error', handleError);
+
+          // Set the source
+          console.log('useNetworkCamera: Setting img.src to:', finalUrl);
+          element.src = finalUrl;
           
-          let errorMsg = 'Failed to connect to camera stream';
-          if (video.error) {
-            console.error('useNetworkCamera: MediaError details:', {
-              code: video.error.code,
-              message: video.error.message
-            });
-            
-            switch (video.error.code) {
-              case 1: // MEDIA_ERR_ABORTED
-                errorMsg = 'Camera stream was aborted';
-                break;
-              case 2: // MEDIA_ERR_NETWORK
-                if (isLocal) {
-                  errorMsg = 'Cannot reach local network camera from cloud proxy. Your camera needs to be accessible from the internet.';
-                } else {
-                  errorMsg = 'Network error while loading camera stream. Please check: 1) Camera is online, 2) Port forwarding configured, 3) No firewall blocking access.';
-                }
-                break;
-              case 3: // MEDIA_ERR_DECODE
-                errorMsg = 'Camera stream format not supported or corrupted. Please check your camera\'s MJPEG output format.';
-                break;
-              case 4: // MEDIA_ERR_SRC_NOT_SUPPORTED
-                if (isLocal) {
-                  errorMsg = 'Local network camera cannot be accessed from this HTTPS site. Please use an HTTPS camera URL or access this site over HTTP.';
-                } else {
-                  errorMsg = 'Camera stream source not supported. Please verify: 1) MJPEG format is correct, 2) Camera is accessible from internet, 3) Router configuration is correct.';
-                }
-                break;
-              default:
-                errorMsg = `Camera stream error (code: ${video.error.code}). Please check camera configuration and network connectivity.`;
-            }
-            console.error('useNetworkCamera: Detailed error:', errorMsg);
-          }
-          
-          setConnectionError(errorMsg);
-          setIsConnected(false);
-          setIsConnecting(false);
-        };
-
-        const handleLoadStart = () => {
-          console.log('useNetworkCamera: Video load started');
-          console.log('useNetworkCamera: Video src during load start:', video.src);
-        };
-
-        const handleCanPlay = () => {
-          console.log('useNetworkCamera: Video can play');
-          console.log('useNetworkCamera: Video dimensions:', video.videoWidth, 'x', video.videoHeight);
-        };
-
-        // Remove existing listeners to avoid duplicates
-        video.removeEventListener('loadedmetadata', handleSuccess);
-        video.removeEventListener('canplay', handleSuccess);
-        video.removeEventListener('error', handleError);
-        video.removeEventListener('loadstart', handleLoadStart);
-        video.removeEventListener('canplay', handleCanPlay);
-
-        // Add new listeners
-        video.addEventListener('loadedmetadata', handleSuccess, { once: true });
-        video.addEventListener('error', handleError);
-        video.addEventListener('loadstart', handleLoadStart);
-        video.addEventListener('canplay', handleCanPlay);
-
-        // Configure video element for MJPEG streaming
-        video.crossOrigin = 'anonymous';
-        video.autoplay = true;
-        video.playsInline = true;
-        video.muted = true;
-        video.controls = false;
-
-        // Set the source and load
-        console.log('useNetworkCamera: About to set video.src to:', finalUrl);
-        video.src = finalUrl;
-        console.log('useNetworkCamera: video.src has been set to:', video.src);
-        
-        console.log('useNetworkCamera: Calling video.load()');
-        video.load();
-        console.log('useNetworkCamera: video.load() called');
+        } else {
+          throw new Error('Expected IMG element for MJPEG stream');
+        }
 
         // Add a timeout to catch hanging connections
         setTimeout(() => {
@@ -246,7 +171,7 @@ export const useNetworkCamera = () => {
             setConnectionError(timeoutMsg);
             setIsConnecting(false);
           }
-        }, 20000); // Increased to 20 seconds
+        }, 20000);
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);
@@ -263,8 +188,12 @@ export const useNetworkCamera = () => {
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
     if (videoRef.current) {
-      videoRef.current.src = '';
-      videoRef.current.srcObject = null;
+      if (videoRef.current instanceof HTMLImageElement) {
+        videoRef.current.src = '';
+      } else {
+        videoRef.current.src = '';
+        videoRef.current.srcObject = null;
+      }
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
@@ -279,39 +208,34 @@ export const useNetworkCamera = () => {
     try {
       console.log('useNetworkCamera: Testing connection to:', config.url);
       
-      // Check if this is a local network camera
       const isLocal = isLocalNetwork(config.url);
       console.log('useNetworkCamera: Is local network camera for test:', isLocal);
       
       if (isLocal) {
         console.log('useNetworkCamera: Skipping connection test for local network camera');
-        return false; // Return false to indicate test cannot be performed
+        return false;
       }
       
-      // Build test URL with auth if needed
       let testUrl = config.url;
       if (config.username && config.password) {
         testUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
       }
       
-      // Use the proxy endpoint for testing
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
-        // Test using the proxy endpoint with HEAD method and longer timeout
         const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(testUrl)}`, {
           method: 'HEAD',
-          signal: AbortSignal.timeout(15000) // Increased timeout
+          signal: AbortSignal.timeout(15000)
         });
         
         console.log('useNetworkCamera: Connection test result:', response.ok, response.status);
         return response.ok;
       } else {
-        // Direct connection test
         const response = await fetch(testUrl, { 
           method: 'HEAD',
           mode: 'cors',
-          signal: AbortSignal.timeout(15000) // Increased timeout
+          signal: AbortSignal.timeout(15000)
         });
         console.log('useNetworkCamera: Connection test response:', response.status);
         return response.ok;

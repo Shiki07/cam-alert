@@ -51,14 +51,23 @@ export const VideoDisplay = ({
         className={`w-full h-full object-cover ${cameraSource === 'webcam' && isConnected ? 'block' : 'hidden'}`}
       />
       
-      {/* Network camera video element - always rendered */}
-      <video
-        ref={networkVideoRef}
-        autoPlay
-        playsInline
-        muted
-        className={`w-full h-full object-cover ${cameraSource === 'network' && isConnected ? 'block' : 'hidden'}`}
-      />
+      {/* Network camera - use img element for MJPEG streams */}
+      {cameraSource === 'network' && isConnected ? (
+        <img
+          ref={networkVideoRef}
+          className="w-full h-full object-cover"
+          style={{ display: 'block' }}
+          alt="Network Camera Stream"
+        />
+      ) : (
+        <video
+          ref={networkVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="w-full h-full object-cover hidden"
+        />
+      )}
 
       {isConnected ? (
         <>
@@ -148,7 +157,7 @@ export const VideoDisplay = ({
                   disabled={isLoading}
                   className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {isLoading ? 'Connecting...' : 'Connect Webcam'}
+                  {isLoading ? 'Connecting..' : 'Connect Webcam'}
                 </Button>
               )}
             </>
