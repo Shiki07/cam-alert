@@ -54,14 +54,22 @@ export const VideoDisplay = ({
       {/* Network camera - use img element for MJPEG streams */}
       {cameraSource === 'network' && isConnected ? (
         <img
-          ref={networkVideoRef as React.RefObject<HTMLImageElement>}
+          ref={(el) => {
+            if (networkVideoRef && 'current' in networkVideoRef) {
+              (networkVideoRef as any).current = el;
+            }
+          }}
           className="w-full h-full object-cover"
           style={{ display: 'block' }}
           alt="Network Camera Stream"
         />
       ) : (
         <video
-          ref={networkVideoRef as React.RefObject<HTMLVideoElement>}
+          ref={(el) => {
+            if (networkVideoRef && 'current' in networkVideoRef && cameraSource !== 'network') {
+              (networkVideoRef as any).current = el;
+            }
+          }}
           autoPlay
           playsInline
           muted
