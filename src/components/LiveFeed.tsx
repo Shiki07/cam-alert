@@ -46,7 +46,14 @@ export const LiveFeed = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
-  const [networkCameras, setNetworkCameras] = useState<NetworkCameraConfig[]>([]);
+  const [networkCameras, setNetworkCameras] = useState<NetworkCameraConfig[]>(() => {
+    try {
+      const saved = localStorage.getItem('networkCameras');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -278,6 +285,11 @@ export const LiveFeed = ({
       motionDetection.stopDetection();
     };
   }, []);
+
+  // Save network cameras to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('networkCameras', JSON.stringify(networkCameras));
+  }, [networkCameras]);
 
   // Monitor network camera connection state
   useEffect(() => {
