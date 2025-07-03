@@ -158,7 +158,11 @@ export const useNetworkCamera = () => {
           element.src = finalUrl;
           
         } else {
-          throw new Error('Expected IMG element for MJPEG stream');
+          console.log('useNetworkCamera: Element is not IMG, current element:', element);
+          console.log('useNetworkCamera: Element type:', element?.constructor.name);
+          setConnectionError('Camera display element not ready. Please try again.');
+          setIsConnecting(false);
+          return;
         }
 
         // Add a timeout to catch hanging connections
