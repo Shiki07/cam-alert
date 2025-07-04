@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Globe, RefreshCw, CheckCircle, AlertCircle } from 'lucide-react';
+import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi } from 'lucide-react';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
 
 export const DuckDNSSettings = () => {
@@ -63,15 +63,26 @@ export const DuckDNSSettings = () => {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="text-gray-300">Current Status</Label>
-                <Button
-                  size="sm"
-                  onClick={manualUpdate}
-                  disabled={isUpdating}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  <RefreshCw className={`w-4 h-4 mr-1 ${isUpdating ? 'animate-spin' : ''}`} />
-                  Update Now
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={checkAndUpdateIP}
+                    disabled={isUpdating}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Wifi className={`w-4 h-4 mr-1 ${isUpdating ? 'animate-spin' : ''}`} />
+                    Check IP
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={manualUpdate}
+                    disabled={isUpdating}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-1 ${isUpdating ? 'animate-spin' : ''}`} />
+                    Update Now
+                  </Button>
+                </div>
               </div>
               
               <div className="bg-gray-700 rounded-lg p-3 space-y-2">
@@ -92,9 +103,17 @@ export const DuckDNSSettings = () => {
                 )}
                 
                 {error && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <AlertCircle className="w-4 h-4 text-red-400" />
-                    <span className="text-red-400">{error}</span>
+                  <div className="flex items-start gap-2 text-sm">
+                    <AlertCircle className="w-4 h-4 text-red-400 mt-0.5" />
+                    <div className="text-red-400">
+                      <div className="font-medium">Error:</div>
+                      <div className="text-xs opacity-90">{error}</div>
+                      {error.includes('IP address') && (
+                        <div className="text-xs opacity-75 mt-1">
+                          This may be due to browser security restrictions. Try disabling content blocking or using a different browser.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 
@@ -104,13 +123,20 @@ export const DuckDNSSettings = () => {
                     <span className="text-blue-400">Updating...</span>
                   </div>
                 )}
+
+                {!currentIP && !error && !isUpdating && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <AlertCircle className="w-4 h-4 text-yellow-400" />
+                    <span className="text-gray-300">IP not detected yet</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="text-xs text-gray-400 space-y-1">
-              <p>• IP is checked every 5 minutes automatically</p>
-              <p>• Use your DuckDNS domain in camera URLs instead of IP</p>
-              <p>• Example: http://yourdomain.duckdns.org:8081/stream.mjpg</p>
+              <p>• IP is checked every 10 minutes automatically</p>
+              <p>• Use your DuckDNS domain in camera URLs: {config.domain}:8081</p>
+              <p>• Browser security may block IP detection - manual updates available</p>
             </div>
           </>
         )}

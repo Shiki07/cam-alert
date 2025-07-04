@@ -35,19 +35,61 @@ export const useDuckDNS = () => {
   const [error, setError] = useState<string | null>(null);
 
   const getCurrentIP = useCallback(async (): Promise<string | null> => {
-    try {
-      const response = await fetch('https://api.ipify.org?format=json');
-      const data = await response.json();
-      return data.ip;
-    } catch (error) {
-      console.error('Failed to get current IP:', error);
-      return null;
+    // Try multiple IP detection services to avoid CORS issues
+    const ipServices = [
+      'https://ipv4.icanhazip.com/',
+      'https://api.ipify.org?format=text',
+      'https://checkip.amazonaws.com/',
+      'https://ipinfo.io/ip'
+    ];
+
+    for (const service of ipServices) {
+      try {
+        console.log(`Trying IP service: ${service}`);
+        const response = await fetch(service, {
+          method: 'GET',
+          mode: 'cors',
+          cache: 'no-cache'
+        });
+        
+        if (response.ok) {
+          const ip = (await response.text()).trim();
+          console.log(`Successfully got IP from ${service}: ${ip}`);
+          return ip;
+        }
+      } catch (error) {
+        console.log(`Failed to get IP from ${service}:`, error);
+        continue;
+      }
     }
-  }, []);
+
+    // If all services fail, try to get IP through DuckDNS update (it returns current IP)
+    try {
+      console.log('All IP services failed, trying DuckDNS detection...');
+      if (config.domain && config.token) {
+        const domain = config.domain.replace('.duckdns.org', '').replace('http://', '').replace('https://', '');
+        const url = `https://www.duckdns.org/update?domains=${domain}&token=${config.token}&ip=`;
+        
+        const response = await fetch(url);
+        const result = await response.text();
+        
+        if (result.includes('OK')) {
+          // DuckDNS doesn't return the IP directly, so we'll use a fallback
+          console.log('DuckDNS responded OK, but IP detection still failed');
+        }
+      }
+    } catch (error) {
+      console.error('DuckDNS IP detection also failed:', error);
+    }
+
+    console.error('Failed to get current IP from all sources');
+    return null;
+  }, [config.domain, config.token]);
 
   const updateDuckDNS = useCallback(async (ip: string): Promise<boolean> => {
     if (!config.domain || !config.token) {
       console.error('DuckDNS: Missing domain or token');
+      setError('Missing DuckDNS domain or token');
       return false;
     }
 
@@ -58,19 +100,26 @@ export const useDuckDNS = () => {
       const domain = config.domain.replace('.duckdns.org', '').replace('http://', '').replace('https://', '');
       const url = `https://www.duckdns.org/update?domains=${domain}&token=${config.token}&ip=${ip}`;
       
-      const response = await fetch(url);
+      console.log(`Updating DuckDNS for domain: ${domain} with IP: ${ip}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        mode: 'cors'
+      });
       const result = await response.text();
       
       if (result.trim() === 'OK') {
         console.log('DuckDNS: Successfully updated IP to', ip);
         setLastUpdate(new Date());
+        setError(null);
         return true;
       } else {
         throw new Error(`DuckDNS update failed: ${result}`);
       }
     } catch (error) {
       console.error('DuckDNS update error:', error);
-      setError(error instanceof Error ? error.message : 'Update failed');
+      const errorMsg = error instanceof Error ? error.message : 'Update failed';
+      setError(errorMsg);
       return false;
     } finally {
       setIsUpdating(false);
@@ -78,29 +127,41 @@ export const useDuckDNS = () => {
   }, [config.domain, config.token]);
 
   const checkAndUpdateIP = useCallback(async (): Promise<void> => {
-    if (!config.enabled) return;
+    if (!config.enabled) {
+      console.log('DuckDNS: Service disabled, skipping IP check');
+      return;
+    }
 
     try {
+      setError(null);
       const newIP = await getCurrentIP();
+      
       if (!newIP) {
-        setError('Failed to detect current IP');
+        setError('Unable to detect current IP address. This may be due to browser security restrictions.');
         return;
       }
 
-      if (newIP !== currentIP) {
-        console.log('DuckDNS: IP changed from', currentIP, 'to', newIP);
-        setCurrentIP(newIP);
+      // Always update the current IP, even if we can't compare with previous
+      setCurrentIP(newIP);
+
+      // If this is a new IP or we don't have a previous update, update DuckDNS
+      if (!lastUpdate || newIP !== currentIP) {
+        console.log('DuckDNS: IP changed or first run, updating...', { previous: currentIP, new: newIP });
         
         const success = await updateDuckDNS(newIP);
         if (!success) {
-          setError('Failed to update DuckDNS');
+          setError('Failed to update DuckDNS - please check your domain and token');
+        } else {
+          console.log('DuckDNS: Update successful');
         }
+      } else {
+        console.log('DuckDNS: IP unchanged, no update needed');
       }
     } catch (error) {
       console.error('DuckDNS check error:', error);
-      setError(error instanceof Error ? error.message : 'Check failed');
+      setError(error instanceof Error ? error.message : 'IP check failed');
     }
-  }, [config.enabled, currentIP, getCurrentIP, updateDuckDNS]);
+  }, [config.enabled, currentIP, lastUpdate, getCurrentIP, updateDuckDNS]);
 
   const updateConfig = useCallback((newConfig: Partial<DuckDNSConfig>) => {
     const updatedConfig = { ...config, ...newConfig };
@@ -118,17 +179,22 @@ export const useDuckDNS = () => {
     return `http://${domain}:${port}`;
   }, [config.domain, config.enabled]);
 
-  // Auto-check IP every 5 minutes when enabled
+  // Auto-check IP every 10 minutes when enabled (increased from 5 to reduce load)
   useEffect(() => {
     if (!config.enabled) return;
 
-    // Initial check
-    checkAndUpdateIP();
+    // Initial check with delay to avoid immediate errors on page load
+    const initialTimeout = setTimeout(() => {
+      checkAndUpdateIP();
+    }, 2000);
 
-    // Set up interval
-    const interval = setInterval(checkAndUpdateIP, 5 * 60 * 1000); // 5 minutes
+    // Set up interval - check every 10 minutes
+    const interval = setInterval(checkAndUpdateIP, 10 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
   }, [config.enabled, checkAndUpdateIP]);
 
   // Save config to localStorage whenever it changes
@@ -146,9 +212,13 @@ export const useDuckDNS = () => {
     checkAndUpdateIP,
     getDuckDNSUrl,
     manualUpdate: async () => {
+      console.log('Manual DuckDNS update requested');
       const ip = await getCurrentIP();
       if (ip) {
+        setCurrentIP(ip);
         await updateDuckDNS(ip);
+      } else {
+        setError('Could not detect current IP for manual update');
       }
     }
   };
