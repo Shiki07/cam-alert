@@ -51,30 +51,22 @@ export const VideoDisplay = ({
         className={`w-full h-full object-cover ${cameraSource === 'webcam' && isConnected ? 'block' : 'hidden'}`}
       />
       
-      {/* Network camera - use img element for MJPEG streams */}
-      {cameraSource === 'network' && isConnected ? (
-        <img
-          ref={(el) => {
-            if (networkVideoRef && 'current' in networkVideoRef) {
-              (networkVideoRef as any).current = el;
-            }
-          }}
-          className="w-full h-full object-cover"
-          style={{ display: 'block' }}
-          alt="Network Camera Stream"
-        />
-      ) : (
-        <video
-          ref={(el) => {
-            if (networkVideoRef && 'current' in networkVideoRef && cameraSource !== 'network') {
-              (networkVideoRef as any).current = el;
-            }
-          }}
-          autoPlay
-          playsInline
-          muted
-          className="w-full h-full object-cover hidden"
-        />
+      {/* Network camera display - conditionally render img or video */}
+      {cameraSource === 'network' && (
+        <>
+          <img
+            ref={networkVideoRef as React.RefObject<HTMLImageElement>}
+            className={`w-full h-full object-cover ${isConnected ? 'block' : 'hidden'}`}
+            alt="Network Camera Stream"
+          />
+          <video
+            ref={networkVideoRef as React.RefObject<HTMLVideoElement>}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover hidden"
+          />
+        </>
       )}
 
       {isConnected ? (

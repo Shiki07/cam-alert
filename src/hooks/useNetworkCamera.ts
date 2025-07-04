@@ -68,15 +68,19 @@ export const useNetworkCamera = () => {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
+      // Wait a moment for the DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
       if (!videoRef.current) {
         console.error('useNetworkCamera: Video element not available - videoRef.current is null');
+        console.error('useNetworkCamera: This might be because the VideoDisplay component hasn\'t rendered the img element yet');
         throw new Error('Video element not available');
       }
 
       const element = videoRef.current;
       
       if (config.type === 'mjpeg') {
-        console.log('useNetworkCamera: Setting up MJPEG stream with IMG element');
+        console.log('useNetworkCamera: Setting up MJPEG stream');
         
         // Build the stream URL with auth if needed
         let streamUrl = config.url;
