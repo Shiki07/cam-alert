@@ -1,4 +1,3 @@
-
 import { LiveFeed } from "@/components/LiveFeed";
 import { CameraControls } from "@/components/CameraControls";
 import { MotionDetection } from "@/components/MotionDetection";
@@ -6,6 +5,7 @@ import { NotificationSettings } from "@/components/NotificationSettings";
 import { StorageSettings } from "@/components/StorageSettings";
 import { MotionSettings } from "@/components/MotionSettings";
 import { SystemStatus } from "@/components/SystemStatus";
+import { DuckDNSSettings } from "@/components/DuckDNSSettings";
 
 interface CameraGridProps {
   // Live Feed Props
@@ -117,6 +117,9 @@ export const CameraGrid = ({
           storageTotal={1024}
           lastEventTime={lastMotionTime}
         />
+        
+        {/* Add DuckDNS Settings */}
+        <DuckDNSSettings />
         
         <StorageSettings
           storageType={storageType}

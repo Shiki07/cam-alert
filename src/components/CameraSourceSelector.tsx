@@ -1,12 +1,12 @@
-
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, Wifi, Plus, Trash2, TestTube } from 'lucide-react';
+import { Camera, Wifi, Plus, Trash2, TestTube, Globe } from 'lucide-react';
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
+import { useDuckDNS } from '@/hooks/useDuckDNS';
 
 export type CameraSource = 'webcam' | 'network';
 
@@ -39,6 +39,8 @@ export const CameraSourceSelector = ({
   });
   const [testingConnections, setTestingConnections] = useState<Set<number>>(new Set());
   const [connectingCameras, setConnectingCameras] = useState<Set<number>>(new Set());
+  
+  const { getDuckDNSUrl, config } = useDuckDNS();
 
   const handleAddCamera = () => {
     if (newCamera.name && newCamera.url && newCamera.type) {
@@ -77,6 +79,21 @@ export const CameraSourceSelector = ({
         newSet.delete(index);
         return newSet;
       });
+    }
+  };
+
+  const generateDuckDNSUrl = (port: string = '8081') => {
+    const duckUrl = getDuckDNSUrl(parseInt(port));
+    if (duckUrl) {
+      return `${duckUrl}/stream.mjpg`;
+    }
+    return '';
+  };
+
+  const handleUseDuckDNS = () => {
+    const duckUrl = generateDuckDNSUrl();
+    if (duckUrl) {
+      setNewCamera(prev => ({ ...prev, url: duckUrl }));
     }
   };
 
@@ -161,13 +178,31 @@ export const CameraSourceSelector = ({
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-gray-300">Stream URL</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-gray-300">Stream URL</Label>
+                    {config.enabled && config.domain && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleUseDuckDNS}
+                        className="bg-green-700 border-green-600 text-green-100 hover:bg-green-600"
+                      >
+                        <Globe className="w-3 h-3 mr-1" />
+                        Use DuckDNS
+                      </Button>
+                    )}
+                  </div>
                   <Input
                     value={newCamera.url || ''}
                     onChange={(e) => setNewCamera(prev => ({ ...prev, url: e.target.value }))}
                     placeholder="http://192.168.178.108:8081/stream.mjpg"
                     className="bg-gray-600 border-gray-500 text-white"
                   />
+                  {config.enabled && config.domain && (
+                    <div className="text-xs text-green-400">
+                      DuckDNS URL: {generateDuckDNSUrl()}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -217,6 +252,12 @@ export const CameraSourceSelector = ({
                       <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
                         {camera.type.toUpperCase()}
                       </span>
+                      {camera.url.includes('.duckdns.org') && (
+                        <span className="text-xs bg-green-600 text-green-100 px-2 py-1 rounded flex items-center gap-1">
+                          <Globe className="w-3 h-3" />
+                          DuckDNS
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">{camera.url}</div>
                   </div>
