@@ -68,8 +68,8 @@ export const useNetworkCamera = () => {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
-      // Wait a moment for the DOM to be ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait longer for the DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       if (!videoRef.current) {
         console.error('useNetworkCamera: Video element not available - videoRef.current is null');
@@ -78,6 +78,8 @@ export const useNetworkCamera = () => {
       }
 
       const element = videoRef.current;
+      console.log('useNetworkCamera: Element found:', element);
+      console.log('useNetworkCamera: Element type:', element.constructor.name);
       
       if (config.type === 'mjpeg') {
         console.log('useNetworkCamera: Setting up MJPEG stream');
@@ -166,9 +168,9 @@ export const useNetworkCamera = () => {
           element.src = finalUrl;
           
         } else {
-          console.log('useNetworkCamera: Element is not IMG, current element:', element);
-          console.log('useNetworkCamera: Element type:', element?.constructor.name);
-          setConnectionError('Camera display element not ready. Please try again.');
+          console.error('useNetworkCamera: Element is not IMG, current element:', element);
+          console.error('useNetworkCamera: Element type:', element?.constructor.name);
+          setConnectionError('Expected img element for MJPEG stream, got: ' + element?.constructor.name);
           setIsConnecting(false);
           return;
         }
