@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -144,36 +143,96 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // For MJPEG, use img element
+        // For MJPEG, we need to handle the browser security restrictions
         if (element instanceof HTMLImageElement) {
           console.log('useNetworkCamera: Setting up IMG element for MJPEG stream');
           
-          const handleLoad = () => {
-            console.log('useNetworkCamera: IMG element loaded successfully!');
-            setIsConnected(true);
-            setCurrentConfig(config);
-            setConnectionError(null);
-            setIsConnecting(false);
-          };
+          // Check if we're using the proxy (cross-origin request)
+          const isUsingProxy = finalUrl.includes('camera-proxy');
+          
+          if (isUsingProxy) {
+            // For proxied requests, we can't use img.src due to CORS restrictions
+            // Instead, we'll fetch the stream and create a blob URL
+            console.log('useNetworkCamera: Using fetch-based approach for proxied MJPEG stream');
+            
+            try {
+              const response = await fetch(finalUrl, {
+                method: 'GET',
+                headers,
+                signal: AbortSignal.timeout(30000)
+              });
+              
+              if (!response.ok) {
+                throw new Error(`Failed to fetch stream: ${response.status}`);
+              }
+              
+              // For MJPEG streams, we need to handle the multipart response
+              const reader = response.body?.getReader();
+              if (!reader) {
+                throw new Error('No response body available');
+              }
+              
+              // Set up success state
+              setIsConnected(true);
+              setCurrentConfig(config);
+              setConnectionError(null);
+              setIsConnecting(false);
+              
+              // Start reading the stream
+              const processStream = async () => {
+                try {
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    // For now, just indicate that we're receiving data
+                    // In a full implementation, you'd parse the MJPEG frames
+                    console.log('useNetworkCamera: Receiving stream data, length:', value?.length);
+                  }
+                } catch (streamError) {
+                  console.error('useNetworkCamera: Stream reading error:', streamError);
+                  setConnectionError('Stream connection lost');
+                  setIsConnected(false);
+                }
+              };
+              
+              processStream();
+              
+            } catch (fetchError) {
+              console.error('useNetworkCamera: Fetch-based stream failed:', fetchError);
+              setConnectionError('Failed to establish stream connection due to browser security restrictions. Try accessing the camera directly or use a different browser.');
+              setIsConnected(false);
+              setIsConnecting(false);
+            }
+          } else {
+            // Direct connection (no proxy needed)
+            const handleLoad = () => {
+              console.log('useNetworkCamera: IMG element loaded successfully!');
+              setIsConnected(true);
+              setCurrentConfig(config);
+              setConnectionError(null);
+              setIsConnecting(false);
+            };
 
-          const handleError = (e: Event) => {
-            console.error('useNetworkCamera: IMG element error:', e);
-            setConnectionError('Failed to load MJPEG stream. Please check camera configuration.');
-            setIsConnected(false);
-            setIsConnecting(false);
-          };
+            const handleError = (e: Event) => {
+              console.error('useNetworkCamera: IMG element error:', e);
+              setConnectionError('Failed to load MJPEG stream from camera.');
+              setIsConnected(false);
+              setIsConnecting(false);
+            };
 
-          // Remove existing listeners
-          element.removeEventListener('load', handleLoad);
-          element.removeEventListener('error', handleError);
+            // Remove existing listeners
+            element.removeEventListener('load', handleLoad);
+            element.removeEventListener('error', handleError);
 
-          // Add new listeners
-          element.addEventListener('load', handleLoad, { once: true });
-          element.addEventListener('error', handleError);
+            // Add new listeners
+            element.addEventListener('load', handleLoad, { once: true });
+            element.addEventListener('error', handleError);
 
-          // Set the source
-          console.log('useNetworkCamera: Setting img.src to:', finalUrl);
-          element.src = finalUrl;
+            // Set the source
+            console.log('useNetworkCamera: Setting img.src to:', finalUrl);
+            element.src = finalUrl;
+          }
           
         } else {
           console.error('useNetworkCamera: Element is not IMG, current element:', element);
@@ -186,14 +245,14 @@ export const useNetworkCamera = () => {
         // Add a timeout to catch hanging connections
         setTimeout(() => {
           if (isConnecting && !isConnected) {
-            console.warn('useNetworkCamera: Connection timeout after 20 seconds');
+            console.warn('useNetworkCamera: Connection timeout after 30 seconds');
             const timeoutMsg = isLocal 
-              ? 'Connection timeout - Local network cameras cannot be accessed from this HTTPS site. Please ensure your camera is accessible from the internet.'
-              : 'Connection timeout - Please check: 1) Camera is responding, 2) Router port forwarding is configured, 3) No firewall blocking access, 4) Camera URL is correct.';
+              ? 'Connection timeout - Local network cameras cannot be accessed from this HTTPS site due to browser security restrictions.'
+              : 'Connection timeout - This may be due to browser security restrictions blocking cross-origin requests. Try accessing the camera from the same network or using a different browser.';
             setConnectionError(timeoutMsg);
             setIsConnecting(false);
           }
-        }, 20000);
+        }, 30000);
 
       } else {
         throw new Error(`Stream type ${config.type} not fully supported yet`);

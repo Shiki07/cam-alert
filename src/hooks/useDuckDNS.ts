@@ -12,7 +12,6 @@ export const useDuckDNS = () => {
       const saved = localStorage.getItem('duckdns-config');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Remove token from client-side config for security
         return {
           domain: parsed.domain || '',
           enabled: parsed.enabled || false
@@ -96,6 +95,7 @@ export const useDuckDNS = () => {
       });
 
       if (functionError) {
+        console.error('DuckDNS function error:', functionError);
         throw new Error(`Edge Function error: ${functionError.message}`);
       }
 
@@ -105,11 +105,32 @@ export const useDuckDNS = () => {
         setError(null);
         return true;
       } else {
-        throw new Error(data?.error || 'Unknown error occurred');
+        const errorMsg = data?.error || 'Unknown error occurred';
+        console.error('DuckDNS update failed:', errorMsg);
+        
+        // Provide more helpful error messages
+        if (errorMsg.includes('token not configured')) {
+          setError('DuckDNS token not configured. Please save your token in settings first.');
+        } else if (errorMsg.includes('Invalid domain')) {
+          setError('Invalid domain format. Please check your domain name.');
+        } else if (errorMsg.includes('Rate limit')) {
+          setError('Too many requests. Please wait before trying again.');
+        } else {
+          setError(`DuckDNS update failed: ${errorMsg}`);
+        }
+        return false;
       }
     } catch (error) {
       console.error('DuckDNS update error:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Update failed';
+      let errorMsg = error instanceof Error ? error.message : 'Update failed';
+      
+      // Provide more helpful error messages
+      if (errorMsg.includes('Authentication required')) {
+        errorMsg = 'Please log in to update DuckDNS';
+      } else if (errorMsg.includes('non-2xx status code')) {
+        errorMsg = 'DuckDNS service error. Please check your token and domain configuration.';
+      }
+      
       setError(errorMsg);
       return false;
     } finally {
@@ -139,7 +160,8 @@ export const useDuckDNS = () => {
         
         const success = await updateDuckDNS(newIP);
         if (!success) {
-          setError('Failed to update DuckDNS - please check your configuration');
+          // Error is already set in updateDuckDNS
+          console.log('DuckDNS: Update failed, error already set');
         } else {
           console.log('DuckDNS: Update successful');
         }
