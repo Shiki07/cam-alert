@@ -1,5 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface DuckDNSConfig {
   domain: string;
@@ -63,28 +64,9 @@ export const useDuckDNS = () => {
       }
     }
 
-    // If all services fail, try to get IP through DuckDNS update (it returns current IP)
-    try {
-      console.log('All IP services failed, trying DuckDNS detection...');
-      if (config.domain && config.token) {
-        const domain = config.domain.replace('.duckdns.org', '').replace('http://', '').replace('https://', '');
-        const url = `https://www.duckdns.org/update?domains=${domain}&token=${config.token}&ip=`;
-        
-        const response = await fetch(url);
-        const result = await response.text();
-        
-        if (result.includes('OK')) {
-          // DuckDNS doesn't return the IP directly, so we'll use a fallback
-          console.log('DuckDNS responded OK, but IP detection still failed');
-        }
-      }
-    } catch (error) {
-      console.error('DuckDNS IP detection also failed:', error);
-    }
-
     console.error('Failed to get current IP from all sources');
     return null;
-  }, [config.domain, config.token]);
+  }, []);
 
   const updateDuckDNS = useCallback(async (ip: string): Promise<boolean> => {
     if (!config.domain || !config.token) {
@@ -97,24 +79,28 @@ export const useDuckDNS = () => {
     setError(null);
 
     try {
-      const domain = config.domain.replace('.duckdns.org', '').replace('http://', '').replace('https://', '');
-      const url = `https://www.duckdns.org/update?domains=${domain}&token=${config.token}&ip=${ip}`;
+      console.log(`Updating DuckDNS via Edge Function for domain: ${config.domain} with IP: ${ip}`);
       
-      console.log(`Updating DuckDNS for domain: ${domain} with IP: ${ip}`);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        mode: 'cors'
+      // Use Supabase Edge Function to update DuckDNS
+      const { data, error: functionError } = await supabase.functions.invoke('duckdns-update', {
+        body: {
+          domain: config.domain,
+          token: config.token,
+          ip: ip
+        }
       });
-      const result = await response.text();
-      
-      if (result.trim() === 'OK') {
+
+      if (functionError) {
+        throw new Error(`Edge Function error: ${functionError.message}`);
+      }
+
+      if (data?.success) {
         console.log('DuckDNS: Successfully updated IP to', ip);
         setLastUpdate(new Date());
         setError(null);
         return true;
       } else {
-        throw new Error(`DuckDNS update failed: ${result}`);
+        throw new Error(data?.error || 'Unknown error occurred');
       }
     } catch (error) {
       console.error('DuckDNS update error:', error);
@@ -179,17 +165,17 @@ export const useDuckDNS = () => {
     return `http://${domain}:${port}`;
   }, [config.domain, config.enabled]);
 
-  // Auto-check IP every 10 minutes when enabled (increased from 5 to reduce load)
+  // Auto-check IP every 15 minutes when enabled (increased to reduce load)
   useEffect(() => {
     if (!config.enabled) return;
 
     // Initial check with delay to avoid immediate errors on page load
     const initialTimeout = setTimeout(() => {
       checkAndUpdateIP();
-    }, 2000);
+    }, 3000);
 
-    // Set up interval - check every 10 minutes
-    const interval = setInterval(checkAndUpdateIP, 10 * 60 * 1000);
+    // Set up interval - check every 15 minutes
+    const interval = setInterval(checkAndUpdateIP, 15 * 60 * 1000);
 
     return () => {
       clearTimeout(initialTimeout);
