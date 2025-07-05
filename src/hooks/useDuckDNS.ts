@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -81,10 +80,18 @@ export const useDuckDNS = () => {
     try {
       console.log(`Updating DuckDNS via Edge Function for domain: ${config.domain} with IP: ${ip}`);
       
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Authentication required for DuckDNS update');
+      }
+
       const { data, error: functionError } = await supabase.functions.invoke('duckdns-update', {
         body: {
           domain: config.domain,
           ip: ip
+        },
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`
         }
       });
 

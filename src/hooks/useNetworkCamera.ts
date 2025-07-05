@@ -1,5 +1,6 @@
 
 import { useState, useRef, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface NetworkCameraConfig {
   url: string;
@@ -37,7 +38,7 @@ export const useNetworkCamera = () => {
     }
   };
 
-  const getProxiedUrl = (originalUrl: string) => {
+  const getProxiedUrl = async (originalUrl: string) => {
     console.log('=== getProxiedUrl - START ===');
     console.log('getProxiedUrl - originalUrl:', originalUrl);
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
@@ -47,15 +48,21 @@ export const useNetworkCamera = () => {
     console.log('getProxiedUrl - shouldUseProxy:', shouldUseProxy);
     
     if (shouldUseProxy) {
+      // Get the current session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Authentication required to access camera proxy');
+      }
+      
       const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`;
       console.log('getProxiedUrl - USING PROXY - proxyUrl:', proxyUrl);
       console.log('=== getProxiedUrl - END (PROXY) ===');
-      return proxyUrl;
+      return { url: proxyUrl, headers: { 'Authorization': `Bearer ${session.access_token}` } };
     }
     
     console.log('getProxiedUrl - NOT USING PROXY - returning original URL:', originalUrl);
     console.log('=== getProxiedUrl - END (NO PROXY) ===');
-    return originalUrl;
+    return { url: originalUrl, headers: {} };
   };
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
@@ -93,9 +100,9 @@ export const useNetworkCamera = () => {
           console.log('useNetworkCamera: Stream URL with auth (hidden for security)');
         }
 
-        // Get the proxied URL
+        // Get the proxied URL with headers
         console.log('useNetworkCamera: Calling getProxiedUrl with streamUrl:', streamUrl);
-        const finalUrl = getProxiedUrl(streamUrl);
+        const { url: finalUrl, headers } = await getProxiedUrl(streamUrl);
         console.log('useNetworkCamera: Final stream URL from getProxiedUrl:', finalUrl);
 
         // Check if this is a local network camera
@@ -107,6 +114,7 @@ export const useNetworkCamera = () => {
         try {
           const testResponse = await fetch(finalUrl, { 
             method: 'HEAD',
+            headers,
             signal: AbortSignal.timeout(15000)
           });
           
@@ -238,8 +246,17 @@ export const useNetworkCamera = () => {
       const shouldUseProxy = testUrl.startsWith('http://') && window.location.protocol === 'https:';
       
       if (shouldUseProxy) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          console.error('useNetworkCamera: No session for proxy test');
+          return false;
+        }
+        
         const response = await fetch(`https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(testUrl)}`, {
           method: 'HEAD',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          },
           signal: AbortSignal.timeout(15000)
         });
         
