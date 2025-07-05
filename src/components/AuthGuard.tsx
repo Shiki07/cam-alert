@@ -15,26 +15,17 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
 
   console.log('AuthGuard - user:', user?.email, 'loading:', loading);
 
-  // Check if we're in a restricted environment (iframe)
-  const isRestrictedEnvironment = window.location !== window.parent.location;
-
   useEffect(() => {
     console.log('AuthGuard useEffect - user:', user?.email, 'loading:', loading);
-    
-    // In restricted environments, skip auth redirect
-    if (isRestrictedEnvironment) {
-      console.log('Running in restricted environment, allowing demo access');
-      return;
-    }
     
     if (!loading && !user) {
       console.log('Redirecting to auth page');
       navigate("/auth");
     }
-  }, [user, loading, navigate, isRestrictedEnvironment]);
+  }, [user, loading, navigate]);
 
-  // Show loading state while checking auth (but not in restricted environments)
-  if (loading && !isRestrictedEnvironment) {
+  // Show loading state while checking auth
+  if (loading) {
     console.log('Showing loading state');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
@@ -43,8 +34,8 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
     );
   }
 
-  // Show auth prompt if not authenticated (but not in restricted environments)
-  if (!user && !isRestrictedEnvironment) {
+  // Show auth prompt if not authenticated
+  if (!user) {
     console.log('Showing auth prompt');
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -64,6 +55,6 @@ export const AuthGuard = ({ children }: AuthGuardProps) => {
     );
   }
 
-  console.log('Showing main dashboard for user:', user?.email || 'demo user');
+  console.log('Showing main dashboard for user:', user.email);
   return <>{children}</>;
 };

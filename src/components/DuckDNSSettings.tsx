@@ -1,12 +1,14 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi } from 'lucide-react';
+import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi, Save } from 'lucide-react';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 export const DuckDNSSettings = () => {
   const {
@@ -19,6 +21,47 @@ export const DuckDNSSettings = () => {
     checkAndUpdateIP,
     manualUpdate
   } = useDuckDNS();
+
+  const [token, setToken] = useState('');
+  const [isSavingToken, setIsSavingToken] = useState(false);
+  const { toast } = useToast();
+
+  const saveToken = async () => {
+    if (!token.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter a DuckDNS token",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsSavingToken(true);
+    try {
+      const { error } = await supabase.functions.invoke('save-duckdns-token', {
+        body: { token: token.trim() }
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "Success",
+        description: "DuckDNS token saved securely"
+      });
+      setToken('');
+    } catch (error) {
+      console.error('Error saving token:', error);
+      toast({
+        title: "Error", 
+        description: "Failed to save DuckDNS token",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSavingToken(false);
+    }
+  };
 
   return (
     <Card className="bg-gray-800 border-gray-700">
@@ -51,13 +94,25 @@ export const DuckDNSSettings = () => {
 
             <div className="space-y-2">
               <Label className="text-gray-300">DuckDNS Token</Label>
-              <Input
-                type="password"
-                value={config.token}
-                onChange={(e) => updateConfig({ token: e.target.value })}
-                placeholder="Your DuckDNS token"
-                className="bg-gray-700 border-gray-600 text-white"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="Enter your DuckDNS token to update it"
+                  className="bg-gray-700 border-gray-600 text-white"
+                />
+                <Button
+                  onClick={saveToken}
+                  disabled={isSavingToken || !token.trim()}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Save className={`w-4 h-4 ${isSavingToken ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400">
+                Your token is stored securely on the server and never exposed to the browser
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -108,11 +163,6 @@ export const DuckDNSSettings = () => {
                     <div className="text-red-400">
                       <div className="font-medium">Error:</div>
                       <div className="text-xs opacity-90">{error}</div>
-                      {error.includes('IP address') && (
-                        <div className="text-xs opacity-75 mt-1">
-                          This may be due to browser security restrictions. Try disabling content blocking or using a different browser.
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -134,9 +184,9 @@ export const DuckDNSSettings = () => {
             </div>
 
             <div className="text-xs text-gray-400 space-y-1">
-              <p>• IP is checked every 10 minutes automatically</p>
+              <p>• IP is checked every 15 minutes automatically</p>
               <p>• Use your DuckDNS domain in camera URLs: {config.domain}:8081</p>
-              <p>• Browser security may block IP detection - manual updates available</p>
+              <p>• All tokens are stored securely on the server</p>
             </div>
           </>
         )}
