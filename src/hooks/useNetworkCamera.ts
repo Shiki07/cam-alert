@@ -64,6 +64,70 @@ export const useNetworkCamera = () => {
     return { url: originalUrl, headers: {} };
   };
 
+  const parseMJPEGStream = (reader: ReadableStreamDefaultReader<Uint8Array>, imgElement: HTMLImageElement) => {
+    let buffer = new Uint8Array(0);
+    const boundary = '--';
+    
+    const processChunk = async () => {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log('useNetworkCamera: Stream ended');
+          return;
+        }
+
+        // Append new data to buffer
+        const newBuffer = new Uint8Array(buffer.length + value.length);
+        newBuffer.set(buffer);
+        newBuffer.set(value, buffer.length);
+        buffer = newBuffer;
+
+        // Convert buffer to string to search for boundaries
+        const bufferString = new TextDecoder().decode(buffer);
+        
+        // Look for JPEG start and end markers
+        const jpegStart = buffer.findIndex((byte, index) => 
+          byte === 0xFF && buffer[index + 1] === 0xD8
+        );
+        
+        if (jpegStart !== -1) {
+          const jpegEnd = buffer.findIndex((byte, index) => 
+            index > jpegStart && byte === 0xFF && buffer[index + 1] === 0xD9
+          );
+          
+          if (jpegEnd !== -1) {
+            // Extract JPEG frame
+            const jpegFrame = buffer.slice(jpegStart, jpegEnd + 2);
+            
+            // Create blob URL and display frame
+            const blob = new Blob([jpegFrame], { type: 'image/jpeg' });
+            const frameUrl = URL.createObjectURL(blob);
+            
+            // Update image source
+            if (imgElement.src && imgElement.src.startsWith('blob:')) {
+              URL.revokeObjectURL(imgElement.src);
+            }
+            imgElement.src = frameUrl;
+            
+            // Remove processed data from buffer
+            buffer = buffer.slice(jpegEnd + 2);
+            
+            console.log('useNetworkCamera: Displayed MJPEG frame, size:', jpegFrame.length);
+          }
+        }
+
+        // Continue processing
+        processChunk();
+      } catch (error) {
+        console.error('useNetworkCamera: Stream processing error:', error);
+        setConnectionError('Stream connection lost');
+        setIsConnected(false);
+      }
+    };
+
+    processChunk();
+  };
+
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
     console.log('useNetworkCamera: Config:', config);
@@ -151,8 +215,7 @@ export const useNetworkCamera = () => {
           const isUsingProxy = finalUrl.includes('camera-proxy');
           
           if (isUsingProxy) {
-            // For proxied requests, we can't use img.src due to CORS restrictions
-            // Instead, we'll fetch the stream and create a blob URL
+            // For proxied requests, we need to fetch and parse the MJPEG stream
             console.log('useNetworkCamera: Using fetch-based approach for proxied MJPEG stream');
             
             try {
@@ -178,25 +241,10 @@ export const useNetworkCamera = () => {
               setConnectionError(null);
               setIsConnecting(false);
               
-              // Start reading the stream
-              const processStream = async () => {
-                try {
-                  while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    // For now, just indicate that we're receiving data
-                    // In a full implementation, you'd parse the MJPEG frames
-                    console.log('useNetworkCamera: Receiving stream data, length:', value?.length);
-                  }
-                } catch (streamError) {
-                  console.error('useNetworkCamera: Stream reading error:', streamError);
-                  setConnectionError('Stream connection lost');
-                  setIsConnected(false);
-                }
-              };
+              console.log('useNetworkCamera: Starting MJPEG stream parsing');
               
-              processStream();
+              // Start parsing the MJPEG stream
+              parseMJPEGStream(reader, element);
               
             } catch (fetchError) {
               console.error('useNetworkCamera: Fetch-based stream failed:', fetchError);
@@ -270,6 +318,10 @@ export const useNetworkCamera = () => {
     console.log('useNetworkCamera: Disconnecting');
     if (videoRef.current) {
       if (videoRef.current instanceof HTMLImageElement) {
+        // Revoke blob URL if it exists
+        if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) {
+          URL.revokeObjectURL(videoRef.current.src);
+        }
         videoRef.current.src = '';
       } else {
         videoRef.current.src = '';
