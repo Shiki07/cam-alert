@@ -64,6 +64,14 @@ export const VideoDisplay = ({
         <>
           {children}
           
+          {/* Connection Status Indicator */}
+          {reconnectAttempts > 0 && (
+            <div className="absolute top-4 left-4 bg-orange-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+              <Wifi className="w-4 h-4 animate-pulse" />
+              Reconnecting... ({reconnectAttempts}/5)
+            </div>
+          )}
+          
           {/* Timestamp */}
           <div className="absolute bottom-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">
             {new Date().toLocaleTimeString()}
@@ -122,9 +130,9 @@ export const VideoDisplay = ({
           <Camera className="w-16 h-16 text-gray-600 mx-auto mb-2" />
           {error ? (
             <>
-              <p className="text-red-400 mb-4">{error}</p>
+              <p className="text-red-400 mb-4 max-w-md">{error}</p>
               <Button 
-                onClick={cameraSource === 'webcam' ? onStartWebcam : undefined}
+                onClick={cameraSource === 'webcam' ? onStartWebcam : onForceReconnect}
                 disabled={isLoading || isConnecting}
                 className="bg-blue-600 hover:bg-blue-700"
               >

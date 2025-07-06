@@ -340,7 +340,7 @@ export const LiveFeed = ({
             cameraSource={cameraSource}
             connectionQuality={connectionMonitor.status.connectionQuality}
             latency={connectionMonitor.status.latency}
-            reconnectAttempts={connectionMonitor.status.reconnectAttempts}
+            reconnectAttempts={networkCamera.reconnectAttempts}
           />
         </div>
         
@@ -357,10 +357,10 @@ export const LiveFeed = ({
           onStopCamera={stopCamera}
           onRecordingToggle={handleRecordingToggle}
           onSnapshot={handleSnapshot}
-          onForceReconnect={connectionMonitor.forceReconnect}
+          onForceReconnect={networkCamera.forceReconnect}
           isRecording={recording.isRecording || isRecording}
           isProcessing={recording.isProcessing}
-          reconnectAttempts={connectionMonitor.status.reconnectAttempts}
+          reconnectAttempts={networkCamera.reconnectAttempts}
         >
           <CameraOverlays
             isRecording={recording.isRecording || isRecording}

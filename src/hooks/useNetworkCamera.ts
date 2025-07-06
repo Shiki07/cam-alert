@@ -16,6 +16,9 @@ export const useNetworkCamera = () => {
   const [currentConfig, setCurrentConfig] = useState<NetworkCameraConfig | null>(null);
   const videoRef = useRef<HTMLVideoElement | HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   const isLocalNetwork = (url: string) => {
     try {
@@ -64,15 +67,52 @@ export const useNetworkCamera = () => {
     return { url: originalUrl, headers: {} };
   };
 
-  const parseMJPEGStream = (reader: ReadableStreamDefaultReader<Uint8Array>, imgElement: HTMLImageElement) => {
-    let buffer = new Uint8Array(0);
-    const boundary = '--';
+  const cleanupStream = useCallback(() => {
+    console.log('useNetworkCamera: Cleaning up stream resources');
     
-    const processChunk = async () => {
+    // Cancel any pending reader operations
+    if (readerRef.current) {
+      try {
+        readerRef.current.cancel();
+      } catch (error) {
+        console.log('useNetworkCamera: Error canceling reader:', error);
+      }
+      readerRef.current = null;
+    }
+    
+    // Clear reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    // Clean up image element
+    if (videoRef.current && videoRef.current instanceof HTMLImageElement) {
+      if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) {
+        URL.revokeObjectURL(videoRef.current.src);
+      }
+      videoRef.current.src = '';
+    }
+  }, []);
+
+  const parseMJPEGStream = useCallback(async (reader: ReadableStreamDefaultReader<Uint8Array>, imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
+    let buffer = new Uint8Array(0);
+    let frameCount = 0;
+    let lastFrameTime = Date.now();
+    
+    readerRef.current = reader;
+    
+    const processChunk = async (): Promise<void> => {
       try {
         const { done, value } = await reader.read();
         if (done) {
-          console.log('useNetworkCamera: Stream ended');
+          console.log('useNetworkCamera: Stream ended normally');
+          return;
+        }
+
+        // Check if we're still connected and should continue processing
+        if (!isConnected) {
+          console.log('useNetworkCamera: Connection lost, stopping stream processing');
           return;
         }
 
@@ -82,9 +122,6 @@ export const useNetworkCamera = () => {
         newBuffer.set(value, buffer.length);
         buffer = newBuffer;
 
-        // Convert buffer to string to search for boundaries
-        const bufferString = new TextDecoder().decode(buffer);
-        
         // Look for JPEG start and end markers
         const jpegStart = buffer.findIndex((byte, index) => 
           byte === 0xFF && buffer[index + 1] === 0xD8
@@ -112,38 +149,83 @@ export const useNetworkCamera = () => {
             // Remove processed data from buffer
             buffer = buffer.slice(jpegEnd + 2);
             
-            console.log('useNetworkCamera: Displayed MJPEG frame, size:', jpegFrame.length);
+            frameCount++;
+            const now = Date.now();
+            if (now - lastFrameTime > 5000) { // Log every 5 seconds
+              console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}`);
+              lastFrameTime = now;
+            }
+            
+            // Reset reconnect attempts on successful frame
+            if (reconnectAttempts > 0) {
+              setReconnectAttempts(0);
+            }
           }
+        }
+
+        // Keep buffer size manageable
+        if (buffer.length > 1024 * 1024) { // 1MB limit
+          console.log('useNetworkCamera: Buffer too large, resetting');
+          buffer = new Uint8Array(0);
         }
 
         // Continue processing
         processChunk();
       } catch (error) {
         console.error('useNetworkCamera: Stream processing error:', error);
-        setConnectionError('Stream connection lost');
-        setIsConnected(false);
+        
+        if (!isConnected) {
+          console.log('useNetworkCamera: Not connected, skipping reconnection');
+          return;
+        }
+        
+        // Handle different types of errors
+        if (error.name === 'AbortError') {
+          console.log('useNetworkCamera: Stream was aborted');
+          return;
+        }
+        
+        // Auto-reconnect on timeout or network errors
+        setConnectionError('Stream connection lost - attempting to reconnect...');
+        setReconnectAttempts(prev => prev + 1);
+        
+        // Attempt reconnection after a delay
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (currentConfig && reconnectAttempts < 5) {
+            console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
+            connectToCamera(config);
+          } else {
+            console.log('useNetworkCamera: Max reconnection attempts reached');
+            setIsConnected(false);
+            setConnectionError('Connection lost. Please try reconnecting manually.');
+          }
+        }, Math.min(2000 * Math.pow(2, reconnectAttempts), 30000)); // Exponential backoff, max 30s
       }
     };
 
     processChunk();
-  };
+  }, [isConnected, currentConfig, reconnectAttempts]);
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
     console.log('useNetworkCamera: Config:', config);
+    
+    // Clean up any existing connections
+    cleanupStream();
+    
     setIsConnecting(true);
     setConnectionError(null);
+    setCurrentConfig(config);
 
     try {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
-      // Wait longer for the DOM to be ready
+      // Wait for the DOM to be ready
       await new Promise(resolve => setTimeout(resolve, 500));
       
       if (!videoRef.current) {
         console.error('useNetworkCamera: Video element not available - videoRef.current is null');
-        console.error('useNetworkCamera: This might be because the VideoDisplay component hasn\'t rendered the img element yet');
         throw new Error('Video element not available');
       }
 
@@ -178,7 +260,7 @@ export const useNetworkCamera = () => {
           const testResponse = await fetch(finalUrl, { 
             method: 'HEAD',
             headers,
-            signal: AbortSignal.timeout(15000)
+            signal: AbortSignal.timeout(10000) // Reduced timeout
           });
           
           if (!testResponse.ok) {
@@ -191,15 +273,11 @@ export const useNetworkCamera = () => {
           
           let errorMsg = 'Cannot reach camera';
           if (testError.name === 'TimeoutError' || testError.message.includes('timeout')) {
-            if (isLocal) {
-              errorMsg = 'Local network camera timeout - this is expected when accessing from cloud. Try connecting from the same network.';
-            } else {
-              errorMsg = 'Camera connection timeout. Please check: 1) Camera is running, 2) Port forwarding is configured on your router, 3) Public IP is correct, 4) No firewall blocking access.';
-            }
+            errorMsg = 'Camera connection timeout. Please check your camera and network configuration.';
           } else if (isLocal) {
-            errorMsg = 'Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet or access this site from the same network.';
+            errorMsg = 'Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet.';
           } else {
-            errorMsg = `Cannot reach camera at ${config.url}. Please verify: 1) Camera is online and accessible, 2) Router port forwarding is configured, 3) No firewall blocking access.`;
+            errorMsg = `Cannot reach camera at ${config.url}. Please verify the camera is online and accessible.`;
           }
           
           setConnectionError(errorMsg);
@@ -222,7 +300,7 @@ export const useNetworkCamera = () => {
               const response = await fetch(finalUrl, {
                 method: 'GET',
                 headers,
-                signal: AbortSignal.timeout(30000)
+                signal: AbortSignal.timeout(60000) // Longer timeout for stream
               });
               
               if (!response.ok) {
@@ -235,20 +313,21 @@ export const useNetworkCamera = () => {
                 throw new Error('No response body available');
               }
               
-              // Set up success state
+              // Set up success state first
               setIsConnected(true);
               setCurrentConfig(config);
               setConnectionError(null);
               setIsConnecting(false);
+              setReconnectAttempts(0);
               
               console.log('useNetworkCamera: Starting MJPEG stream parsing');
               
               // Start parsing the MJPEG stream
-              parseMJPEGStream(reader, element);
+              parseMJPEGStream(reader, element, config);
               
             } catch (fetchError) {
               console.error('useNetworkCamera: Fetch-based stream failed:', fetchError);
-              setConnectionError('Failed to establish stream connection due to browser security restrictions. Try accessing the camera directly or use a different browser.');
+              setConnectionError('Failed to establish stream connection. Please try again.');
               setIsConnected(false);
               setIsConnecting(false);
             }
@@ -260,6 +339,7 @@ export const useNetworkCamera = () => {
               setCurrentConfig(config);
               setConnectionError(null);
               setIsConnecting(false);
+              setReconnectAttempts(0);
             };
 
             const handleError = (e: Event) => {
@@ -290,14 +370,11 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // Add a timeout to catch hanging connections
+        // Connection timeout fallback
         setTimeout(() => {
           if (isConnecting && !isConnected) {
             console.warn('useNetworkCamera: Connection timeout after 30 seconds');
-            const timeoutMsg = isLocal 
-              ? 'Connection timeout - Local network cameras cannot be accessed from this HTTPS site due to browser security restrictions.'
-              : 'Connection timeout - This may be due to browser security restrictions blocking cross-origin requests. Try accessing the camera from the same network or using a different browser.';
-            setConnectionError(timeoutMsg);
+            setConnectionError('Connection timeout - please check your camera configuration and try again.');
             setIsConnecting(false);
           }
         }, 30000);
@@ -312,30 +389,24 @@ export const useNetworkCamera = () => {
       setIsConnected(false);
       setIsConnecting(false);
     }
-  }, [isConnecting, isConnected]);
+  }, [isConnecting, isConnected, cleanupStream, parseMJPEGStream]);
 
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
-    if (videoRef.current) {
-      if (videoRef.current instanceof HTMLImageElement) {
-        // Revoke blob URL if it exists
-        if (videoRef.current.src && videoRef.current.src.startsWith('blob:')) {
-          URL.revokeObjectURL(videoRef.current.src);
-        }
-        videoRef.current.src = '';
-      } else {
-        videoRef.current.src = '';
-        videoRef.current.srcObject = null;
-      }
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
+    cleanupStream();
     setIsConnected(false);
     setCurrentConfig(null);
     setConnectionError(null);
-  }, []);
+    setReconnectAttempts(0);
+  }, [cleanupStream]);
+
+  const forceReconnect = useCallback(() => {
+    if (currentConfig) {
+      console.log('useNetworkCamera: Force reconnecting to:', currentConfig.name);
+      setReconnectAttempts(0);
+      connectToCamera(currentConfig);
+    }
+  }, [currentConfig, connectToCamera]);
 
   const testConnection = useCallback(async (config: NetworkCameraConfig): Promise<boolean> => {
     try {
@@ -368,7 +439,7 @@ export const useNetworkCamera = () => {
           headers: {
             'Authorization': `Bearer ${session.access_token}`
           },
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(10000)
         });
         
         console.log('useNetworkCamera: Connection test result:', response.ok, response.status);
@@ -377,7 +448,7 @@ export const useNetworkCamera = () => {
         const response = await fetch(testUrl, { 
           method: 'HEAD',
           mode: 'cors',
-          signal: AbortSignal.timeout(15000)
+          signal: AbortSignal.timeout(10000)
         });
         console.log('useNetworkCamera: Connection test response:', response.status);
         return response.ok;
@@ -395,8 +466,10 @@ export const useNetworkCamera = () => {
     currentConfig,
     videoRef,
     streamRef,
+    reconnectAttempts,
     connectToCamera,
     disconnect,
+    forceReconnect,
     testConnection
   };
 };
