@@ -190,6 +190,28 @@ export const useDuckDNS = () => {
     return `http://${domain}:${port}`;
   }, [config.domain, config.enabled]);
 
+  const isDuckDNSUrl = useCallback((url: string): boolean => {
+    try {
+      const urlObj = new URL(url);
+      return urlObj.hostname.includes('.duckdns.org') || 
+             (config.domain && urlObj.hostname.includes(config.domain));
+    } catch {
+      return false;
+    }
+  }, [config.domain]);
+
+  const getCameraUrlWithDuckDNS = useCallback((port: number, path: string = '/stream.mjpg'): string => {
+    if (!config.enabled || !config.domain) {
+      return '';
+    }
+    
+    const domain = config.domain.includes('.duckdns.org') 
+      ? config.domain 
+      : `${config.domain}.duckdns.org`;
+    
+    return `http://${domain}:${port}${path}`;
+  }, [config.domain, config.enabled]);
+
   useEffect(() => {
     if (!config.enabled) return;
 
@@ -218,6 +240,8 @@ export const useDuckDNS = () => {
     updateConfig,
     checkAndUpdateIP,
     getDuckDNSUrl,
+    isDuckDNSUrl,
+    getCameraUrlWithDuckDNS,
     manualUpdate: async () => {
       console.log('Manual DuckDNS update requested');
       const ip = await getCurrentIP();

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi, Save } from 'lucide-react';
+import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi, Save, Copy } from 'lucide-react';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -19,7 +19,8 @@ export const DuckDNSSettings = () => {
     error,
     updateConfig,
     checkAndUpdateIP,
-    manualUpdate
+    manualUpdate,
+    getCameraUrlWithDuckDNS
   } = useDuckDNS();
 
   const [token, setToken] = useState('');
@@ -60,6 +61,17 @@ export const DuckDNSSettings = () => {
       });
     } finally {
       setIsSavingToken(false);
+    }
+  };
+
+  const copyCameraUrl = (port: number) => {
+    const url = getCameraUrlWithDuckDNS(port);
+    if (url) {
+      navigator.clipboard.writeText(url);
+      toast({
+        title: "Copied!",
+        description: "Camera URL copied to clipboard"
+      });
     }
   };
 
@@ -114,6 +126,48 @@ export const DuckDNSSettings = () => {
                 Your token is stored securely on the server and never exposed to the browser
               </p>
             </div>
+
+            {config.domain && (
+              <div className="space-y-2">
+                <Label className="text-gray-300">Camera URLs</Label>
+                <div className="bg-gray-700 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-300">Port 8081 (MJPEG):</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyCameraUrl(8081)}
+                      className="bg-gray-600 border-gray-500 hover:bg-gray-500"
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <code className="text-xs text-blue-300 break-all block">
+                    {getCameraUrlWithDuckDNS(8081)}
+                  </code>
+                  
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-300">Port 8080 (Web UI):</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyCameraUrl(8080)}
+                      className="bg-gray-600 border-gray-500 hover:bg-gray-500"
+                    >
+                      <Copy className="w-3 h-3 mr-1" />
+                      Copy
+                    </Button>
+                  </div>
+                  <code className="text-xs text-blue-300 break-all block">
+                    {getCameraUrlWithDuckDNS(8080)}
+                  </code>
+                </div>
+                <p className="text-xs text-yellow-400">
+                  ⚠️ Note: These URLs use HTTP and will be proxied through HTTPS when accessed from this site
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -185,7 +239,8 @@ export const DuckDNSSettings = () => {
 
             <div className="text-xs text-gray-400 space-y-1">
               <p>• IP is checked every 15 minutes automatically</p>
-              <p>• Use your DuckDNS domain in camera URLs: {config.domain}:8081</p>
+              <p>• Use your DuckDNS domain in camera URLs for external access</p>
+              <p>• HTTP URLs are automatically proxied through HTTPS for security</p>
               <p>• All tokens are stored securely on the server</p>
             </div>
           </>
