@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -115,6 +116,7 @@ export const useNetworkCamera = () => {
     let frameCount = 0;
     let lastFrameTime = Date.now();
     let lastActivityTime = Date.now();
+    let connectionEstablished = false;
     
     readerRef.current = reader;
     
@@ -190,14 +192,26 @@ export const useNetworkCamera = () => {
             buffer = buffer.slice(jpegEnd + 2);
             
             frameCount++;
+            
+            // Set connection as established after processing first frame
+            if (!connectionEstablished && frameCount >= 1) {
+              console.log('useNetworkCamera: First frame processed, establishing connection');
+              connectionEstablished = true;
+              setIsConnected(true);
+              setCurrentConfig(config);
+              setConnectionError(null);
+              setIsConnecting(false);
+              setReconnectAttempts(0);
+            }
+            
             const now = Date.now();
             if (now - lastFrameTime > 5000) { // Log every 5 seconds
               console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}`);
               lastFrameTime = now;
             }
             
-            // Reset reconnect attempts on successful frame
-            if (reconnectAttempts > 0) {
+            // Reset reconnect attempts on successful frame processing
+            if (reconnectAttempts > 0 && connectionEstablished) {
               setReconnectAttempts(0);
               setConnectionError(null);
             }
@@ -216,10 +230,10 @@ export const useNetworkCamera = () => {
           setTimeout(() => processChunk(), 10);
         }
       } catch (error) {
-        console.error('useNetworkCamera: Stream processing error:', error);
+        console.log('useNetworkCamera: Stream processing error:', error);
         
         if (!isActiveRef.current) {
-          console.log('useNetworkCamera: Not active, skipping reconnection');
+          console.log('useNetworkCamera: Stream not active, stopping processing');
           return;
         }
         
@@ -231,6 +245,7 @@ export const useNetworkCamera = () => {
         
         // Check if we should attempt reconnection
         if (reconnectAttempts < 5) {
+          console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
           setConnectionError('Connection interrupted - attempting to reconnect...');
           setReconnectAttempts(prev => prev + 1);
           
@@ -238,12 +253,11 @@ export const useNetworkCamera = () => {
           const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000); // Max 10s delay
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isActiveRef.current) {
-              console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
               connectToCamera(config);
             }
           }, delay);
         } else {
-          console.log('useNetworkCamera: Max reconnection attempts reached');
+          console.log('useNetworkCamera: Max reconnection attempts reached or stream inactive');
           setIsConnected(false);
           setConnectionError('Connection lost. Please try reconnecting manually.');
           isActiveRef.current = false;
@@ -267,6 +281,7 @@ export const useNetworkCamera = () => {
     setIsConnecting(true);
     setConnectionError(null);
     setCurrentConfig(config);
+    setIsConnected(false); // Reset connection state
 
     try {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
@@ -368,16 +383,9 @@ export const useNetworkCamera = () => {
                 throw new Error('No response body available');
               }
               
-              // Set up success state BEFORE starting stream parsing
-              setIsConnected(true);
-              setCurrentConfig(config);
-              setConnectionError(null);
-              setIsConnecting(false);
-              setReconnectAttempts(0);
-              
               console.log('useNetworkCamera: Starting MJPEG stream parsing');
               
-              // Start parsing the MJPEG stream - this will run continuously
+              // Start parsing the MJPEG stream - connection state will be set when first frame is processed
               parseMJPEGStream(reader, element, config);
               
             } catch (fetchError) {
@@ -434,7 +442,7 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // Connection timeout fallback
+        // Connection timeout fallback - only if no frames have been processed
         setTimeout(() => {
           if (isConnecting && !isConnected) {
             console.warn('useNetworkCamera: Connection timeout after 30 seconds');
