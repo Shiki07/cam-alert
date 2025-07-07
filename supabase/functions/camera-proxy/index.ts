@@ -1,13 +1,13 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, HEAD, OPTIONS',
-};
+}
 
-// Rate limiting store
+// Rate limiting for camera proxy
 const rateLimits = new Map<string, { count: number; resetTime: number }>();
 
 const checkRateLimit = (userId: string): boolean => {
@@ -15,11 +15,11 @@ const checkRateLimit = (userId: string): boolean => {
   const limit = rateLimits.get(userId);
   
   if (!limit || now > limit.resetTime) {
-    rateLimits.set(userId, { count: 1, resetTime: now + 60000 });
+    rateLimits.set(userId, { count: 1, resetTime: now + 60000 }); // 1 minute window
     return true;
   }
   
-  if (limit.count >= 60) { // Max 60 requests per minute for camera streams
+  if (limit.count >= 30) { // 30 requests per minute for camera streams
     return false;
   }
   
@@ -27,17 +27,18 @@ const checkRateLimit = (userId: string): boolean => {
   return true;
 };
 
-const validateUrl = (url: string): boolean => {
+// SECURITY: Validate and sanitize camera URLs to prevent SSRF
+const validateCameraURL = (url: string): boolean => {
   try {
-    const parsed = new URL(url);
+    const urlObj = new URL(url);
     
-    // Only allow HTTP and HTTPS protocols
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
+    // Only allow HTTP/HTTPS protocols
+    if (!['http:', 'https:'].includes(urlObj.protocol)) {
       return false;
     }
     
-    // Block private IP ranges and localhost
-    const hostname = parsed.hostname;
+    // Block localhost and private IP ranges
+    const hostname = urlObj.hostname.toLowerCase();
     
     // Block localhost variations
     if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
@@ -45,22 +46,22 @@ const validateUrl = (url: string): boolean => {
     }
     
     // Block private IP ranges
-    const ipRegex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
-    const ipMatch = hostname.match(ipRegex);
+    if (hostname.match(/^10\./)) return false;
+    if (hostname.match(/^192\.168\./)) return false;
+    if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) return false;
+    if (hostname.match(/^169\.254\./)) return false;
     
-    if (ipMatch) {
-      const [, a, b, c, d] = ipMatch.map(Number);
-      
-      // Allow public IP ranges but block private ones
-      if (
-        (a === 10) || // 10.0.0.0/8
-        (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
-        (a === 192 && b === 168) || // 192.168.0.0/16
-        (a === 169 && b === 254) // 169.254.0.0/16 (link-local)
-      ) {
-        // Allow if it's a commonly used external IP range for cameras
-        console.log(`Warning: Accessing private IP range: ${hostname}`);
-      }
+    // Block metadata services
+    if (hostname.includes('metadata') || hostname === '169.254.169.254') {
+      return false;
+    }
+    
+    // Only allow common camera ports
+    const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
+    const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
+    
+    if (!allowedPorts.includes(port)) {
+      return false;
     }
     
     return true;
@@ -77,7 +78,8 @@ serve(async (req) => {
   try {
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.warn('Camera proxy: Invalid authorization header');
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
         { 
@@ -88,8 +90,20 @@ serve(async (req) => {
     }
 
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase configuration');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify the JWT token
@@ -97,6 +111,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
     
     if (authError || !user) {
+      console.warn('Camera proxy: Invalid or expired token');
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { 
@@ -108,6 +123,7 @@ serve(async (req) => {
 
     // Check rate limit
     if (!checkRateLimit(user.id)) {
+      console.warn(`Camera proxy: Rate limit exceeded for user: ${user.id}`);
       return new Response(
         JSON.stringify({ error: 'Rate limit exceeded' }),
         { 
@@ -117,218 +133,114 @@ serve(async (req) => {
       );
     }
 
-    let targetUrl: string;
-    let method = req.method;
-
-    console.log(`=== Camera Proxy Request ===`);
-    console.log(`Method: ${req.method}`);
-    console.log(`User: ${user.id}`);
-
-    if (req.method === 'GET' || req.method === 'HEAD') {
-      const url = new URL(req.url);
-      const urlParam = url.searchParams.get('url');
-      if (!urlParam) {
-        console.error(`Missing url parameter in ${req.method} request`);
-        return new Response('Missing url parameter', { 
+    // Get the target URL from query parameters
+    const url = new URL(req.url);
+    const targetUrl = url.searchParams.get('url');
+    
+    if (!targetUrl) {
+      return new Response(
+        JSON.stringify({ error: 'Missing url parameter' }),
+        { 
           status: 400, 
-          headers: corsHeaders 
-        });
-      }
-      targetUrl = urlParam;
-    } else if (req.method === 'POST') {
-      const body = await req.json();
-      if (!body.url) {
-        console.error('Missing url in POST request body');
-        return new Response('Missing url in request body', { 
-          status: 400, 
-          headers: corsHeaders 
-        });
-      }
-      targetUrl = body.url;
-      method = body.method || 'GET';
-    } else {
-      return new Response('Method not allowed', { 
-        status: 405, 
-        headers: corsHeaders 
-      });
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    // Validate the target URL
-    if (!validateUrl(targetUrl)) {
-      console.error('Invalid or blocked URL:', targetUrl);
-      return new Response('Invalid or blocked URL', {
-        status: 400,
-        headers: corsHeaders,
-      });
+    // SECURITY: Validate the camera URL
+    if (!validateCameraURL(targetUrl)) {
+      console.warn(`Camera proxy: Blocked potentially dangerous URL: ${targetUrl}`);
+      return new Response(
+        JSON.stringify({ error: 'Invalid or blocked URL' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
-    console.log(`Proxying ${method} request to:`, targetUrl);
+    console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
 
+    // Create AbortController for timeout
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.log('Request timeout after 30 seconds');
-      controller.abort();
-    }, 30000); // Increased timeout to 30 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
 
     try {
-      console.log(`Making ${method} request to camera...`);
-      
+      // Proxy the request
       const response = await fetch(targetUrl, {
-        method: method,
+        method: req.method,
         headers: {
-          'User-Agent': 'Camera-Proxy/1.0',
-          'Accept': '*/*',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-          'Accept-Encoding': 'identity',
+          'User-Agent': 'CamAlert-Proxy/1.0',
+          'Accept': 'image/jpeg, multipart/x-mixed-replace, */*'
         },
-        signal: controller.signal,
+        signal: controller.signal
       });
 
       clearTimeout(timeoutId);
 
-      console.log(`Response status: ${response.status} ${response.statusText}`);
-
       if (!response.ok) {
-        console.error(`Failed to fetch from target: ${response.status} ${response.statusText}`);
-        
-        let errorMessage = `Camera connection failed: ${response.status}`;
-        if (response.status === 404) {
-          errorMessage = 'Camera stream not found';
-        } else if (response.status === 401) {
-          errorMessage = 'Camera authentication required';
-        } else if (response.status === 403) {
-          errorMessage = 'Camera access forbidden';
-        } else if (response.status >= 500) {
-          errorMessage = 'Camera server error';
-        }
-        
-        return new Response(errorMessage, {
-          status: response.status,
-          headers: corsHeaders,
-        });
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      console.log(`Successfully connected to camera. Status: ${response.status}`);
+      // Forward the response with appropriate headers
+      const responseHeaders = new Headers(corsHeaders);
+      
+      // Copy relevant headers from the camera response
       const contentType = response.headers.get('content-type');
+      if (contentType) {
+        responseHeaders.set('content-type', contentType);
+      }
+      
+      const contentLength = response.headers.get('content-length');
+      if (contentLength) {
+        responseHeaders.set('content-length', contentLength);
+      }
 
-      if (method === 'HEAD') {
-        const headers = new Headers(corsHeaders);
-        if (contentType) {
-          headers.set('content-type', contentType);
-        }
-        headers.set('cache-control', 'no-cache');
+      // For streaming responses, we need to handle them specially
+      if (response.body) {
+        return new Response(response.body, {
+          status: response.status,
+          headers: responseHeaders,
+        });
+      } else {
         return new Response(null, {
           status: response.status,
-          headers: headers,
+          headers: responseHeaders,
         });
       }
-
-      const headers = new Headers(corsHeaders);
-      
-      if (contentType) {
-        headers.set('content-type', contentType);
-      }
-      
-      headers.set('cache-control', 'no-cache, no-store, must-revalidate');
-      headers.set('pragma', 'no-cache');
-      headers.set('expires', '0');
-      headers.set('x-accel-buffering', 'no');
-
-      if (contentType && (contentType.includes('multipart') || contentType.includes('mjpeg'))) {
-        console.log('Handling MJPEG multipart stream');
-        
-        const stream = new ReadableStream({
-          async start(controller) {
-            const reader = response.body?.getReader();
-            if (!reader) {
-              controller.close();
-              return;
-            }
-
-            try {
-              let buffer = new Uint8Array();
-              let lastActivityTime = Date.now();
-              
-              while (true) {
-                const timeoutPromise = new Promise<never>((_, reject) => {
-                  setTimeout(() => reject(new Error('Stream read timeout')), 15000);
-                });
-                
-                const readPromise = reader.read();
-                const { done, value } = await Promise.race([readPromise, timeoutPromise]);
-                
-                if (done) break;
-                
-                lastActivityTime = Date.now();
-                
-                const newBuffer = new Uint8Array(buffer.length + value.length);
-                newBuffer.set(buffer);
-                newBuffer.set(value, buffer.length);
-                buffer = newBuffer;
-                
-                const chunkSize = 8192;
-                while (buffer.length >= chunkSize) {
-                  controller.enqueue(buffer.slice(0, chunkSize));
-                  buffer = buffer.slice(chunkSize);
-                }
-                
-                // Keep buffer manageable
-                if (buffer.length > 1024 * 1024) { // 1MB limit
-                  console.log('Proxy: Buffer too large, resetting');
-                  if (buffer.length > 0) {
-                    controller.enqueue(buffer);
-                  }
-                  buffer = new Uint8Array();
-                }
-              }
-              
-              if (buffer.length > 0) {
-                controller.enqueue(buffer);
-              }
-              
-              controller.close();
-            } catch (error) {
-              console.error('Stream processing error:', error);
-              controller.error(error);
-            }
-          }
-        });
-
-        return new Response(stream, {
-          status: response.status,
-          headers: headers,
-        });
-      }
-
-      return new Response(response.body, {
-        status: response.status,
-        headers: headers,
-      });
 
     } catch (fetchError) {
       clearTimeout(timeoutId);
       
-      console.error('Network error connecting to camera:', fetchError);
-      
       if (fetchError.name === 'AbortError') {
-        return new Response('Camera connection timeout', {
-          status: 408,
-          headers: corsHeaders,
-        });
+        console.warn('Camera proxy: Request timeout');
+        return new Response(
+          JSON.stringify({ error: 'Request timeout' }),
+          { 
+            status: 408, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
       }
       
-      return new Response('Camera connection failed - network error', {
-        status: 502,
-        headers: corsHeaders,
-      });
+      console.error('Camera proxy fetch error:', fetchError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to connect to camera' }),
+        { 
+          status: 502, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
 
   } catch (error) {
-    console.error('Proxy error:', error);
-    return new Response('Internal server error', {
-      status: 500,
-      headers: corsHeaders,
-    });
+    console.error('Camera proxy error:', error);
+    return new Response(
+      JSON.stringify({ error: 'Internal server error' }),
+      { 
+        status: 500, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
   }
 });

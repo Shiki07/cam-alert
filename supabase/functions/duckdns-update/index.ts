@@ -19,12 +19,57 @@ const checkRateLimit = (userId: string): boolean => {
     return true;
   }
   
-  if (limit.count >= 10) { // Max 10 requests per minute
+  if (limit.count >= 5) { // Reduced from 10 to 5 for security
     return false;
   }
   
   limit.count++;
   return true;
+};
+
+// Enhanced input validation
+const validateIP = (ip: string): boolean => {
+  if (!ip || typeof ip !== 'string') return false;
+  
+  // Strict IPv4 validation
+  const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+  if (!ipRegex.test(ip)) return false;
+  
+  // Block private IP ranges for security
+  const parts = ip.split('.').map(Number);
+  
+  // Block localhost
+  if (parts[0] === 127) return false;
+  
+  // Block private networks
+  if (parts[0] === 10) return false;
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+  if (parts[0] === 192 && parts[1] === 168) return false;
+  
+  // Block link-local
+  if (parts[0] === 169 && parts[1] === 254) return false;
+  
+  return true;
+};
+
+const validateDomain = (domain: string): boolean => {
+  if (!domain || typeof domain !== 'string') return false;
+  
+  const cleanDomain = domain.replace('.duckdns.org', '').replace(/^https?:\/\//, '');
+  
+  // Enhanced domain validation
+  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?$/;
+  
+  return domainRegex.test(cleanDomain) && 
+         cleanDomain.length >= 3 && 
+         cleanDomain.length <= 63 &&
+         !cleanDomain.includes('..') &&
+         !cleanDomain.startsWith('-') &&
+         !cleanDomain.endsWith('-');
+};
+
+const sanitizeInput = (input: string): string => {
+  return input.trim().replace(/[<>'"&]/g, '');
 };
 
 serve(async (req) => {
@@ -35,7 +80,8 @@ serve(async (req) => {
   try {
     // Get the authorization header
     const authHeader = req.headers.get('authorization');
-    if (!authHeader) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.warn('Invalid authorization header format');
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
         { 
@@ -46,8 +92,20 @@ serve(async (req) => {
     }
 
     // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase configuration');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify the JWT token
@@ -55,6 +113,7 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
     
     if (authError || !user) {
+      console.warn('Invalid or expired token');
       return new Response(
         JSON.stringify({ error: 'Invalid or expired token' }),
         { 
@@ -66,6 +125,7 @@ serve(async (req) => {
 
     // Check rate limit
     if (!checkRateLimit(user.id)) {
+      console.warn(`Rate limit exceeded for user: ${user.id}`);
       return new Response(
         JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
         { 
@@ -75,11 +135,14 @@ serve(async (req) => {
       );
     }
 
-    const { domain, ip } = await req.json();
-
-    if (!domain || !ip) {
+    // Parse and validate request body
+    let requestBody;
+    try {
+      requestBody = await req.json();
+    } catch (error) {
+      console.warn('Invalid JSON in request body');
       return new Response(
-        JSON.stringify({ error: 'Missing required parameters: domain or ip' }),
+        JSON.stringify({ error: 'Invalid request format' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -87,9 +150,10 @@ serve(async (req) => {
       );
     }
 
-    // Validate IP address format
-    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-    if (!ipRegex.test(ip)) {
+    const { domain, ip } = requestBody;
+
+    if (!validateIP(ip)) {
+      console.warn('Invalid IP address format or private IP blocked');
       return new Response(
         JSON.stringify({ error: 'Invalid IP address format' }),
         { 
@@ -99,10 +163,8 @@ serve(async (req) => {
       );
     }
 
-    // Validate domain format
-    const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?$/;
-    const cleanDomain = domain.replace('.duckdns.org', '').replace('http://', '').replace('https://', '');
-    if (!domainRegex.test(cleanDomain)) {
+    if (!validateDomain(domain)) {
+      console.warn('Invalid domain format');
       return new Response(
         JSON.stringify({ error: 'Invalid domain format' }),
         { 
@@ -111,6 +173,10 @@ serve(async (req) => {
         }
       );
     }
+
+    // Sanitize inputs
+    const cleanDomain = sanitizeInput(domain.replace('.duckdns.org', '').replace(/^https?:\/\//, ''));
+    const cleanIP = sanitizeInput(ip);
 
     // Get the token from user metadata
     const token = user.user_metadata?.duckdns_token;
@@ -124,29 +190,69 @@ serve(async (req) => {
       );
     }
     
-    // Make request to DuckDNS
-    const duckdnsUrl = `https://www.duckdns.org/update?domains=${cleanDomain}&token=${token}&ip=${ip}`;
+    // Make request to DuckDNS with timeout
+    const duckdnsUrl = `https://www.duckdns.org/update?domains=${encodeURIComponent(cleanDomain)}&token=${encodeURIComponent(token)}&ip=${encodeURIComponent(cleanIP)}`;
     
-    console.log(`Updating DuckDNS - Domain: ${cleanDomain}, IP: ${ip}, User: ${user.id}`);
+    console.log(`Updating DuckDNS - Domain: ${cleanDomain}, IP: ${cleanIP}, User: ${user.id}`);
     
-    const response = await fetch(duckdnsUrl);
-    const result = await response.text();
+    // Add timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    console.log(`DuckDNS response: ${result}`);
-    
-    if (result.trim() === 'OK') {
-      return new Response(
-        JSON.stringify({ success: true, message: 'DuckDNS updated successfully' }),
-        { 
-          status: 200, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    try {
+      const response = await fetch(duckdnsUrl, {
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'CamAlert/1.0'
         }
-      );
-    } else {
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.text();
+      
+      console.log(`DuckDNS response: ${result}`);
+      
+      if (result.trim() === 'OK') {
+        return new Response(
+          JSON.stringify({ success: true, message: 'DuckDNS updated successfully' }),
+          { 
+            status: 200, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      } else {
+        return new Response(
+          JSON.stringify({ error: 'DuckDNS update failed' }),
+          { 
+            status: 400, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      if (fetchError.name === 'AbortError') {
+        console.error('DuckDNS request timeout');
+        return new Response(
+          JSON.stringify({ error: 'Request timeout' }),
+          { 
+            status: 408, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      console.error('DuckDNS fetch error:', fetchError);
       return new Response(
-        JSON.stringify({ error: `DuckDNS update failed: ${result}` }),
+        JSON.stringify({ error: 'Failed to update DuckDNS' }),
         { 
-          status: 400, 
+          status: 500, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
