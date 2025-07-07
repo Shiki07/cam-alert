@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -19,6 +20,7 @@ export const useNetworkCamera = () => {
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const isActiveRef = useRef(false); // Track if stream should be active
 
   const isLocalNetwork = (url: string) => {
     try {
@@ -70,6 +72,9 @@ export const useNetworkCamera = () => {
   const cleanupStream = useCallback(() => {
     console.log('useNetworkCamera: Cleaning up stream resources');
     
+    // Mark stream as inactive
+    isActiveRef.current = false;
+    
     // Cancel any pending reader operations
     if (readerRef.current) {
       try {
@@ -104,15 +109,15 @@ export const useNetworkCamera = () => {
     
     const processChunk = async (): Promise<void> => {
       try {
-        const { done, value } = await reader.read();
-        if (done) {
-          console.log('useNetworkCamera: Stream ended normally');
+        // Check if stream should still be active
+        if (!isActiveRef.current) {
+          console.log('useNetworkCamera: Stream marked as inactive, stopping processing');
           return;
         }
 
-        // Check if we're still connected and should continue processing
-        if (!isConnected) {
-          console.log('useNetworkCamera: Connection lost, stopping stream processing');
+        const { done, value } = await reader.read();
+        if (done) {
+          console.log('useNetworkCamera: Stream ended normally');
           return;
         }
 
@@ -169,13 +174,16 @@ export const useNetworkCamera = () => {
           buffer = new Uint8Array(0);
         }
 
-        // Continue processing
-        processChunk();
+        // Continue processing if still active
+        if (isActiveRef.current) {
+          // Use setTimeout to prevent stack overflow
+          setTimeout(() => processChunk(), 0);
+        }
       } catch (error) {
         console.error('useNetworkCamera: Stream processing error:', error);
         
-        if (!isConnected) {
-          console.log('useNetworkCamera: Not connected, skipping reconnection');
+        if (!isActiveRef.current) {
+          console.log('useNetworkCamera: Not active, skipping reconnection');
           return;
         }
         
@@ -191,11 +199,11 @@ export const useNetworkCamera = () => {
         
         // Attempt reconnection after a delay
         reconnectTimeoutRef.current = setTimeout(() => {
-          if (currentConfig && reconnectAttempts < 5) {
+          if (currentConfig && reconnectAttempts < 5 && isActiveRef.current) {
             console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
             connectToCamera(config);
           } else {
-            console.log('useNetworkCamera: Max reconnection attempts reached');
+            console.log('useNetworkCamera: Max reconnection attempts reached or stream inactive');
             setIsConnected(false);
             setConnectionError('Connection lost. Please try reconnecting manually.');
           }
@@ -204,7 +212,7 @@ export const useNetworkCamera = () => {
     };
 
     processChunk();
-  }, [isConnected, currentConfig, reconnectAttempts]);
+  }, [reconnectAttempts, currentConfig]);
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
@@ -212,6 +220,9 @@ export const useNetworkCamera = () => {
     
     // Clean up any existing connections
     cleanupStream();
+    
+    // Mark stream as active
+    isActiveRef.current = true;
     
     setIsConnecting(true);
     setConnectionError(null);
@@ -282,6 +293,7 @@ export const useNetworkCamera = () => {
           
           setConnectionError(errorMsg);
           setIsConnecting(false);
+          isActiveRef.current = false;
           return;
         }
 
@@ -313,7 +325,7 @@ export const useNetworkCamera = () => {
                 throw new Error('No response body available');
               }
               
-              // Set up success state first
+              // Set up success state BEFORE starting stream parsing
               setIsConnected(true);
               setCurrentConfig(config);
               setConnectionError(null);
@@ -322,7 +334,7 @@ export const useNetworkCamera = () => {
               
               console.log('useNetworkCamera: Starting MJPEG stream parsing');
               
-              // Start parsing the MJPEG stream
+              // Start parsing the MJPEG stream - this will run continuously
               parseMJPEGStream(reader, element, config);
               
             } catch (fetchError) {
@@ -330,6 +342,7 @@ export const useNetworkCamera = () => {
               setConnectionError('Failed to establish stream connection. Please try again.');
               setIsConnected(false);
               setIsConnecting(false);
+              isActiveRef.current = false;
             }
           } else {
             // Direct connection (no proxy needed)
@@ -347,6 +360,7 @@ export const useNetworkCamera = () => {
               setConnectionError('Failed to load MJPEG stream from camera.');
               setIsConnected(false);
               setIsConnecting(false);
+              isActiveRef.current = false;
             };
 
             // Remove existing listeners
@@ -367,6 +381,7 @@ export const useNetworkCamera = () => {
           console.error('useNetworkCamera: Element type:', element?.constructor.name);
           setConnectionError('Expected img element for MJPEG stream, got: ' + element?.constructor.name);
           setIsConnecting(false);
+          isActiveRef.current = false;
           return;
         }
 
@@ -376,6 +391,7 @@ export const useNetworkCamera = () => {
             console.warn('useNetworkCamera: Connection timeout after 30 seconds');
             setConnectionError('Connection timeout - please check your camera configuration and try again.');
             setIsConnecting(false);
+            isActiveRef.current = false;
           }
         }, 30000);
 
@@ -388,11 +404,13 @@ export const useNetworkCamera = () => {
       setConnectionError(error instanceof Error ? error.message : 'Connection failed');
       setIsConnected(false);
       setIsConnecting(false);
+      isActiveRef.current = false;
     }
   }, [isConnecting, isConnected, cleanupStream, parseMJPEGStream]);
 
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
+    isActiveRef.current = false;
     cleanupStream();
     setIsConnected(false);
     setCurrentConfig(null);
