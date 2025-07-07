@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -20,7 +19,8 @@ export const useNetworkCamera = () => {
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
-  const isActiveRef = useRef(false); // Track if stream should be active
+  const isActiveRef = useRef(false);
+  const fetchControllerRef = useRef<AbortController | null>(null);
 
   const isLocalNetwork = (url: string) => {
     try {
@@ -75,6 +75,16 @@ export const useNetworkCamera = () => {
     // Mark stream as inactive
     isActiveRef.current = false;
     
+    // Cancel any pending fetch operations
+    if (fetchControllerRef.current) {
+      try {
+        fetchControllerRef.current.abort();
+      } catch (error) {
+        console.log('useNetworkCamera: Error aborting fetch:', error);
+      }
+      fetchControllerRef.current = null;
+    }
+    
     // Cancel any pending reader operations
     if (readerRef.current) {
       try {
@@ -104,6 +114,7 @@ export const useNetworkCamera = () => {
     let buffer = new Uint8Array(0);
     let frameCount = 0;
     let lastFrameTime = Date.now();
+    let lastActivityTime = Date.now();
     
     readerRef.current = reader;
     
@@ -115,11 +126,35 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        const { done, value } = await reader.read();
+        // Set a reasonable timeout for reading chunks
+        const timeoutMs = 15000; // 15 seconds
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
+        });
+
+        const readPromise = reader.read();
+        const result = await Promise.race([readPromise, timeoutPromise]);
+        
+        const { done, value } = result;
+        
         if (done) {
           console.log('useNetworkCamera: Stream ended normally');
+          if (isActiveRef.current && reconnectAttempts < 5) {
+            console.log('useNetworkCamera: Stream ended unexpectedly, attempting reconnection');
+            setConnectionError('Stream ended - attempting to reconnect...');
+            setReconnectAttempts(prev => prev + 1);
+            
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isActiveRef.current) {
+                connectToCamera(config);
+              }
+            }, 2000);
+          }
           return;
         }
+
+        // Update last activity time
+        lastActivityTime = Date.now();
 
         // Append new data to buffer
         const newBuffer = new Uint8Array(buffer.length + value.length);
@@ -164,20 +199,21 @@ export const useNetworkCamera = () => {
             // Reset reconnect attempts on successful frame
             if (reconnectAttempts > 0) {
               setReconnectAttempts(0);
+              setConnectionError(null);
             }
           }
         }
 
         // Keep buffer size manageable
-        if (buffer.length > 1024 * 1024) { // 1MB limit
+        if (buffer.length > 2 * 1024 * 1024) { // 2MB limit
           console.log('useNetworkCamera: Buffer too large, resetting');
           buffer = new Uint8Array(0);
         }
 
         // Continue processing if still active
         if (isActiveRef.current) {
-          // Use setTimeout to prevent stack overflow
-          setTimeout(() => processChunk(), 0);
+          // Use setTimeout to prevent stack overflow and allow other operations
+          setTimeout(() => processChunk(), 10);
         }
       } catch (error) {
         console.error('useNetworkCamera: Stream processing error:', error);
@@ -193,26 +229,30 @@ export const useNetworkCamera = () => {
           return;
         }
         
-        // Auto-reconnect on timeout or network errors
-        setConnectionError('Stream connection lost - attempting to reconnect...');
-        setReconnectAttempts(prev => prev + 1);
-        
-        // Attempt reconnection after a delay
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (currentConfig && reconnectAttempts < 5 && isActiveRef.current) {
-            console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
-            connectToCamera(config);
-          } else {
-            console.log('useNetworkCamera: Max reconnection attempts reached or stream inactive');
-            setIsConnected(false);
-            setConnectionError('Connection lost. Please try reconnecting manually.');
-          }
-        }, Math.min(2000 * Math.pow(2, reconnectAttempts), 30000)); // Exponential backoff, max 30s
+        // Check if we should attempt reconnection
+        if (reconnectAttempts < 5) {
+          setConnectionError('Connection interrupted - attempting to reconnect...');
+          setReconnectAttempts(prev => prev + 1);
+          
+          // Attempt reconnection after a delay
+          const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000); // Max 10s delay
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isActiveRef.current) {
+              console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
+              connectToCamera(config);
+            }
+          }, delay);
+        } else {
+          console.log('useNetworkCamera: Max reconnection attempts reached');
+          setIsConnected(false);
+          setConnectionError('Connection lost. Please try reconnecting manually.');
+          isActiveRef.current = false;
+        }
       }
     };
 
     processChunk();
-  }, [reconnectAttempts, currentConfig]);
+  }, [reconnectAttempts]);
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
@@ -271,7 +311,7 @@ export const useNetworkCamera = () => {
           const testResponse = await fetch(finalUrl, { 
             method: 'HEAD',
             headers,
-            signal: AbortSignal.timeout(10000) // Reduced timeout
+            signal: AbortSignal.timeout(10000)
           });
           
           if (!testResponse.ok) {
@@ -309,10 +349,13 @@ export const useNetworkCamera = () => {
             console.log('useNetworkCamera: Using fetch-based approach for proxied MJPEG stream');
             
             try {
+              // Create new AbortController for this fetch
+              fetchControllerRef.current = new AbortController();
+              
               const response = await fetch(finalUrl, {
                 method: 'GET',
                 headers,
-                signal: AbortSignal.timeout(60000) // Longer timeout for stream
+                signal: fetchControllerRef.current.signal
               });
               
               if (!response.ok) {
@@ -339,13 +382,19 @@ export const useNetworkCamera = () => {
               
             } catch (fetchError) {
               console.error('useNetworkCamera: Fetch-based stream failed:', fetchError);
+              
+              if (fetchError.name === 'AbortError') {
+                console.log('useNetworkCamera: Fetch aborted');
+                return;
+              }
+              
               setConnectionError('Failed to establish stream connection. Please try again.');
               setIsConnected(false);
               setIsConnecting(false);
               isActiveRef.current = false;
             }
           } else {
-            // Direct connection (no proxy needed)
+            // Direct connection (no proxy needed)  
             const handleLoad = () => {
               console.log('useNetworkCamera: IMG element loaded successfully!');
               setIsConnected(true);
@@ -422,6 +471,7 @@ export const useNetworkCamera = () => {
     if (currentConfig) {
       console.log('useNetworkCamera: Force reconnecting to:', currentConfig.name);
       setReconnectAttempts(0);
+      setConnectionError(null);
       connectToCamera(currentConfig);
     }
   }, [currentConfig, connectToCamera]);

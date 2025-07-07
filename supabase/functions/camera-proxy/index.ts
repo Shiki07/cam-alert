@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -53,7 +52,6 @@ const validateUrl = (url: string): boolean => {
       const [, a, b, c, d] = ipMatch.map(Number);
       
       // Allow public IP ranges but block private ones
-      // This is a basic check - in production you'd want more comprehensive validation
       if (
         (a === 10) || // 10.0.0.0/8
         (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12
@@ -61,8 +59,6 @@ const validateUrl = (url: string): boolean => {
         (a === 169 && b === 254) // 169.254.0.0/16 (link-local)
       ) {
         // Allow if it's a commonly used external IP range for cameras
-        // This is where you'd implement your specific business logic
-        // For now, we'll be permissive for camera IPs but log them
         console.log(`Warning: Accessing private IP range: ${hostname}`);
       }
     }
@@ -170,9 +166,9 @@ serve(async (req) => {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log('Request timeout after 20 seconds');
+      console.log('Request timeout after 30 seconds');
       controller.abort();
-    }, 20000);
+    }, 30000); // Increased timeout to 30 seconds
 
     try {
       console.log(`Making ${method} request to camera...`);
@@ -252,10 +248,19 @@ serve(async (req) => {
 
             try {
               let buffer = new Uint8Array();
+              let lastActivityTime = Date.now();
               
               while (true) {
-                const { done, value } = await reader.read();
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                  setTimeout(() => reject(new Error('Stream read timeout')), 15000);
+                });
+                
+                const readPromise = reader.read();
+                const { done, value } = await Promise.race([readPromise, timeoutPromise]);
+                
                 if (done) break;
+                
+                lastActivityTime = Date.now();
                 
                 const newBuffer = new Uint8Array(buffer.length + value.length);
                 newBuffer.set(buffer);
@@ -266,6 +271,15 @@ serve(async (req) => {
                 while (buffer.length >= chunkSize) {
                   controller.enqueue(buffer.slice(0, chunkSize));
                   buffer = buffer.slice(chunkSize);
+                }
+                
+                // Keep buffer manageable
+                if (buffer.length > 1024 * 1024) { // 1MB limit
+                  console.log('Proxy: Buffer too large, resetting');
+                  if (buffer.length > 0) {
+                    controller.enqueue(buffer);
+                  }
+                  buffer = new Uint8Array();
                 }
               }
               
