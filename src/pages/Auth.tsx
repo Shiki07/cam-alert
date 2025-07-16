@@ -147,6 +147,11 @@ const Auth = () => {
           <CardDescription className="text-gray-300">
             Secure access to your remote camera system
           </CardDescription>
+          <div className="mt-3 px-3 py-2 bg-amber-600/20 border border-amber-600/30 rounded-md">
+            <p className="text-amber-200 text-sm text-center font-medium">
+              🚧 This webapp is still under construction
+            </p>
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="signin" className="w-full">
