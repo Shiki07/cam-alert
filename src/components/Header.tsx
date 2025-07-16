@@ -22,7 +22,12 @@ const Header = () => {
   return (
     <header className="bg-gray-900 border-b border-gray-700 px-6 py-4">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold text-white">CamAlert Control Panel</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-white">CamAlert Control Panel</h1>
+          <div className="px-3 py-1 bg-amber-600/20 border border-amber-600/30 rounded-md">
+            <span className="text-amber-200 text-sm font-medium">🚧 Under Construction</span>
+          </div>
+        </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 text-gray-300">
             <User className="w-4 h-4" />
