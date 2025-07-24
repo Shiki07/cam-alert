@@ -10,6 +10,39 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Rate limiting store (in production, use Redis or similar)
+const rateLimits = new Map<string, { count: number; resetTime: number }>();
+
+const checkRateLimit = (userId: string): boolean => {
+  const now = Date.now();
+  const limit = rateLimits.get(userId);
+  
+  if (!limit || now > limit.resetTime) {
+    rateLimits.set(userId, { count: 1, resetTime: now + 60000 }); // 1 minute window
+    return true;
+  }
+  
+  if (limit.count >= 3) { // Max 3 emails per minute per user
+    return false;
+  }
+  
+  limit.count++;
+  return true;
+};
+
+// Enhanced email validation
+const validateEmail = (email: string): boolean => {
+  if (!email || typeof email !== 'string') return false;
+  
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  return emailRegex.test(email) && email.length <= 254;
+};
+
+// Input sanitization
+const sanitizeInput = (input: string): string => {
+  return input.trim().replace(/[<>'"&]/g, '');
+};
+
 interface MotionAlertRequest {
   email: string;
   attachmentData?: string; // base64 encoded image/video
@@ -27,13 +60,121 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    // Get the authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.warn('Invalid authorization header format');
+      return new Response(
+        JSON.stringify({ error: 'Authentication required' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Initialize Supabase client for auth verification
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase configuration');
+      return new Response(
+        JSON.stringify({ error: 'Server configuration error' }),
+        { 
+          status: 500, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Verify the JWT token
+    const jwt = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
+    
+    if (authError || !user) {
+      console.warn('Invalid or expired token');
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { 
+          status: 401, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Check rate limit
+    if (!checkRateLimit(user.id)) {
+      console.warn(`Rate limit exceeded for user: ${user.id}`);
+      return new Response(
+        JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+        { 
+          status: 429, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
     const { email, attachmentData, attachmentType, timestamp, motionLevel }: MotionAlertRequest = await req.json();
     
-    console.log('Sending motion alert to:', email);
+    // Enhanced input validation
+    if (!validateEmail(email)) {
+      console.warn('Invalid email format provided');
+      return new Response(
+        JSON.stringify({ error: 'Invalid email address' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Validate timestamp
+    const alertTime = new Date(timestamp);
+    if (isNaN(alertTime.getTime())) {
+      console.warn('Invalid timestamp provided');
+      return new Response(
+        JSON.stringify({ error: 'Invalid timestamp' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Validate motion level if provided
+    if (motionLevel !== undefined && (typeof motionLevel !== 'number' || motionLevel < 0 || motionLevel > 100)) {
+      console.warn('Invalid motion level provided');
+      return new Response(
+        JSON.stringify({ error: 'Invalid motion level' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Validate attachment data if provided
+    if (attachmentData && (!attachmentType || !['image', 'video'].includes(attachmentType))) {
+      console.warn('Invalid attachment type provided');
+      return new Response(
+        JSON.stringify({ error: 'Invalid attachment type' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+
+    // Sanitize email for logging (security)
+    const sanitizedEmail = sanitizeInput(email);
+    console.log('Sending motion alert to:', sanitizedEmail.substring(0, 3) + '***@' + sanitizedEmail.split('@')[1]);
 
     const emailData: any = {
       from: "CamAlert <noreply@resend.dev>",
-      to: [email],
+      to: [sanitizeInput(email)],
       subject: "🚨 Motion Detected - CamAlert",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -41,8 +182,8 @@ const handler = async (req: Request): Promise<Response> => {
           <div style="background: #f3f4f6; padding: 20px; border-radius: 8px; margin: 20px 0;">
             <p><strong>Alert Details:</strong></p>
             <ul>
-              <li><strong>Time:</strong> ${new Date(timestamp).toLocaleString()}</li>
-              <li><strong>Motion Level:</strong> ${motionLevel ? motionLevel.toFixed(2) + '%' : 'N/A'}</li>
+              <li><strong>Time:</strong> ${sanitizeInput(new Date(timestamp).toLocaleString())}</li>
+              <li><strong>Motion Level:</strong> ${motionLevel ? sanitizeInput(motionLevel.toFixed(2)) + '%' : 'N/A'}</li>
               <li><strong>Camera:</strong> Main Feed</li>
             </ul>
           </div>
@@ -76,7 +217,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const emailResponse = await resend.emails.send(emailData);
     
-    console.log("Motion alert email sent successfully:", emailResponse);
+    console.log(`Motion alert email sent successfully for user: ${user.id}, email ID: ${emailResponse.data?.id}`);
 
     return new Response(JSON.stringify({ 
       success: true, 
