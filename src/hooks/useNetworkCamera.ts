@@ -192,8 +192,8 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Set a reasonable timeout for reading chunks
-        const timeoutMs = 10000; // Reduce timeout to 10 seconds
+        // Set a much longer timeout for MJPEG stream reads
+        const timeoutMs = 60000; // 60 seconds - MJPEG streams can have gaps
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
         });
@@ -204,21 +204,26 @@ export const useNetworkCamera = () => {
         const { done, value } = result;
         
         if (done) {
-          console.log('useNetworkCamera: Stream ended unexpectedly, attempting reconnection');
-          // Stream ended unexpectedly - attempt to reconnect
+          console.log('useNetworkCamera: Stream ended unexpectedly, attempting immediate reconnection');
+          // Stream ended unexpectedly - this should not happen with a stable camera
           if (isActiveRef.current && currentConfig) {
-            console.log('useNetworkCamera: Initiating automatic reconnection');
+            console.log('useNetworkCamera: Stream ended prematurely, reconnecting automatically');
             
-            // Don't disconnect immediately, try to reconnect
+            // Immediate reconnection for unexpected stream end
             setTimeout(() => {
               if (isActiveRef.current && currentConfig) {
-                console.log('useNetworkCamera: Executing reconnection attempt');
+                console.log('useNetworkCamera: Executing immediate reconnection');
                 connectToCamera(currentConfig).catch(error => {
-                  console.error('useNetworkCamera: Reconnection failed:', error);
-                  setConnectionError('Connection lost and reconnection failed');
+                  console.error('useNetworkCamera: Immediate reconnection failed:', error);
+                  // Try one more time after a delay
+                  setTimeout(() => {
+                    if (isActiveRef.current && currentConfig) {
+                      connectToCamera(currentConfig);
+                    }
+                  }, 5000);
                 });
               }
-            }, 2000); // Wait 2 seconds before reconnecting
+            }, 1000); // Very quick reconnection for stream end
           }
           return;
         }
@@ -579,9 +584,11 @@ export const useNetworkCamera = () => {
                   ...headers,
                   'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
                   'Cache-Control': 'no-cache, no-store, must-revalidate',
-                  'Pragma': 'no-cache'
+                  'Pragma': 'no-cache',
+                  'Connection': 'keep-alive'
                 },
-                signal: fetchControllerRef.current.signal
+                signal: fetchControllerRef.current.signal,
+                keepalive: true
               });
               
               if (!response.ok) {
