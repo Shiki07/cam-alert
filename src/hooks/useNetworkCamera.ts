@@ -1,6 +1,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useConnectionStabilizer } from './useConnectionStabilizer';
 
 export interface NetworkCameraConfig {
   url: string;
@@ -30,6 +31,28 @@ export const useNetworkCamera = () => {
   const bufferSizeRef = useRef<number>(0);
   const blobUrlsRef = useRef<Set<string>>(new Set());
 
+  // Connection stabilizer for proactive monitoring
+  const connectionStabilizer = useConnectionStabilizer({
+    enabled: isConnected,
+    checkInterval: 15000, // Check every 15 seconds
+    onConnectionLost: () => {
+      console.log('ConnectionStabilizer: Detected connection loss, attempting recovery');
+      if (currentConfig && isActiveRef.current) {
+        setConnectionError('Network connection lost - attempting recovery...');
+        // Attempt reconnection after a short delay
+        setTimeout(() => {
+          if (isActiveRef.current) {
+            connectToCamera(currentConfig);
+          }
+        }, 2000);
+      }
+    },
+    onConnectionRestored: () => {
+      console.log('ConnectionStabilizer: Connection restored');
+      setConnectionError(null);
+    }
+  });
+
   const isLocalNetwork = (url: string) => {
     try {
       const urlObj = new URL(url);
@@ -56,6 +79,7 @@ export const useNetworkCamera = () => {
     console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
     console.log('getProxiedUrl - originalUrl.startsWith("http://"):', originalUrl.startsWith('http://'));
     
+    // CRITICAL: Always use proxy for HTTP URLs when on HTTPS to prevent HTTPS-Only mode conflicts
     const shouldUseProxy = originalUrl.startsWith('http://') && window.location.protocol === 'https:';
     console.log('getProxiedUrl - shouldUseProxy:', shouldUseProxy);
     
@@ -69,7 +93,14 @@ export const useNetworkCamera = () => {
       const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`;
       console.log('getProxiedUrl - USING PROXY - proxyUrl:', proxyUrl);
       console.log('=== getProxiedUrl - END (PROXY) ===');
-      return { url: proxyUrl, headers: { 'Authorization': `Bearer ${session.access_token}` } };
+      return { 
+        url: proxyUrl, 
+        headers: { 
+          'Authorization': `Bearer ${session.access_token}`,
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        } 
+      };
     }
     
     console.log('getProxiedUrl - NOT USING PROXY - returning original URL:', originalUrl);
@@ -145,9 +176,9 @@ export const useNetworkCamera = () => {
     let lastQualityCheck = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 100 * 1024; // Limit buffer to 100KB
-    const maxFramesPerSession = 500; // Limit frames per session to prevent memory buildup
-    const minFrameInterval = 33; // ~30 FPS max to prevent overwhelming
+    const maxBufferSize = 50 * 1024; // Reduced to 50KB for better stability
+    const maxFramesPerSession = 200; // Reduced frames per session
+    const minFrameInterval = 50; // ~20 FPS max to reduce load
     
     readerRef.current = reader;
     
@@ -204,9 +235,9 @@ export const useNetworkCamera = () => {
         // Reset consecutive errors on successful read
         consecutiveErrors = 0;
 
-        // Append new data to buffer with size check
+        // Append new data to buffer with more aggressive size check
         if (buffer.length + value.length > maxBufferSize) {
-          console.log('useNetworkCamera: Incoming data would exceed buffer limit, resetting buffer');
+          console.log(`useNetworkCamera: Incoming data would exceed buffer limit, resetting buffer ${buffer.length}`);
           buffer = new Uint8Array(0);
         }
 
@@ -308,12 +339,17 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Aggressive buffer cleanup - keep only recent data
-        if (buffer.length > maxBufferSize / 2) {
+        // More aggressive buffer cleanup - keep only recent data
+        if (buffer.length > maxBufferSize / 3) { // Trigger cleanup at 33% instead of 50%
           console.log('useNetworkCamera: Buffer getting large, aggressive cleanup');
           // Keep only the last portion of the buffer
-          const keepSize = maxBufferSize / 4;
+          const keepSize = maxBufferSize / 6; // Keep even less data
           buffer = buffer.slice(-keepSize);
+          
+          // Force garbage collection hint
+          if (window.gc) {
+            window.gc();
+          }
         }
 
         // Continue processing if still active
@@ -321,7 +357,7 @@ export const useNetworkCamera = () => {
           // Use requestAnimationFrame for better performance
           requestAnimationFrame(() => {
             if (isActiveRef.current) {
-              setTimeout(() => processChunk(), 5); // Reduce delay
+              setTimeout(() => processChunk(), 10); // Slightly increased delay for stability
             }
           });
         }
@@ -516,7 +552,12 @@ export const useNetworkCamera = () => {
               
               const response = await fetch(finalUrl, {
                 method: 'GET',
-                headers,
+                headers: {
+                  ...headers,
+                  'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
+                  'Cache-Control': 'no-cache, no-store, must-revalidate',
+                  'Pragma': 'no-cache'
+                },
                 signal: fetchControllerRef.current.signal
               });
               

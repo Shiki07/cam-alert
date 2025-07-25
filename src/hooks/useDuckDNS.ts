@@ -106,7 +106,14 @@ export const useDuckDNS = () => {
 
       if (functionError) {
         console.error('DuckDNS function error:', functionError);
-        throw new Error(`Edge Function error: ${functionError.message}`);
+        // Handle different types of function errors
+        if (functionError.message?.includes('FunctionsFetchError')) {
+          throw new Error('Network connection failed. Please check your internet connection and try again.');
+        } else if (functionError.message?.includes('timeout')) {
+          throw new Error('Request timeout. The DuckDNS service may be temporarily unavailable.');
+        } else {
+          throw new Error(`Service error: ${functionError.message}`);
+        }
       }
 
       if (data?.success) {

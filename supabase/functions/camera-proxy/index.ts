@@ -237,7 +237,7 @@ serve(async (req) => {
       
       // Create AbortController for timeout per attempt
       const controller = new AbortController();
-      const timeout = req.method === 'HEAD' ? 15000 : 30000; // Longer timeout for better reliability
+      const timeout = req.method === 'HEAD' ? 10000 : 20000; // Reduced timeouts for more responsive failures
       const timeoutId = setTimeout(() => {
         console.log(`Camera proxy: Timeout on attempt ${attempt} after ${timeout}ms`);
         controller.abort();
@@ -246,17 +246,20 @@ serve(async (req) => {
       try {
         console.log(`Camera proxy: Starting fetch to ${targetUrl}`);
         
-        // Proxy the request with more comprehensive headers
+        // Proxy the request with timeout and connection management
         const response = await fetch(targetUrl, {
           method: req.method,
           headers: {
             'User-Agent': 'CamAlert-Proxy/1.0',
             'Accept': req.method === 'HEAD' ? '*/*' : 'image/jpeg, multipart/x-mixed-replace, */*',
             'Cache-Control': 'no-cache',
-            'Connection': 'close',
-            'Pragma': 'no-cache'
+            'Connection': 'keep-alive', // Use keep-alive for better performance
+            'Pragma': 'no-cache',
+            'DNT': '1' // Do Not Track
           },
-          signal: controller.signal
+          signal: controller.signal,
+          // Add redirect handling
+          redirect: 'follow'
         });
         
         console.log(`Camera proxy: Fetch completed, status: ${response.status}`);
@@ -315,7 +318,7 @@ serve(async (req) => {
         
         // If this is not the last attempt, wait before retrying
         if (attempt < maxRetries) {
-          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 3000); // Exponential backoff, max 3s
+          const delay = attempt === 1 ? 500 : Math.min(1000 * attempt, 2000); // Faster initial retry
           console.log(`Camera proxy: Waiting ${delay}ms before retry`);
           await new Promise(resolve => setTimeout(resolve, delay));
         }
