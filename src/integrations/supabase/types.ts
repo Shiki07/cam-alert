@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      motion_events: {
+        Row: {
+          cleared_at: string | null
+          created_at: string
+          detected_at: string
+          detection_zone: string | null
+          duration_ms: number | null
+          email_sent: boolean | null
+          id: string
+          motion_level: number
+          recording_triggered: boolean | null
+          user_id: string
+        }
+        Insert: {
+          cleared_at?: string | null
+          created_at?: string
+          detected_at?: string
+          detection_zone?: string | null
+          duration_ms?: number | null
+          email_sent?: boolean | null
+          id?: string
+          motion_level: number
+          recording_triggered?: boolean | null
+          user_id: string
+        }
+        Update: {
+          cleared_at?: string | null
+          created_at?: string
+          detected_at?: string
+          detection_zone?: string | null
+          duration_ms?: number | null
+          email_sent?: boolean | null
+          id?: string
+          motion_level?: number
+          recording_triggered?: boolean | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -85,7 +124,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_motion_event_cleared: {
+        Args: { event_id: string; cleared_timestamp?: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
