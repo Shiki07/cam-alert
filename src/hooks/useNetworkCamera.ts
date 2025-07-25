@@ -155,9 +155,9 @@ export const useNetworkCamera = () => {
     let lastMemoryCleanup = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 64 * 1024; // Reduced buffer size to prevent memory issues
-    const minFrameInterval = 50; // ~20 FPS for stable playback
-    const memoryCleanupInterval = 30000; // More frequent memory cleanup
+    const maxBufferSize = 32 * 1024; // Much smaller buffer - process frames immediately
+    const minFrameInterval = 100; // ~10 FPS to reduce processing load and prevent blocking
+    const memoryCleanupInterval = 15000; // Very frequent cleanup
     
     readerRef.current = reader;
     
@@ -228,20 +228,26 @@ export const useNetworkCamera = () => {
         // Reset consecutive errors on successful read
         consecutiveErrors = 0;
 
-        // Append new data to buffer with more aggressive size check
+        // More aggressive buffer management - prevent any accumulation
         if (buffer.length + value.length > maxBufferSize) {
-          console.log(`useNetworkCamera: Incoming data would exceed buffer limit, resetting buffer ${buffer.length}`);
-          buffer = new Uint8Array(0);
+          console.log(`useNetworkCamera: Buffer limit exceeded (${buffer.length + value.length} > ${maxBufferSize}), clearing buffer completely`);
+          buffer = new Uint8Array(0); // Clear completely to prevent growth
         }
 
-        const newBuffer = new Uint8Array(buffer.length + value.length);
-        newBuffer.set(buffer);
-        newBuffer.set(value, buffer.length);
-        buffer = newBuffer;
+        // Only append if we have room - this prevents endless growth
+        if (buffer.length + value.length <= maxBufferSize) {
+          const newBuffer = new Uint8Array(buffer.length + value.length);
+          newBuffer.set(buffer);
+          newBuffer.set(value, buffer.length);
+          buffer = newBuffer;
+        } else {
+          // If still too big, start fresh with just the new data
+          buffer = value.slice(0, maxBufferSize);
+        }
 
-        // Process multiple frames if available in buffer
+        // Process only ONE frame per cycle to prevent blocking
         let framesProcessed = 0;
-        const maxFramesPerChunk = 3; // Process max 3 frames per chunk to prevent blocking
+        const maxFramesPerChunk = 1; // Process only 1 frame per cycle to prevent blocking
 
         while (framesProcessed < maxFramesPerChunk) {
           // Look for JPEG start and end markers
@@ -348,12 +354,12 @@ export const useNetworkCamera = () => {
 
         // Continue processing if still active
         if (isActiveRef.current) {
-          // Use requestAnimationFrame for smooth performance
-          requestAnimationFrame(() => {
+          // Slower processing to prevent browser blocking
+          setTimeout(() => {
             if (isActiveRef.current) {
-              setTimeout(() => processChunk(), 5); // Fast processing for smooth video
+              processChunk();
             }
-          });
+          }, 20); // Slower processing to prevent blocking
         }
       } catch (error: any) {
         // Handle aborted operations gracefully - these are expected during cleanup
