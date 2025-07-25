@@ -8,7 +8,7 @@ export const useCameraSettings = () => {
   const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState('');
-  const [storageType, setStorageType] = useState<'cloud' | 'local'>('cloud');
+  const [storageType, setStorageType] = useState<'cloud' | 'local'>('local');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
   
   // Enhanced motion detection settings
