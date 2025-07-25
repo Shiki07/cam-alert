@@ -34,25 +34,53 @@ const validateCameraURL = (url: string): boolean => {
     
     // Only allow HTTP/HTTPS protocols
     if (!['http:', 'https:'].includes(urlObj.protocol)) {
+      console.log(`Camera proxy: Blocked non-HTTP(S) protocol: ${urlObj.protocol}`);
       return false;
     }
     
     // Block localhost and private IP ranges
     const hostname = urlObj.hostname.toLowerCase();
     
+    // Allow DuckDNS domains explicitly
+    if (hostname.endsWith('.duckdns.org')) {
+      console.log(`Camera proxy: Allowing DuckDNS domain: ${hostname}`);
+      // Still check the port
+      const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
+      const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
+      if (!allowedPorts.includes(port)) {
+        console.log(`Camera proxy: Blocked DuckDNS domain with invalid port: ${port}`);
+        return false;
+      }
+      return true;
+    }
+    
     // Block localhost variations
     if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+      console.log(`Camera proxy: Blocked localhost: ${hostname}`);
       return false;
     }
     
     // Block private IP ranges
-    if (hostname.match(/^10\./)) return false;
-    if (hostname.match(/^192\.168\./)) return false;
-    if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) return false;
-    if (hostname.match(/^169\.254\./)) return false;
+    if (hostname.match(/^10\./)) {
+      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
+      return false;
+    }
+    if (hostname.match(/^192\.168\./)) {
+      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
+      return false;
+    }
+    if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
+      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
+      return false;
+    }
+    if (hostname.match(/^169\.254\./)) {
+      console.log(`Camera proxy: Blocked link-local IP: ${hostname}`);
+      return false;
+    }
     
     // Block metadata services
     if (hostname.includes('metadata') || hostname === '169.254.169.254') {
+      console.log(`Camera proxy: Blocked metadata service: ${hostname}`);
       return false;
     }
     
@@ -61,11 +89,14 @@ const validateCameraURL = (url: string): boolean => {
     const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
     
     if (!allowedPorts.includes(port)) {
+      console.log(`Camera proxy: Blocked invalid port: ${port}`);
       return false;
     }
     
+    console.log(`Camera proxy: URL validation passed for: ${hostname}:${port}`);
     return true;
-  } catch {
+  } catch (e) {
+    console.log(`Camera proxy: URL parsing failed: ${e.message}`);
     return false;
   }
 };
