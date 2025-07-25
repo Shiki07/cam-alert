@@ -155,9 +155,9 @@ export const useNetworkCamera = () => {
     let lastMemoryCleanup = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 80 * 1024; // Larger buffer to accommodate typical MJPEG frames (40-60KB)
-    const minFrameInterval = 100; // ~10 FPS to reduce processing load and prevent blocking
-    const memoryCleanupInterval = 15000; // Very frequent cleanup
+    const maxBufferSize = 256 * 1024; // Large enough buffer to prevent frame fragmentation
+    const minFrameInterval = 50; // ~20 FPS for smoother streaming
+    const memoryCleanupInterval = 10000; // Frequent cleanup
     
     readerRef.current = reader;
     
@@ -228,26 +228,15 @@ export const useNetworkCamera = () => {
         // Reset consecutive errors on successful read
         consecutiveErrors = 0;
 
-        // More aggressive buffer management - prevent any accumulation
-        if (buffer.length + value.length > maxBufferSize) {
-          console.log(`useNetworkCamera: Buffer limit exceeded (${buffer.length + value.length} > ${maxBufferSize}), clearing buffer completely`);
-          buffer = new Uint8Array(0); // Clear completely to prevent growth
-        }
+        // Efficient streaming approach - append new data
+        const newBuffer = new Uint8Array(buffer.length + value.length);
+        newBuffer.set(buffer);
+        newBuffer.set(value, buffer.length);
+        buffer = newBuffer;
 
-        // Only append if we have room - this prevents endless growth
-        if (buffer.length + value.length <= maxBufferSize) {
-          const newBuffer = new Uint8Array(buffer.length + value.length);
-          newBuffer.set(buffer);
-          newBuffer.set(value, buffer.length);
-          buffer = newBuffer;
-        } else {
-          // If still too big, start fresh with just the new data
-          buffer = value.slice(0, maxBufferSize);
-        }
-
-        // Process only ONE frame per cycle to prevent blocking
+        // Process ALL available complete frames to prevent accumulation
         let framesProcessed = 0;
-        const maxFramesPerChunk = 1; // Process only 1 frame per cycle to prevent blocking
+        const maxFramesPerChunk = 10; // Process multiple frames per cycle to prevent buffer growth
 
         while (framesProcessed < maxFramesPerChunk) {
           // Look for JPEG start and end markers
@@ -338,18 +327,11 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Intelligent buffer management to prevent overflow
-        if (buffer.length > maxBufferSize) {
-          console.log('useNetworkCamera: Buffer optimization - maintaining stream continuity');
-          // Find the last complete JPEG frame boundary to keep partial frames intact
-          let keepPosition = buffer.length;
-          for (let i = buffer.length - 1; i > maxBufferSize / 3; i--) {
-            if (buffer[i] === 0xFF && buffer[i + 1] === 0xD9) {
-              keepPosition = i + 2;
-              break;
-            }
-          }
-          buffer = buffer.slice(keepPosition);
+        // Aggressive buffer management to prevent memory bloat
+        if (buffer.length > maxBufferSize / 2) {
+          console.log(`useNetworkCamera: Buffer size ${buffer.length} exceeds half limit, truncating`);
+          // Keep only recent data to prevent endless accumulation
+          buffer = buffer.slice(-maxBufferSize / 4);
         }
 
         // Continue processing if still active
