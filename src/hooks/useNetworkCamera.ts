@@ -153,9 +153,6 @@ export const useNetworkCamera = () => {
       
       const { url: proxiedUrl, headers } = await getProxiedUrl(config.url);
       
-      // Use browser's native MJPEG support - much more reliable than manual parsing
-      imgElement.crossOrigin = 'anonymous';
-      
       // Set up error handling
       const handleError = () => {
         console.log('useNetworkCamera: Native MJPEG stream error, attempting reconnection');
@@ -201,28 +198,10 @@ export const useNetworkCamera = () => {
       imgElement.onload = handleLoad;
       imgElement.onerror = handleError;
       
-      // For proxied requests, we need to handle authentication differently
-      if (Object.keys(headers).length > 0) {
-        // Create a fetch request to get the stream with proper headers
-        const response = await fetch(proxiedUrl, {
-          method: 'GET',
-          headers,
-          signal: fetchControllerRef.current?.signal
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        // Create a blob URL from the stream for the img element
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrlsRef.current.add(blobUrl);
-        imgElement.src = blobUrl;
-      } else {
-        // Direct connection - let browser handle the stream natively
-        imgElement.src = proxiedUrl;
-      }
+      // For MJPEG streams through proxy, just set the URL directly
+      // The browser will handle the authentication headers through cookies/session
+      console.log('useNetworkCamera: Setting img src to proxied URL:', proxiedUrl);
+      imgElement.src = proxiedUrl;
       
       lastFrameTimeRef.current = Date.now();
       
