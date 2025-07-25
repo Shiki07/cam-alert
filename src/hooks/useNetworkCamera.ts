@@ -331,18 +331,9 @@ export const useNetworkCamera = () => {
         if (element instanceof HTMLImageElement) {
           console.log('useNetworkCamera: Setting up IMG element for MJPEG stream');
           
-          // Check if we're using the proxy (cross-origin request)
-          const isUsingProxy = finalUrl.includes('camera-proxy');
-          
-          if (isUsingProxy) {
-            // For proxied requests, we still need fetch but use simpler approach
-            console.log('useNetworkCamera: Using native MJPEG with proxy');
-            connectToMJPEGStream(element, config);
-          } else {
-            // Direct connection - let browser handle the stream natively
-            console.log('useNetworkCamera: Using direct native MJPEG connection');
-            connectToMJPEGStream(element, config);
-          }
+          // Always use proxy for HTTP cameras when on HTTPS
+          console.log('useNetworkCamera: Using proxy for MJPEG stream');
+          connectToMJPEGStream(element, config);
           
         } else {
           console.error('useNetworkCamera: Element is not IMG, current element:', element);
