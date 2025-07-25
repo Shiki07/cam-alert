@@ -204,77 +204,124 @@ serve(async (req) => {
 
     console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
 
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for streams
-
-    try {
-      // Proxy the request
-      const response = await fetch(targetUrl, {
-        method: req.method,
-        headers: {
-          'User-Agent': 'CamAlert-Proxy/1.0',
-          'Accept': 'image/jpeg, multipart/x-mixed-replace, */*'
-        },
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Forward the response with appropriate headers
-      const responseHeaders = new Headers(corsHeaders);
+    // Retry logic for unreliable connections
+    const maxRetries = req.method === 'HEAD' ? 2 : 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`Camera proxy: Attempt ${attempt}/${maxRetries} to ${req.method} ${targetUrl}`);
       
-      // Copy relevant headers from the camera response
-      const contentType = response.headers.get('content-type');
-      if (contentType) {
-        responseHeaders.set('content-type', contentType);
-      }
-      
-      const contentLength = response.headers.get('content-length');
-      if (contentLength) {
-        responseHeaders.set('content-length', contentLength);
-      }
+      // Create AbortController for timeout per attempt
+      const controller = new AbortController();
+      const timeout = req.method === 'HEAD' ? 10000 : 30000; // Shorter timeout for HEAD requests
+      const timeoutId = setTimeout(() => {
+        console.log(`Camera proxy: Timeout on attempt ${attempt} after ${timeout}ms`);
+        controller.abort();
+      }, timeout);
 
-      // For streaming responses, we need to handle them specially
-      if (response.body) {
-        return new Response(response.body, {
-          status: response.status,
-          headers: responseHeaders,
+      try {
+        // Proxy the request
+        const response = await fetch(targetUrl, {
+          method: req.method,
+          headers: {
+            'User-Agent': 'CamAlert-Proxy/1.0',
+            'Accept': req.method === 'HEAD' ? '*/*' : 'image/jpeg, multipart/x-mixed-replace, */*',
+            'Cache-Control': 'no-cache',
+            'Connection': 'close'
+          },
+          signal: controller.signal
         });
-      } else {
-        return new Response(null, {
-          status: response.status,
-          headers: responseHeaders,
-        });
-      }
 
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      if (fetchError.name === 'AbortError') {
-        console.warn('Camera proxy: Request timeout');
-        return new Response(
-          JSON.stringify({ error: 'Request timeout' }),
-          { 
-            status: 408, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        console.log(`Camera proxy: Success on attempt ${attempt} - Status: ${response.status}`);
+
+        // Forward the response with appropriate headers
+        const responseHeaders = new Headers(corsHeaders);
+        
+        // Copy relevant headers from the camera response
+        const contentType = response.headers.get('content-type');
+        if (contentType) {
+          responseHeaders.set('content-type', contentType);
+        }
+        
+        const contentLength = response.headers.get('content-length');
+        if (contentLength) {
+          responseHeaders.set('content-length', contentLength);
+        }
+        
+        // Add cache control for streams
+        if (req.method === 'GET') {
+          responseHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+          responseHeaders.set('Pragma', 'no-cache');
+          responseHeaders.set('Expires', '0');
+        }
+
+        // For streaming responses, we need to handle them specially
+        if (response.body) {
+          return new Response(response.body, {
+            status: response.status,
+            headers: responseHeaders,
+          });
+        } else {
+          return new Response(null, {
+            status: response.status,
+            headers: responseHeaders,
+          });
+        }
+
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        lastError = fetchError as Error;
+        
+        if (fetchError.name === 'AbortError') {
+          console.warn(`Camera proxy: Request timeout on attempt ${attempt}`);
+        } else {
+          console.error(`Camera proxy: Fetch error on attempt ${attempt}:`, fetchError.message);
+        }
+        
+        // If this is not the last attempt, wait before retrying
+        if (attempt < maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 3000); // Exponential backoff, max 3s
+          console.log(`Camera proxy: Waiting ${delay}ms before retry`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
       }
-      
-      console.error('Camera proxy fetch error:', fetchError);
+    }
+    
+    // All retries failed
+    console.error(`Camera proxy: All ${maxRetries} attempts failed. Last error:`, lastError?.message);
+    
+    if (lastError?.name === 'AbortError') {
       return new Response(
-        JSON.stringify({ error: 'Failed to connect to camera' }),
+        JSON.stringify({ 
+          error: 'Camera connection timeout',
+          details: `Failed to connect to camera after ${maxRetries} attempts`,
+          timestamp: new Date().toISOString()
+        }),
         { 
-          status: 502, 
+          status: 408, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       );
     }
+    
+    return new Response(
+      JSON.stringify({ 
+        error: 'Failed to connect to camera',
+        details: lastError?.message || 'Unknown error',
+        attempts: maxRetries,
+        timestamp: new Date().toISOString()
+      }),
+      { 
+        status: 502, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
 
   } catch (error) {
     console.error('Camera proxy error:', error);
