@@ -5,9 +5,10 @@ import { Camera, Square, Play } from "lucide-react";
 interface CameraControlsProps {
   isRecording: boolean;
   onToggleRecording: () => void;
+  quality?: 'high' | 'medium' | 'low';
 }
 
-export const CameraControls = ({ isRecording, onToggleRecording }: CameraControlsProps) => {
+export const CameraControls = ({ isRecording, onToggleRecording, quality = 'medium' }: CameraControlsProps) => {
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
       <h3 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
@@ -48,7 +49,9 @@ export const CameraControls = ({ isRecording, onToggleRecording }: CameraControl
           </div>
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm text-gray-300">Quality:</span>
-            <span className="text-sm text-gray-400">1080p</span>
+            <span className="text-sm text-gray-400">
+              {quality === 'high' ? '1080p' : quality === 'medium' ? '720p' : '480p'}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-gray-300">Storage:</span>

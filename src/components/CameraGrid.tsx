@@ -121,7 +121,8 @@ export const CameraGrid = ({
         
         <CameraControls 
           isRecording={isRecording} 
-          onToggleRecording={onToggleRecording} 
+          onToggleRecording={onToggleRecording}
+          quality={quality}
         />
         
         <MotionDetection 

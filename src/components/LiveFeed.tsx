@@ -107,16 +107,31 @@ export const LiveFeed = ({
   });
 
   const getVideoConstraints = () => {
+    const constraints = {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 30, max: 30 }
+    };
+
     switch (quality) {
       case 'high':
-        return { width: 1920, height: 1080 };
+        constraints.width.ideal = 1920;
+        constraints.height.ideal = 1080;
+        constraints.frameRate.ideal = 30;
+        break;
       case 'medium':
-        return { width: 1280, height: 720 };
+        constraints.width.ideal = 1280;
+        constraints.height.ideal = 720;
+        constraints.frameRate.ideal = 25;
+        break;
       case 'low':
-        return { width: 640, height: 480 };
-      default:
-        return { width: 1280, height: 720 };
+        constraints.width.ideal = 640;
+        constraints.height.ideal = 480;
+        constraints.frameRate.ideal = 20;
+        break;
     }
+
+    return constraints;
   };
 
   const startWebcam = async () => {
@@ -144,8 +159,11 @@ export const LiveFeed = ({
         // Continue anyway as some browsers may restrict device enumeration
       }
 
+      const videoConstraints = getVideoConstraints();
+      console.log(`Starting webcam with ${quality} quality:`, videoConstraints);
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: getVideoConstraints(),
+        video: videoConstraints,
         audio: true
       });
 
@@ -250,7 +268,9 @@ export const LiveFeed = ({
   };
 
   const handleConnectNetworkCamera = async (config: NetworkCameraConfig) => {
-    console.log('LiveFeed: Attempting to connect to network camera:', config);
+    // Pass current quality setting to network camera
+    const configWithQuality = { ...config, quality };
+    console.log('LiveFeed: Attempting to connect to network camera with quality:', configWithQuality);
     setError(null);
     setIsLoading(true);
     
@@ -260,7 +280,7 @@ export const LiveFeed = ({
         description: `Attempting to connect to ${config.name}`,
       });
 
-      await networkCamera.connectToCamera(config);
+      await networkCamera.connectToCamera(configWithQuality);
       
       console.log('LiveFeed: Connection result - isConnected:', networkCamera.isConnected);
       console.log('LiveFeed: Connection error:', networkCamera.connectionError);
@@ -335,6 +355,20 @@ export const LiveFeed = ({
   useEffect(() => {
     localStorage.setItem('networkCameras', JSON.stringify(networkCameras));
   }, [networkCameras]);
+
+  // Restart camera when quality changes to apply new settings
+  useEffect(() => {
+    if (isConnected) {
+      console.log(`Quality changed to ${quality}, restarting camera to apply new settings`);
+      if (cameraSource === 'webcam') {
+        stopCamera();
+        setTimeout(() => startWebcam(), 500);
+      } else if (cameraSource === 'network' && networkCamera.currentConfig) {
+        stopCamera();
+        setTimeout(() => handleConnectNetworkCamera(networkCamera.currentConfig!), 500);
+      }
+    }
+  }, [quality]);
 
   // Monitor network camera connection state
   useEffect(() => {

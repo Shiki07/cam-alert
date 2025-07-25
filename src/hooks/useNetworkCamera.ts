@@ -8,6 +8,7 @@ export interface NetworkCameraConfig {
   username?: string;
   password?: string;
   name: string;
+  quality?: 'high' | 'medium' | 'low';
 }
 
 export const useNetworkCamera = () => {
@@ -323,9 +324,43 @@ export const useNetworkCamera = () => {
     processChunk();
   }, [reconnectAttempts]);
 
+  const getQualityParams = (quality?: string) => {
+    switch (quality) {
+      case 'high':
+        return { resolution: '1920x1080', bitrate: '2000000', fps: '30' };
+      case 'medium':
+        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
+      case 'low':
+        return { resolution: '640x480', bitrate: '500000', fps: '20' };
+      default:
+        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
+    }
+  };
+
+  const appendQualityParams = (url: string, quality?: string) => {
+    if (!quality) return url;
+    
+    try {
+      const urlObj = new URL(url);
+      const params = getQualityParams(quality);
+      
+      // Add quality parameters to URL (many IP cameras support these)
+      Object.entries(params).forEach(([key, value]) => {
+        urlObj.searchParams.set(key, value);
+      });
+      
+      console.log(`useNetworkCamera: Enhanced URL with ${quality} quality:`, urlObj.toString());
+      return urlObj.toString();
+    } catch (error) {
+      console.warn('useNetworkCamera: Failed to parse URL for quality enhancement:', error);
+      return url;
+    }
+  };
+
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
     console.log('useNetworkCamera: Config:', config);
+    console.log('useNetworkCamera: Quality setting:', config.quality);
     
     // Clean up any existing connections
     cleanupStream();
@@ -357,9 +392,10 @@ export const useNetworkCamera = () => {
       if (config.type === 'mjpeg') {
         console.log('useNetworkCamera: Setting up MJPEG stream');
         
-        // Build the stream URL with auth if needed
-        let streamUrl = config.url;
-        console.log('useNetworkCamera: Original stream URL:', streamUrl);
+        // Build the stream URL with auth and quality params if needed
+        let streamUrl = appendQualityParams(config.url, config.quality);
+        console.log('useNetworkCamera: Original stream URL:', config.url);
+        console.log('useNetworkCamera: Enhanced stream URL with quality params:', streamUrl);
         
         if (config.username && config.password) {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
