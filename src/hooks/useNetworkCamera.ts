@@ -325,18 +325,18 @@ export const useNetworkCamera = () => {
             }
           });
         }
-      } catch (error) {
+      } catch (error: any) {
+        // Handle aborted operations gracefully - these are expected during cleanup
+        if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+          console.log('useNetworkCamera: Stream processing aborted (expected during cleanup)');
+          return; // Don't count as errors or attempt reconnection
+        }
+        
         consecutiveErrors++;
         console.log('useNetworkCamera: Stream processing error:', error, `(consecutive: ${consecutiveErrors})`);
         
         if (!isActiveRef.current) {
-          console.log('useNetworkCamera: Stream not active, stopping processing');
-          return;
-        }
-        
-        // Handle different types of errors
-        if (error.name === 'AbortError') {
-          console.log('useNetworkCamera: Stream was aborted');
+          console.log('useNetworkCamera: Stream marked as inactive, stopping processing');
           return;
         }
         
