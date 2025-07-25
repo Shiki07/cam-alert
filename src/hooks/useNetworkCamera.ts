@@ -176,9 +176,9 @@ export const useNetworkCamera = () => {
     let lastQualityCheck = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 50 * 1024; // Reduced to 50KB for better stability
-    const maxFramesPerSession = 200; // Reduced frames per session
-    const minFrameInterval = 50; // ~20 FPS max to reduce load
+    const maxBufferSize = 200 * 1024; // Increased to 200KB for smoother streaming
+    const maxFramesPerSession = 300; // Balanced frame limit
+    const minFrameInterval = 33; // Back to ~30 FPS for smooth playback
     
     readerRef.current = reader;
     
@@ -339,25 +339,20 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // More aggressive buffer cleanup - keep only recent data
-        if (buffer.length > maxBufferSize / 3) { // Trigger cleanup at 33% instead of 50%
+        // More balanced buffer cleanup
+        if (buffer.length > maxBufferSize * 0.7) { // Trigger cleanup at 70% instead of 33%
           console.log('useNetworkCamera: Buffer getting large, aggressive cleanup');
-          // Keep only the last portion of the buffer
-          const keepSize = maxBufferSize / 6; // Keep even less data
+          // Keep more data for smoother streaming
+          const keepSize = maxBufferSize / 3; // Keep 33% of max buffer
           buffer = buffer.slice(-keepSize);
-          
-          // Force garbage collection hint
-          if (window.gc) {
-            window.gc();
-          }
         }
 
         // Continue processing if still active
         if (isActiveRef.current) {
-          // Use requestAnimationFrame for better performance
+          // Use requestAnimationFrame for smooth performance
           requestAnimationFrame(() => {
             if (isActiveRef.current) {
-              setTimeout(() => processChunk(), 10); // Slightly increased delay for stability
+              setTimeout(() => processChunk(), 5); // Fast processing for smooth video
             }
           });
         }
