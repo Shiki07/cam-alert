@@ -74,12 +74,14 @@ export const useNetworkCamera = () => {
         throw new Error('Authentication required');
       }
       
+      // Include the auth token as a URL parameter for img elements
+      const proxyUrl = new URL('https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy');
+      proxyUrl.searchParams.set('url', originalUrl);
+      proxyUrl.searchParams.set('token', session.access_token);
+      
       return { 
-        url: `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`,
-        headers: { 
-          'Authorization': `Bearer ${session.access_token}`,
-          'Cache-Control': 'no-cache'
-        } 
+        url: proxyUrl.toString(),
+        headers: {} // No headers needed since token is in URL
       };
     }
     

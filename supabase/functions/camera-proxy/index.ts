@@ -118,10 +118,21 @@ serve(async (req) => {
   }
 
   try {
-    // Get the authorization header
+    // Get the authorization from header OR query parameter (for img elements)
     const authHeader = req.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.warn('Camera proxy: Invalid authorization header');
+    const url = new URL(req.url);
+    const tokenParam = url.searchParams.get('token');
+    
+    let jwt: string | null = null;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      jwt = authHeader.replace('Bearer ', '');
+    } else if (tokenParam) {
+      jwt = tokenParam;
+    }
+    
+    if (!jwt) {
+      console.warn('Camera proxy: No authentication token provided');
       return new Response(
         JSON.stringify({ error: 'Authentication required' }),
         { 
@@ -149,7 +160,6 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Verify the JWT token
-    const jwt = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(jwt);
     
     if (authError || !user) {
