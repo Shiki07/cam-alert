@@ -204,6 +204,30 @@ serve(async (req) => {
 
     console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
 
+    // First, try to resolve DNS for better error reporting
+    try {
+      const urlObj = new URL(targetUrl);
+      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}`);
+      
+      // Try a simple DNS resolution test with a quick timeout
+      const testController = new AbortController();
+      const testTimeout = setTimeout(() => testController.abort(), 5000);
+      
+      try {
+        const testResponse = await fetch(`http://${urlObj.hostname}`, {
+          method: 'HEAD',
+          signal: testController.signal
+        });
+        clearTimeout(testTimeout);
+        console.log(`Camera proxy: DNS/connectivity test - response received from ${urlObj.hostname}`);
+      } catch (testError) {
+        clearTimeout(testTimeout);
+        console.log(`Camera proxy: DNS/connectivity test failed for ${urlObj.hostname}:`, testError.message);
+      }
+    } catch (e) {
+      console.log(`Camera proxy: Pre-test failed:`, e.message);
+    }
+
     // Retry logic for unreliable connections
     const maxRetries = req.method === 'HEAD' ? 2 : 3;
     let lastError: Error | null = null;
@@ -213,24 +237,29 @@ serve(async (req) => {
       
       // Create AbortController for timeout per attempt
       const controller = new AbortController();
-      const timeout = req.method === 'HEAD' ? 10000 : 30000; // Shorter timeout for HEAD requests
+      const timeout = req.method === 'HEAD' ? 15000 : 30000; // Longer timeout for better reliability
       const timeoutId = setTimeout(() => {
         console.log(`Camera proxy: Timeout on attempt ${attempt} after ${timeout}ms`);
         controller.abort();
       }, timeout);
 
       try {
-        // Proxy the request
+        console.log(`Camera proxy: Starting fetch to ${targetUrl}`);
+        
+        // Proxy the request with more comprehensive headers
         const response = await fetch(targetUrl, {
           method: req.method,
           headers: {
             'User-Agent': 'CamAlert-Proxy/1.0',
             'Accept': req.method === 'HEAD' ? '*/*' : 'image/jpeg, multipart/x-mixed-replace, */*',
             'Cache-Control': 'no-cache',
-            'Connection': 'close'
+            'Connection': 'close',
+            'Pragma': 'no-cache'
           },
           signal: controller.signal
         });
+        
+        console.log(`Camera proxy: Fetch completed, status: ${response.status}`);
 
         clearTimeout(timeoutId);
 

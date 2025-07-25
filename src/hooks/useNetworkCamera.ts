@@ -375,30 +375,46 @@ export const useNetworkCamera = () => {
         const isLocal = isLocalNetwork(config.url);
         console.log('useNetworkCamera: Is local network camera:', isLocal);
 
-        // Test connection first
+        // Test connection with multiple attempts
         console.log('useNetworkCamera: Testing connection...');
-        try {
-          const testResponse = await fetch(finalUrl, { 
-            method: 'HEAD',
-            headers,
-            signal: AbortSignal.timeout(30000) // Increase timeout to 30 seconds
-          });
-          
-          if (!testResponse.ok) {
-            throw new Error(`Connection test failed: ${testResponse.status} ${testResponse.statusText}`);
+        let connectionTestPassed = false;
+        
+        for (let testAttempt = 1; testAttempt <= 3; testAttempt++) {
+          try {
+            console.log(`useNetworkCamera: Connection test attempt ${testAttempt}/3`);
+            
+            const testResponse = await fetch(finalUrl, { 
+              method: 'HEAD',
+              headers,
+              signal: AbortSignal.timeout(20000) // 20 seconds per attempt
+            });
+            
+            if (testResponse.ok) {
+              console.log(`useNetworkCamera: Connection test passed on attempt ${testAttempt}`);
+              connectionTestPassed = true;
+              break;
+            } else {
+              console.warn(`useNetworkCamera: Connection test failed on attempt ${testAttempt}: ${testResponse.status} ${testResponse.statusText}`);
+              if (testAttempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 3000 * testAttempt)); // Increasing delay
+              }
+            }
+          } catch (testError) {
+            console.warn(`useNetworkCamera: Connection test error on attempt ${testAttempt}:`, testError);
+            if (testAttempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 3000 * testAttempt)); // Increasing delay
+            }
           }
+        }
+
+        if (!connectionTestPassed) {
+          console.error('useNetworkCamera: All connection test attempts failed');
           
-          console.log('useNetworkCamera: Connection test successful');
-        } catch (testError) {
-          console.error('useNetworkCamera: Connection test failed:', testError);
-          
-          let errorMsg = 'Cannot reach camera';
-          if (testError.name === 'TimeoutError' || testError.message.includes('timeout')) {
-            errorMsg = 'Camera connection timeout. Please check your camera and network configuration.';
-          } else if (isLocal) {
+          let errorMsg = 'Cannot reach camera after multiple attempts';
+          if (isLocal) {
             errorMsg = 'Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet.';
           } else {
-            errorMsg = `Cannot reach camera at ${config.url}. Please verify the camera is online and accessible.`;
+            errorMsg = `Cannot reach camera at ${config.url}. Camera may be offline or blocked by firewall. Please verify the camera is online and accessible from the internet.`;
           }
           
           setConnectionError(errorMsg);
