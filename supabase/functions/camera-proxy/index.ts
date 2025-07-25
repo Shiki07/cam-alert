@@ -2,12 +2,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma, accept',
-  'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-  'Access-Control-Expose-Headers': 'content-type, content-length'
-}
+const getCorsHeaders = (req: Request) => {
+  const origin = req.headers.get('origin');
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma, accept',
+    'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Expose-Headers': 'content-type, content-length'
+  };
+};
 
 // Rate limiting for camera proxy
 const rateLimits = new Map<string, { count: number; resetTime: number }>();
@@ -105,6 +109,8 @@ const validateCameraURL = (url: string): boolean => {
 
 serve(async (req) => {
   console.log(`Camera proxy: Received ${req.method} request`);
+  
+  const corsHeaders = getCorsHeaders(req);
   
   if (req.method === 'OPTIONS') {
     console.log('Camera proxy: Handling CORS preflight request');
