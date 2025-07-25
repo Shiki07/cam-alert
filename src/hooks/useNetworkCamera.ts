@@ -147,273 +147,110 @@ export const useNetworkCamera = () => {
     lastFrameTimeRef.current = Date.now();
   }, []);
 
-  const parseMJPEGStream = useCallback(async (reader: ReadableStreamDefaultReader<Uint8Array>, imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
-    let buffer = new Uint8Array(0);
-    let frameCount = 0;
-    let lastFrameTime = Date.now();
-    let lastQualityCheck = Date.now();
-    let lastMemoryCleanup = Date.now();
-    let connectionEstablished = false;
-    let consecutiveErrors = 0;
-    const maxBufferSize = 256 * 1024; // Large enough buffer to prevent frame fragmentation
-    const minFrameInterval = 50; // ~20 FPS for smoother streaming
-    const memoryCleanupInterval = 10000; // Frequent cleanup
-    
-    readerRef.current = reader;
-    
-    const processChunk = async (): Promise<void> => {
-      try {
-        // Check if stream should still be active
-        if (!isActiveRef.current) {
-          console.log('useNetworkCamera: Stream marked as inactive, stopping processing');
-          return;
-        }
-
-        // Perform periodic memory cleanup without interrupting the stream
-        const currentTime = Date.now();
-        if (currentTime - lastMemoryCleanup > memoryCleanupInterval) {
-          lastMemoryCleanup = currentTime;
-          
-          // Clean up old blob URLs more aggressively during periodic cleanup
-          if (blobUrlsRef.current.size > 5) {
-            const urlsArray = Array.from(blobUrlsRef.current);
-            const oldUrls = urlsArray.slice(0, -3); // Keep only last 3
-            oldUrls.forEach(url => {
-              URL.revokeObjectURL(url);
-              blobUrlsRef.current.delete(url);
-            });
-            console.log(`useNetworkCamera: Periodic cleanup - removed ${oldUrls.length} blob URLs`);
-          }
-          
-          // Reset frame counter to prevent overflow
-          if (frameCount > 10000) {
-            frameCount = 0;
-            console.log('useNetworkCamera: Frame counter reset for continuous operation');
-          }
-        }
-
-        // Read stream chunk without timeout for continuous MJPEG streams
-        const result = await reader.read();
-        
-        const { done, value } = result;
-        
-        if (done) {
-          console.log('useNetworkCamera: Stream ended unexpectedly, attempting immediate reconnection');
-          // Stream ended unexpectedly - this should not happen with a stable camera
-          if (isActiveRef.current && currentConfig) {
-            console.log('useNetworkCamera: Stream ended prematurely, reconnecting automatically');
-            
-            // Immediate reconnection for unexpected stream end
-            setTimeout(() => {
-              if (isActiveRef.current && currentConfig) {
-                console.log('useNetworkCamera: Executing immediate reconnection');
-                connectToCamera(currentConfig).catch(error => {
-                  console.error('useNetworkCamera: Immediate reconnection failed:', error);
-                  // Try one more time after a delay
-                  setTimeout(() => {
-                    if (isActiveRef.current && currentConfig) {
-                      connectToCamera(currentConfig);
-                    }
-                  }, 5000);
-                });
-              }
-            }, 1000); // Very quick reconnection for stream end
-          }
-          return;
-        }
-
-        // Update last quality check time
-        lastQualityCheck = Date.now();
-
-        // Reset consecutive errors on successful read
-        consecutiveErrors = 0;
-
-        // Efficient streaming approach - append new data
-        const newBuffer = new Uint8Array(buffer.length + value.length);
-        newBuffer.set(buffer);
-        newBuffer.set(value, buffer.length);
-        buffer = newBuffer;
-
-        // Process ALL available complete frames to prevent accumulation
-        let framesProcessed = 0;
-        const maxFramesPerChunk = 10; // Process multiple frames per cycle to prevent buffer growth
-
-        while (framesProcessed < maxFramesPerChunk) {
-          // Look for JPEG start and end markers
-          const jpegStart = buffer.findIndex((byte, index) => 
-            byte === 0xFF && buffer[index + 1] === 0xD8
-          );
-          
-          if (jpegStart === -1) break;
-
-          const jpegEnd = buffer.findIndex((byte, index) => 
-            index > jpegStart + 10 && byte === 0xFF && buffer[index + 1] === 0xD9
-          );
-          
-          if (jpegEnd === -1) break;
-
-          // Extract JPEG frame
-          const jpegFrame = buffer.slice(jpegStart, jpegEnd + 2);
-          
-          // Skip very small frames (likely corrupted)
-          if (jpegFrame.length < 1000) {
-            buffer = buffer.slice(jpegEnd + 2);
-            continue;
-          }
-          
-          // Throttle frame updates to prevent overwhelming the browser
-          const now = Date.now();
-          if (now - lastFrameTimeRef.current < minFrameInterval) {
-            buffer = buffer.slice(jpegEnd + 2);
-            framesProcessed++;
-            continue;
-          }
-          lastFrameTimeRef.current = now;
-          
-          // Create blob URL and display frame
-          const blob = new Blob([jpegFrame], { type: 'image/jpeg' });
-          const frameUrl = URL.createObjectURL(blob);
-          
-          // Track blob URLs for cleanup
-          blobUrlsRef.current.add(frameUrl);
-          
-          // Dynamic blob URL cleanup to prevent memory leaks
-          if (blobUrlsRef.current.size > 8) {
-            const urlsArray = Array.from(blobUrlsRef.current);
-            const oldUrls = urlsArray.slice(0, -4); // Keep only last 4
-            oldUrls.forEach(url => {
-              URL.revokeObjectURL(url);
-              blobUrlsRef.current.delete(url);
-            });
-          }
-          
-          // Update image source
-          if (imgElement.src && imgElement.src.startsWith('blob:')) {
-            const oldUrl = imgElement.src;
-            if (blobUrlsRef.current.has(oldUrl)) {
-              URL.revokeObjectURL(oldUrl);
-              blobUrlsRef.current.delete(oldUrl);
-            }
-          }
-          imgElement.src = frameUrl;
-          
-          // Remove processed data from buffer
-          buffer = buffer.slice(jpegEnd + 2);
-          
-          frameCount++;
-          framesProcessed++;
-          
-          // Set connection as established after processing first frame
-          if (!connectionEstablished && frameCount >= 1) {
-            console.log('useNetworkCamera: First frame processed, establishing connection');
-            connectionEstablished = true;
-            setIsConnected(true);
-            setCurrentConfig(config);
-            setConnectionError(null);
-            setIsConnecting(false);
-            setReconnectAttempts(0);
-          }
-          
-          // Log frame processing stats periodically
-          if (currentTime - lastFrameTime > 15000) { // Log every 15 seconds
-            console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}, buffer size: ${buffer.length}, blob URLs: ${blobUrlsRef.current.size}`);
-            lastFrameTime = currentTime;
-          }
-          
-          // Reset reconnect attempts on successful frame processing
-          if (reconnectAttempts > 0 && connectionEstablished) {
-            setReconnectAttempts(0);
-            setConnectionError(null);
-          }
-        }
-
-        // Aggressive buffer management to prevent memory bloat
-        if (buffer.length > maxBufferSize / 2) {
-          console.log(`useNetworkCamera: Buffer size ${buffer.length} exceeds half limit, truncating`);
-          // Keep only recent data to prevent endless accumulation
-          buffer = buffer.slice(-maxBufferSize / 4);
-        }
-
-        // Continue processing if still active
-        if (isActiveRef.current) {
-          // Slower processing to prevent browser blocking
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              processChunk();
-            }
-          }, 20); // Slower processing to prevent blocking
-        }
-      } catch (error: any) {
-        // Handle aborted operations gracefully - these are expected during cleanup
-        if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-          console.log('useNetworkCamera: Stream processing aborted (expected during cleanup)');
-          return; // Don't count as errors or attempt reconnection
-        }
-        
-        consecutiveErrors++;
-        console.log('useNetworkCamera: Stream processing error:', error, `(consecutive: ${consecutiveErrors})`);
-        
-        if (!isActiveRef.current) {
-          console.log('useNetworkCamera: Stream marked as inactive, stopping processing');
-          return;
-        }
-        
-        // Classify error types for intelligent recovery
-        const isRecoverableError = error.name === 'TypeError' || 
-                                  error.message?.includes('timeout') ||
-                                  error.message?.includes('network') ||
-                                  error.message?.includes('Failed to fetch');
-        
-        const isFatalError = error.message?.includes('404') ||
-                           error.message?.includes('403') ||
-                           error.message?.includes('401') ||
-                           error.message?.includes('Authentication');
-        
-        // For fatal errors, stop immediately
-        if (isFatalError) {
-          console.log('useNetworkCamera: Fatal error detected, stopping stream');
-          setIsConnected(false);
-          setConnectionError(`Connection failed: ${error.message}`);
-          isActiveRef.current = false;
-          return;
-        }
-        
-        // For recoverable errors, try quick recovery first
-        if (isRecoverableError && consecutiveErrors < 25) {
-          console.log(`useNetworkCamera: Recoverable error ${consecutiveErrors}/25, continuing stream`);
-          // Brief pause then continue processing without full reconnection
-          if (isActiveRef.current) {
-            setTimeout(() => {
-              if (isActiveRef.current) {
-                processChunk();
-              }
-            }, Math.min(100 * consecutiveErrors, 2000));
-          }
-          return;
-        }
-        
-        // Only perform full reconnection for persistent errors
-        if (consecutiveErrors > 25 && reconnectAttempts < 2) {
-          console.log('useNetworkCamera: Persistent errors, attempting full reconnection');
-          setConnectionError('Stream experiencing issues - recovering...');
+  const connectToMJPEGStream = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
+    try {
+      console.log('useNetworkCamera: Starting native MJPEG stream connection');
+      
+      const { url: proxiedUrl, headers } = await getProxiedUrl(config.url);
+      
+      // Use browser's native MJPEG support - much more reliable than manual parsing
+      imgElement.crossOrigin = 'anonymous';
+      
+      // Set up error handling
+      const handleError = () => {
+        console.log('useNetworkCamera: Native MJPEG stream error, attempting reconnection');
+        if (isActiveRef.current && reconnectAttempts < 3) {
           setReconnectAttempts(prev => prev + 1);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
+          setTimeout(() => {
             if (isActiveRef.current) {
               connectToCamera(config);
             }
-          }, 5000);
-        } else if (consecutiveErrors > 25) {
-          console.log('useNetworkCamera: Max recovery attempts reached');
+          }, 2000 * (reconnectAttempts + 1));
+        } else {
           setIsConnected(false);
-          setConnectionError('Stream connection unstable. Please check camera and try reconnecting.');
+          setConnectionError('Camera stream unavailable');
           isActiveRef.current = false;
         }
+      };
+      
+      const handleLoad = () => {
+        console.log('useNetworkCamera: Native MJPEG stream connected successfully');
+        setIsConnected(true);
+        setCurrentConfig(config);
+        setConnectionError(null);
+        setIsConnecting(false);
+        setReconnectAttempts(0);
+        
+        // Set up periodic connection monitoring
+        if (heartbeatRef.current) {
+          clearInterval(heartbeatRef.current);
+        }
+        
+        heartbeatRef.current = setInterval(() => {
+          if (!isActiveRef.current) return;
+          
+          // Check if image is still loading new frames
+          const currentTime = Date.now();
+          if (currentTime - lastFrameTimeRef.current > 30000) {
+            console.log('useNetworkCamera: Stream appears stalled, reconnecting');
+            handleError();
+          }
+        }, 15000);
+      };
+      
+      imgElement.onload = handleLoad;
+      imgElement.onerror = handleError;
+      
+      // For proxied requests, we need to handle authentication differently
+      if (Object.keys(headers).length > 0) {
+        // Create a fetch request to get the stream with proper headers
+        const response = await fetch(proxiedUrl, {
+          method: 'GET',
+          headers,
+          signal: fetchControllerRef.current?.signal
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Create a blob URL from the stream for the img element
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlsRef.current.add(blobUrl);
+        imgElement.src = blobUrl;
+      } else {
+        // Direct connection - let browser handle the stream natively
+        imgElement.src = proxiedUrl;
       }
-    };
-
-    processChunk();
-  }, [reconnectAttempts]);
+      
+      lastFrameTimeRef.current = Date.now();
+      
+    } catch (error: any) {
+      console.error('useNetworkCamera: Native MJPEG connection failed:', error);
+      
+      if (error.name === 'AbortError') {
+        console.log('useNetworkCamera: Connection aborted (expected during cleanup)');
+        return;
+      }
+      
+      setConnectionError(`Connection failed: ${error.message}`);
+      setIsConnecting(false);
+      
+      if (reconnectAttempts < 3) {
+        console.log(`useNetworkCamera: Retrying connection (${reconnectAttempts + 1}/3)`);
+        setReconnectAttempts(prev => prev + 1);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (isActiveRef.current) {
+            connectToCamera(config);
+          }
+        }, 3000 * (reconnectAttempts + 1));
+      } else {
+        setIsConnected(false);
+        isActiveRef.current = false;
+      }
+    }
+  }, [getProxiedUrl, reconnectAttempts]);
 
   const getQualityParams = (quality?: string) => {
     switch (quality) {
@@ -517,84 +354,13 @@ export const useNetworkCamera = () => {
           const isUsingProxy = finalUrl.includes('camera-proxy');
           
           if (isUsingProxy) {
-            // For proxied requests, we need to fetch and parse the MJPEG stream
-            console.log('useNetworkCamera: Using fetch-based approach for proxied MJPEG stream');
-            
-            try {
-              // Create new AbortController for this fetch
-              fetchControllerRef.current = new AbortController();
-              
-              const response = await fetch(finalUrl, {
-                method: 'GET',
-                headers: {
-                  ...headers,
-                  'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
-                  'Cache-Control': 'no-cache, no-store, must-revalidate',
-                  'Pragma': 'no-cache',
-                  'Connection': 'keep-alive'
-                },
-                signal: fetchControllerRef.current.signal,
-                keepalive: true
-              });
-              
-              if (!response.ok) {
-                throw new Error(`Failed to fetch stream: ${response.status}`);
-              }
-              
-              // For MJPEG streams, we need to handle the multipart response
-              const reader = response.body?.getReader();
-              if (!reader) {
-                throw new Error('No response body available');
-              }
-              
-              console.log('useNetworkCamera: Starting MJPEG stream parsing');
-              
-              // Start parsing the MJPEG stream - connection state will be set when first frame is processed
-              parseMJPEGStream(reader, element, config);
-              
-            } catch (fetchError) {
-              console.error('useNetworkCamera: Fetch-based stream failed:', fetchError);
-              
-              if (fetchError.name === 'AbortError') {
-                console.log('useNetworkCamera: Fetch aborted');
-                return;
-              }
-              
-              setConnectionError('Failed to establish stream connection. Please try again.');
-              setIsConnected(false);
-              setIsConnecting(false);
-              isActiveRef.current = false;
-            }
+            // For proxied requests, we still need fetch but use simpler approach
+            console.log('useNetworkCamera: Using native MJPEG with proxy');
+            connectToMJPEGStream(element, config);
           } else {
-            // Direct connection (no proxy needed)  
-            const handleLoad = () => {
-              console.log('useNetworkCamera: IMG element loaded successfully!');
-              setIsConnected(true);
-              setCurrentConfig(config);
-              setConnectionError(null);
-              setIsConnecting(false);
-              setReconnectAttempts(0);
-            };
-
-            const handleError = (e: Event) => {
-              console.error('useNetworkCamera: IMG element error:', e);
-              setConnectionError('Failed to load MJPEG stream from camera.');
-              setIsConnected(false);
-              setIsConnecting(false);
-              isActiveRef.current = false;
-            };
-
-            // Remove existing listeners
-            element.removeEventListener('load', handleLoad);
-            element.removeEventListener('error', handleError);
-
-            // Add new listeners
-            element.addEventListener('load', handleLoad, { once: true });
-            element.addEventListener('error', handleError);
-
-            // Set the source
-            console.log('useNetworkCamera: Setting img.src to:', finalUrl);
-            element.src = finalUrl;
+            // Direct connection - let browser handle the stream natively
+            console.log('useNetworkCamera: Using direct native MJPEG connection');
+            connectToMJPEGStream(element, config);
           }
           
         } else {
@@ -627,7 +393,7 @@ export const useNetworkCamera = () => {
       setIsConnecting(false);
       isActiveRef.current = false;
     }
-  }, [isConnecting, isConnected, cleanupStream, parseMJPEGStream]);
+  }, [isConnecting, isConnected, cleanupStream, connectToMJPEGStream]);
 
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
