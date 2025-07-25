@@ -226,8 +226,8 @@ export const LiveFeed = ({
       console.log('LiveFeed: Connection result - isConnected:', networkCamera.isConnected);
       console.log('LiveFeed: Connection error:', networkCamera.connectionError);
       
-      // Wait a moment for state to update
-      setTimeout(() => {
+      // Wait for connection to be established (longer timeout for MJPEG streams)
+      const checkConnection = () => {
         if (networkCamera.isConnected) {
           setIsConnected(true);
           setError(null);
@@ -236,8 +236,8 @@ export const LiveFeed = ({
             title: "Camera connected!",
             description: `Successfully connected to ${config.name}`,
           });
-        } else {
-          const errorMsg = networkCamera.connectionError || 'Failed to connect to network camera';
+        } else if (networkCamera.connectionError) {
+          const errorMsg = networkCamera.connectionError;
           setError(errorMsg);
           setIsConnected(false);
           console.error('LiveFeed: Failed to connect:', networkCamera.connectionError);
@@ -246,8 +246,14 @@ export const LiveFeed = ({
             description: errorMsg,
             variant: "destructive",
           });
+        } else {
+          // Still connecting, check again after a short delay
+          setTimeout(checkConnection, 500);
         }
-      }, 1000);
+      };
+      
+      // Initial check after 2 seconds (enough time for MJPEG first frame)
+      setTimeout(checkConnection, 2000);
       
     } catch (error) {
       console.error('LiveFeed: Connection error:', error);
