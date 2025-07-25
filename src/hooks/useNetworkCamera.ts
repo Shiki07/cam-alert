@@ -149,110 +149,6 @@ export const useNetworkCamera = () => {
     lastFrameTimeRef.current = Date.now();
   }, []);
 
-  const connectToMJPEGStream = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
-    try {
-      console.log('useNetworkCamera: Starting native MJPEG stream connection');
-      
-      const { url: proxiedUrl, headers } = await getProxiedUrl(config.url);
-      
-      // Set up error handling
-      const handleError = () => {
-        console.log('useNetworkCamera: Native MJPEG stream error, attempting reconnection');
-        if (isActiveRef.current && reconnectAttempts < 3) {
-          setReconnectAttempts(prev => prev + 1);
-          setTimeout(() => {
-            if (isActiveRef.current) {
-              connectToCamera(config);
-            }
-          }, 2000 * (reconnectAttempts + 1));
-        } else {
-          setIsConnected(false);
-          setConnectionError('Camera stream unavailable');
-          isActiveRef.current = false;
-        }
-      };
-      
-      const handleLoad = () => {
-        console.log('useNetworkCamera: Native MJPEG stream connected successfully');
-        setIsConnected(true);
-        setCurrentConfig(config);
-        setConnectionError(null);
-        setIsConnecting(false);
-        setReconnectAttempts(0);
-        
-        // Set up periodic connection monitoring
-        if (heartbeatRef.current) {
-          clearInterval(heartbeatRef.current);
-        }
-        
-        heartbeatRef.current = setInterval(() => {
-          if (!isActiveRef.current) return;
-          
-          // Check if image is still loading new frames
-          const currentTime = Date.now();
-          if (currentTime - lastFrameTimeRef.current > 30000) {
-            console.log('useNetworkCamera: Stream appears stalled, reconnecting');
-            handleError();
-          }
-        }, 15000);
-      };
-      
-      imgElement.onload = handleLoad;
-      imgElement.onerror = handleError;
-      
-      // Direct approach - let the browser handle MJPEG natively
-      // The proxy already handles authentication via Authorization header
-      console.log('useNetworkCamera: Setting img src directly to proxy URL:', proxiedUrl);
-      imgElement.src = proxiedUrl;
-      
-      lastFrameTimeRef.current = Date.now();
-      
-    } catch (error: any) {
-      console.error('useNetworkCamera: Native MJPEG connection failed:', error);
-      
-      if (error.name === 'AbortError') {
-        console.log('useNetworkCamera: Connection aborted (expected during cleanup)');
-        return;
-      }
-      
-      setConnectionError(`Connection failed: ${error.message}`);
-      setIsConnecting(false);
-      
-      if (reconnectAttempts < 3) {
-        console.log(`useNetworkCamera: Retrying connection (${reconnectAttempts + 1}/3)`);
-        setReconnectAttempts(prev => prev + 1);
-        reconnectTimeoutRef.current = setTimeout(() => {
-          if (isActiveRef.current) {
-            connectToCamera(config);
-          }
-        }, 3000 * (reconnectAttempts + 1));
-      } else {
-        setIsConnected(false);
-        isActiveRef.current = false;
-      }
-    }
-  }, [getProxiedUrl, reconnectAttempts]);
-
-  const getQualityParams = (quality?: string) => {
-    switch (quality) {
-      case 'high':
-        return { resolution: '1920x1080', bitrate: '2000000', fps: '30' };
-      case 'medium':
-        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
-      case 'low':
-        return { resolution: '640x480', bitrate: '500000', fps: '20' };
-      default:
-        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
-    }
-  };
-
-  const appendQualityParams = (url: string, quality?: string) => {
-    // Don't append quality params by default to avoid 404s on cameras that don't support them
-    // Quality will be handled by the client-side constraints instead
-    console.log(`useNetworkCamera: Quality setting ${quality} will be handled client-side, using original URL`);
-    return url;
-  };
-
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
     console.log('useNetworkCamera: Config:', config);
@@ -365,7 +261,206 @@ export const useNetworkCamera = () => {
       setIsConnecting(false);
       isActiveRef.current = false;
     }
-  }, [isConnecting, isConnected, cleanupStream, connectToMJPEGStream]);
+  }, [isConnecting, isConnected, cleanupStream, getProxiedUrl]);
+
+  const connectToMJPEGStream = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
+    try {
+      console.log('useNetworkCamera: Starting MJPEG stream connection via fetch');
+      
+      const { url: proxiedUrl } = await getProxiedUrl(config.url);
+      
+      // Use fetch to get the stream with proper authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch(proxiedUrl, {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Accept': 'image/jpeg, multipart/x-mixed-replace, */*'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      // For MJPEG streams, we need to handle the multipart response
+      const contentType = response.headers.get('content-type');
+      
+      if (contentType?.includes('multipart/x-mixed-replace')) {
+        console.log('useNetworkCamera: Handling multipart MJPEG stream');
+        // Handle multipart MJPEG stream
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('Failed to get response reader');
+        }
+
+        let buffer = new Uint8Array();
+        const boundary = contentType.split('boundary=')[1];
+        
+        const processStream = async () => {
+          while (isActiveRef.current) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            // Append new data to buffer
+            const newBuffer = new Uint8Array(buffer.length + value.length);
+            newBuffer.set(buffer);
+            newBuffer.set(value, buffer.length);
+            buffer = newBuffer;
+
+            // Look for JPEG frames in the buffer
+            let startIdx = -1;
+            let endIdx = -1;
+            
+            // Find JPEG start marker (FF D8)
+            for (let i = 0; i < buffer.length - 1; i++) {
+              if (buffer[i] === 0xFF && buffer[i + 1] === 0xD8) {
+                startIdx = i;
+                break;
+              }
+            }
+            
+            // Find JPEG end marker (FF D9)
+            if (startIdx !== -1) {
+              for (let i = startIdx + 2; i < buffer.length - 1; i++) {
+                if (buffer[i] === 0xFF && buffer[i + 1] === 0xD9) {
+                  endIdx = i + 2;
+                  break;
+                }
+              }
+            }
+
+            // If we have a complete JPEG frame, display it
+            if (startIdx !== -1 && endIdx !== -1) {
+              const frameData = buffer.slice(startIdx, endIdx);
+              const blob = new Blob([frameData], { type: 'image/jpeg' });
+              
+              // Revoke previous blob URL
+              if (imgElement.src && imgElement.src.startsWith('blob:')) {
+                URL.revokeObjectURL(imgElement.src);
+              }
+              
+              const blobUrl = URL.createObjectURL(blob);
+              imgElement.src = blobUrl;
+              
+              // Track blob URL for cleanup
+              blobUrlsRef.current.add(blobUrl);
+              
+              // Remove processed data from buffer
+              buffer = buffer.slice(endIdx);
+              
+              // Update frame tracking
+              frameCountRef.current++;
+              lastFrameTimeRef.current = Date.now();
+              
+              // Connection success
+              if (!isConnected) {
+                setIsConnected(true);
+                setCurrentConfig(config);
+                setConnectionError(null);
+                setIsConnecting(false);
+                setReconnectAttempts(0);
+                console.log('useNetworkCamera: MJPEG stream connected successfully');
+              }
+            }
+
+            // Limit buffer size to prevent memory issues
+            if (buffer.length > 1024 * 1024) { // 1MB limit
+              buffer = buffer.slice(-512 * 1024); // Keep last 512KB
+            }
+          }
+        };
+
+        readerRef.current = reader;
+        processStream().catch(error => {
+          console.error('useNetworkCamera: Stream processing error:', error);
+          if (isActiveRef.current && reconnectAttempts < 3) {
+            setReconnectAttempts(prev => prev + 1);
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                connectToMJPEGStream(imgElement, config);
+              }
+            }, 2000 * (reconnectAttempts + 1));
+          } else {
+            setIsConnected(false);
+            setConnectionError('Stream processing failed');
+            isActiveRef.current = false;
+          }
+        });
+
+      } else {
+        // Handle single JPEG image
+        console.log('useNetworkCamera: Handling single JPEG image');
+        const blob = await response.blob();
+        
+        // Revoke previous blob URL
+        if (imgElement.src && imgElement.src.startsWith('blob:')) {
+          URL.revokeObjectURL(imgElement.src);
+        }
+        
+        const blobUrl = URL.createObjectURL(blob);
+        imgElement.src = blobUrl;
+        
+        // Track blob URL for cleanup
+        blobUrlsRef.current.add(blobUrl);
+        
+        setIsConnected(true);
+        setCurrentConfig(config);
+        setConnectionError(null);
+        setIsConnecting(false);
+        setReconnectAttempts(0);
+        console.log('useNetworkCamera: Single JPEG loaded successfully');
+      }
+      
+    } catch (error: any) {
+      console.error('useNetworkCamera: MJPEG connection failed:', error);
+      
+      if (error.name === 'AbortError') {
+        console.log('useNetworkCamera: Connection aborted (expected during cleanup)');
+        return;
+      }
+      
+      setConnectionError(`Connection failed: ${error.message}`);
+      setIsConnecting(false);
+      
+      if (reconnectAttempts < 3) {
+        console.log(`useNetworkCamera: Retrying connection (${reconnectAttempts + 1}/3)`);
+        setReconnectAttempts(prev => prev + 1);
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (isActiveRef.current) {
+            connectToMJPEGStream(imgElement, config);
+          }
+        }, 3000 * (reconnectAttempts + 1));
+      } else {
+        setIsConnected(false);
+        isActiveRef.current = false;
+      }
+    }
+  }, [getProxiedUrl, reconnectAttempts, isConnected]);
+
+  const getQualityParams = (quality?: string) => {
+    switch (quality) {
+      case 'high':
+        return { resolution: '1920x1080', bitrate: '2000000', fps: '30' };
+      case 'medium':
+        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
+      case 'low':
+        return { resolution: '640x480', bitrate: '500000', fps: '20' };
+      default:
+        return { resolution: '1280x720', bitrate: '1000000', fps: '25' };
+    }
+  };
+
+  const appendQualityParams = (url: string, quality?: string) => {
+    // Don't append quality params by default to avoid 404s on cameras that don't support them
+    // Quality will be handled by the client-side constraints instead
+    console.log(`useNetworkCamera: Quality setting ${quality} will be handled client-side, using original URL`);
+    return url;
+  };
+
 
   const disconnect = useCallback(() => {
     console.log('useNetworkCamera: Disconnecting');
