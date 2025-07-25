@@ -149,7 +149,16 @@ serve(async (req) => {
 
     // SECURITY: Validate the camera URL
     if (!validateCameraURL(targetUrl)) {
-      console.warn(`Camera proxy: Blocked potentially dangerous URL: ${targetUrl}`);
+      console.warn(`Camera proxy: Blocked potentially dangerous URL: ${targetUrl} - Failed validation`);
+      console.log(`Camera proxy: URL validation details for ${targetUrl}:`);
+      try {
+        const urlObj = new URL(targetUrl);
+        console.log(`  - Protocol: ${urlObj.protocol}`);
+        console.log(`  - Hostname: ${urlObj.hostname}`);
+        console.log(`  - Port: ${urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80')}`);
+      } catch (e) {
+        console.log(`  - URL parsing failed: ${e.message}`);
+      }
       return new Response(
         JSON.stringify({ error: 'Invalid or blocked URL' }),
         { 
