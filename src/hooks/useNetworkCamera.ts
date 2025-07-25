@@ -339,11 +339,11 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // More balanced buffer cleanup
-        if (buffer.length > maxBufferSize * 0.7) { // Trigger cleanup at 70% instead of 33%
-          console.log('useNetworkCamera: Buffer getting large, aggressive cleanup');
-          // Keep more data for smoother streaming
-          const keepSize = maxBufferSize / 3; // Keep 33% of max buffer
+        // Prevent buffer overflow with stable cleanup
+        if (buffer.length > maxBufferSize) {
+          console.log('useNetworkCamera: Buffer limit reached, stable cleanup');
+          // Keep half the buffer to maintain stream continuity
+          const keepSize = maxBufferSize / 2;
           buffer = buffer.slice(-keepSize);
         }
 
