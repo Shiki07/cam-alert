@@ -102,7 +102,7 @@ const validateCameraURL = (url: string): boolean => {
 };
 
 serve(async (req) => {
-  console.log(`Camera proxy: Received ${req.method} request from ${req.headers.get('origin') || 'unknown origin'}`);
+  console.log(`Camera proxy: Received ${req.method} request`);
   
   if (req.method === 'OPTIONS') {
     console.log('Camera proxy: Handling CORS preflight request');
