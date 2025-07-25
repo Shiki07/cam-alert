@@ -192,14 +192,8 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Set a much longer timeout for MJPEG stream reads
-        const timeoutMs = 60000; // 60 seconds - MJPEG streams can have gaps
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
-        });
-
-        const readPromise = reader.read();
-        const result = await Promise.race([readPromise, timeoutPromise]);
+        // Read stream chunk without timeout for continuous MJPEG streams
+        const result = await reader.read();
         
         const { done, value } = result;
         
