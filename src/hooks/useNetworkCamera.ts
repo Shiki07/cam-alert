@@ -117,6 +117,9 @@ export const useNetworkCamera = () => {
     let lastFrameTime = Date.now();
     let lastActivityTime = Date.now();
     let connectionEstablished = false;
+    let consecutiveErrors = 0;
+    const maxBufferSize = 1024 * 1024; // Reduce buffer size to 1MB
+    const maxFramesPerSession = 1000; // Limit frames per session to prevent memory buildup
     
     readerRef.current = reader;
     
@@ -128,8 +131,20 @@ export const useNetworkCamera = () => {
           return;
         }
 
+        // Restart stream if we've processed too many frames to prevent memory issues
+        if (frameCount > maxFramesPerSession) {
+          console.log('useNetworkCamera: Max frames reached, restarting stream for memory management');
+          setConnectionError('Refreshing stream...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isActiveRef.current) {
+              connectToCamera(config);
+            }
+          }, 1000);
+          return;
+        }
+
         // Set a reasonable timeout for reading chunks
-        const timeoutMs = 15000; // 15 seconds
+        const timeoutMs = 10000; // Reduce timeout to 10 seconds
         const timeoutPromise = new Promise<never>((_, reject) => {
           setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
         });
@@ -141,7 +156,7 @@ export const useNetworkCamera = () => {
         
         if (done) {
           console.log('useNetworkCamera: Stream ended normally');
-          if (isActiveRef.current && reconnectAttempts < 5) {
+          if (isActiveRef.current && reconnectAttempts < 3) { // Reduce max attempts
             console.log('useNetworkCamera: Stream ended unexpectedly, attempting reconnection');
             setConnectionError('Stream ended - attempting to reconnect...');
             setReconnectAttempts(prev => prev + 1);
@@ -150,7 +165,7 @@ export const useNetworkCamera = () => {
               if (isActiveRef.current) {
                 connectToCamera(config);
               }
-            }, 2000);
+            }, 3000); // Increase reconnect delay
           }
           return;
         }
@@ -158,79 +173,107 @@ export const useNetworkCamera = () => {
         // Update last activity time
         lastActivityTime = Date.now();
 
-        // Append new data to buffer
+        // Reset consecutive errors on successful read
+        consecutiveErrors = 0;
+
+        // Append new data to buffer with size check
+        if (buffer.length + value.length > maxBufferSize) {
+          console.log('useNetworkCamera: Incoming data would exceed buffer limit, resetting buffer');
+          buffer = new Uint8Array(0);
+        }
+
         const newBuffer = new Uint8Array(buffer.length + value.length);
         newBuffer.set(buffer);
         newBuffer.set(value, buffer.length);
         buffer = newBuffer;
 
-        // Look for JPEG start and end markers
-        const jpegStart = buffer.findIndex((byte, index) => 
-          byte === 0xFF && buffer[index + 1] === 0xD8
-        );
-        
-        if (jpegStart !== -1) {
-          const jpegEnd = buffer.findIndex((byte, index) => 
-            index > jpegStart && byte === 0xFF && buffer[index + 1] === 0xD9
+        // Process multiple frames if available in buffer
+        let framesProcessed = 0;
+        const maxFramesPerChunk = 3; // Process max 3 frames per chunk to prevent blocking
+
+        while (framesProcessed < maxFramesPerChunk) {
+          // Look for JPEG start and end markers
+          const jpegStart = buffer.findIndex((byte, index) => 
+            byte === 0xFF && buffer[index + 1] === 0xD8
           );
           
-          if (jpegEnd !== -1) {
-            // Extract JPEG frame
-            const jpegFrame = buffer.slice(jpegStart, jpegEnd + 2);
-            
-            // Create blob URL and display frame
-            const blob = new Blob([jpegFrame], { type: 'image/jpeg' });
-            const frameUrl = URL.createObjectURL(blob);
-            
-            // Update image source
-            if (imgElement.src && imgElement.src.startsWith('blob:')) {
-              URL.revokeObjectURL(imgElement.src);
-            }
-            imgElement.src = frameUrl;
-            
-            // Remove processed data from buffer
+          if (jpegStart === -1) break;
+
+          const jpegEnd = buffer.findIndex((byte, index) => 
+            index > jpegStart + 10 && byte === 0xFF && buffer[index + 1] === 0xD9
+          );
+          
+          if (jpegEnd === -1) break;
+
+          // Extract JPEG frame
+          const jpegFrame = buffer.slice(jpegStart, jpegEnd + 2);
+          
+          // Skip very small frames (likely corrupted)
+          if (jpegFrame.length < 1000) {
             buffer = buffer.slice(jpegEnd + 2);
-            
-            frameCount++;
-            
-            // Set connection as established after processing first frame
-            if (!connectionEstablished && frameCount >= 1) {
-              console.log('useNetworkCamera: First frame processed, establishing connection');
-              connectionEstablished = true;
-              setIsConnected(true);
-              setCurrentConfig(config);
-              setConnectionError(null);
-              setIsConnecting(false);
-              setReconnectAttempts(0);
-            }
-            
-            const now = Date.now();
-            if (now - lastFrameTime > 5000) { // Log every 5 seconds
-              console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}`);
-              lastFrameTime = now;
-            }
-            
-            // Reset reconnect attempts on successful frame processing
-            if (reconnectAttempts > 0 && connectionEstablished) {
-              setReconnectAttempts(0);
-              setConnectionError(null);
-            }
+            continue;
+          }
+          
+          // Create blob URL and display frame
+          const blob = new Blob([jpegFrame], { type: 'image/jpeg' });
+          const frameUrl = URL.createObjectURL(blob);
+          
+          // Update image source
+          if (imgElement.src && imgElement.src.startsWith('blob:')) {
+            URL.revokeObjectURL(imgElement.src);
+          }
+          imgElement.src = frameUrl;
+          
+          // Remove processed data from buffer
+          buffer = buffer.slice(jpegEnd + 2);
+          
+          frameCount++;
+          framesProcessed++;
+          
+          // Set connection as established after processing first frame
+          if (!connectionEstablished && frameCount >= 1) {
+            console.log('useNetworkCamera: First frame processed, establishing connection');
+            connectionEstablished = true;
+            setIsConnected(true);
+            setCurrentConfig(config);
+            setConnectionError(null);
+            setIsConnecting(false);
+            setReconnectAttempts(0);
+          }
+          
+          const now = Date.now();
+          if (now - lastFrameTime > 10000) { // Log every 10 seconds
+            console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}, buffer size: ${buffer.length}`);
+            lastFrameTime = now;
+          }
+          
+          // Reset reconnect attempts on successful frame processing
+          if (reconnectAttempts > 0 && connectionEstablished) {
+            setReconnectAttempts(0);
+            setConnectionError(null);
           }
         }
 
-        // Keep buffer size manageable
-        if (buffer.length > 2 * 1024 * 1024) { // 2MB limit
-          console.log('useNetworkCamera: Buffer too large, resetting');
-          buffer = new Uint8Array(0);
+        // Aggressive buffer cleanup - keep only recent data
+        if (buffer.length > maxBufferSize / 2) {
+          console.log('useNetworkCamera: Buffer getting large, aggressive cleanup');
+          // Keep only the last portion of the buffer
+          const keepSize = maxBufferSize / 4;
+          buffer = buffer.slice(-keepSize);
         }
 
         // Continue processing if still active
         if (isActiveRef.current) {
-          // Use setTimeout to prevent stack overflow and allow other operations
-          setTimeout(() => processChunk(), 10);
+          // Use requestAnimationFrame for better performance
+          requestAnimationFrame(() => {
+            if (isActiveRef.current) {
+              setTimeout(() => processChunk(), 5); // Reduce delay
+            }
+          });
         }
       } catch (error) {
-        console.log('useNetworkCamera: Stream processing error:', error);
+        consecutiveErrors++;
+        console.log('useNetworkCamera: Stream processing error:', error, `(consecutive: ${consecutiveErrors})`);
         
         if (!isActiveRef.current) {
           console.log('useNetworkCamera: Stream not active, stopping processing');
@@ -243,14 +286,26 @@ export const useNetworkCamera = () => {
           return;
         }
         
+        // If too many consecutive errors, force restart
+        if (consecutiveErrors > 10) {
+          console.log('useNetworkCamera: Too many consecutive errors, forcing restart');
+          setConnectionError('Stream unstable - restarting...');
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (isActiveRef.current) {
+              connectToCamera(config);
+            }
+          }, 5000);
+          return;
+        }
+        
         // Check if we should attempt reconnection
-        if (reconnectAttempts < 5) {
-          console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/5`);
+        if (reconnectAttempts < 3) { // Reduce max attempts
+          console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/3`);
           setConnectionError('Connection interrupted - attempting to reconnect...');
           setReconnectAttempts(prev => prev + 1);
           
           // Attempt reconnection after a delay
-          const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000); // Max 10s delay
+          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttempts), 15000); // More conservative backoff
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isActiveRef.current) {
               connectToCamera(config);
