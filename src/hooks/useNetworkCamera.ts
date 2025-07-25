@@ -192,8 +192,14 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Fast read without aggressive timeouts - let browser handle networking
-        const result = await reader.read();
+        // Set a reasonable timeout for reading chunks
+        const timeoutMs = 10000; // Reduce timeout to 10 seconds
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
+        });
+
+        const readPromise = reader.read();
+        const result = await Promise.race([readPromise, timeoutPromise]);
         
         const { done, value } = result;
         
@@ -252,9 +258,9 @@ export const useNetworkCamera = () => {
             continue;
           }
           
-          // Minimal throttling - only skip frames if processing too fast
+          // Throttle frame updates to prevent overwhelming the browser
           const now = Date.now();
-          if (now - lastFrameTimeRef.current < 16) { // ~60 FPS max
+          if (now - lastFrameTimeRef.current < minFrameInterval) {
             buffer = buffer.slice(jpegEnd + 2);
             framesProcessed++;
             continue;
@@ -332,9 +338,14 @@ export const useNetworkCamera = () => {
           buffer = buffer.slice(keepPosition);
         }
 
-        // Continue processing if still active - immediate processing for no delays
+        // Continue processing if still active
         if (isActiveRef.current) {
-          setImmediate ? setImmediate(() => processChunk()) : setTimeout(() => processChunk(), 0);
+          // Use requestAnimationFrame for smooth performance
+          requestAnimationFrame(() => {
+            if (isActiveRef.current) {
+              setTimeout(() => processChunk(), 5); // Fast processing for smooth video
+            }
+          });
         }
       } catch (error: any) {
         // Handle aborted operations gracefully - these are expected during cleanup
@@ -448,11 +459,8 @@ export const useNetworkCamera = () => {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
-      // DOM check without delay - immediate connection
-      if (!videoRef.current) {
-        // Quick retry without blocking
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
+      // Wait for the DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
       
       if (!videoRef.current) {
         console.error('useNetworkCamera: Video element not available - videoRef.current is null');
@@ -485,28 +493,61 @@ export const useNetworkCamera = () => {
         const isLocal = isLocalNetwork(config.url);
         console.log('useNetworkCamera: Is local network camera:', isLocal);
 
-        // Quick connection test - skip lengthy testing for speed
-        console.log('useNetworkCamera: Quick connection validation...');
-        let connectionTestPassed = true; // Assume connection works, validate during stream
+        // Test connection with multiple attempts
+        console.log('useNetworkCamera: Testing connection...');
+        let connectionTestPassed = false;
         
-        try {
-          // Single fast test attempt only
-          const quickTest = await fetch(finalUrl, { 
-            method: 'HEAD',
-            headers,
-            signal: AbortSignal.timeout(3000) // Just 3 seconds
-          });
-          
-          if (!quickTest.ok) {
-            console.warn(`useNetworkCamera: Quick test warning: ${quickTest.status}`);
-            // Continue anyway - stream might still work
+        for (let testAttempt = 1; testAttempt <= 3; testAttempt++) {
+          try {
+            console.log(`useNetworkCamera: Connection test attempt ${testAttempt}/3`);
+            
+            const testResponse = await fetch(finalUrl, { 
+              method: 'HEAD',
+              headers,
+              signal: AbortSignal.timeout(20000) // 20 seconds per attempt
+            });
+            
+            if (testResponse.ok) {
+              console.log(`useNetworkCamera: Connection test passed on attempt ${testAttempt}`);
+              connectionTestPassed = true;
+              break;
+            } else {
+              console.warn(`useNetworkCamera: Connection test failed on attempt ${testAttempt}: ${testResponse.status} ${testResponse.statusText}`);
+              if (testAttempt < 3) {
+                await new Promise(resolve => setTimeout(resolve, 3000 * testAttempt)); // Increasing delay
+              }
+            }
+          } catch (testError) {
+            console.warn(`useNetworkCamera: Connection test error on attempt ${testAttempt}:`, testError);
+            
+            // If CORS error, try to proceed anyway - the actual stream might work
+            if (testError.message.includes('CORS') || testError.message.includes('NetworkError')) {
+              console.log('useNetworkCamera: CORS detected, but attempting stream connection anyway');
+              connectionTestPassed = true;
+              break;
+            }
+            
+            if (testAttempt < 3) {
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Faster retry for connection issues
+            }
           }
-        } catch (testError) {
-          console.log('useNetworkCamera: Quick test failed, proceeding with stream attempt:', testError.message);
-          // Always proceed - don't block on test failures
         }
 
-        // Skip blocking - proceed directly to stream connection
+        if (!connectionTestPassed) {
+          console.error('useNetworkCamera: All connection test attempts failed');
+          
+          let errorMsg = 'Cannot reach camera after multiple attempts';
+          if (isLocal) {
+            errorMsg = 'Local network cameras cannot be reached from the cloud proxy. Please ensure your camera is accessible from the internet.';
+          } else {
+            errorMsg = `Cannot reach camera at ${config.url}. Camera may be offline or blocked by firewall. Please verify the camera is online and accessible from the internet.`;
+          }
+          
+          setConnectionError(errorMsg);
+          setIsConnecting(false);
+          isActiveRef.current = false;
+          return;
+        }
 
         // For MJPEG, we need to handle the browser security restrictions
         if (element instanceof HTMLImageElement) {
