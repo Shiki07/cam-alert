@@ -64,40 +64,27 @@ export const useNetworkCamera = () => {
     }
   };
 
-  const getProxiedUrl = async (originalUrl: string) => {
-    console.log('=== getProxiedUrl - START ===');
-    console.log('getProxiedUrl - originalUrl:', originalUrl);
-    console.log('getProxiedUrl - window.location.protocol:', window.location.protocol);
-    console.log('getProxiedUrl - originalUrl.startsWith("http://"):', originalUrl.startsWith('http://'));
-    
-    // CRITICAL: Always use proxy for HTTP URLs when on HTTPS to prevent HTTPS-Only mode conflicts
+  const getProxiedUrl = useCallback(async (originalUrl: string) => {
+    // Fast path - cache auth token to avoid repeated auth calls
     const shouldUseProxy = originalUrl.startsWith('http://') && window.location.protocol === 'https:';
-    console.log('getProxiedUrl - shouldUseProxy:', shouldUseProxy);
     
     if (shouldUseProxy) {
-      // Get the current session for authentication
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        throw new Error('Authentication required to access camera proxy');
+        throw new Error('Authentication required');
       }
       
-      const proxyUrl = `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`;
-      console.log('getProxiedUrl - USING PROXY - proxyUrl:', proxyUrl);
-      console.log('=== getProxiedUrl - END (PROXY) ===');
       return { 
-        url: proxyUrl, 
+        url: `https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy?url=${encodeURIComponent(originalUrl)}`,
         headers: { 
           'Authorization': `Bearer ${session.access_token}`,
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
+          'Cache-Control': 'no-cache'
         } 
       };
     }
     
-    console.log('getProxiedUrl - NOT USING PROXY - returning original URL:', originalUrl);
-    console.log('=== getProxiedUrl - END (NO PROXY) ===');
     return { url: originalUrl, headers: {} };
-  };
+  }, []);
 
   const cleanupStream = useCallback(() => {
     console.log('useNetworkCamera: Cleaning up stream resources');
@@ -217,36 +204,17 @@ export const useNetworkCamera = () => {
         const { done, value } = result;
         
         if (done) {
-          console.log('useNetworkCamera: Stream ended, attempting seamless recovery');
-          // Try to recover the stream without full reconnection
-          if (isActiveRef.current && reconnectAttempts < 2) {
-            console.log('useNetworkCamera: Attempting stream recovery');
-            setReconnectAttempts(prev => prev + 1);
+          console.log('useNetworkCamera: Stream ended naturally');
+          // Only reconnect if this was unexpected and we're still supposed to be connected
+          if (isActiveRef.current && connectionEstablished && reconnectAttempts === 0) {
+            console.log('useNetworkCamera: Unexpected stream end, single recovery attempt');
+            setReconnectAttempts(1);
             
-            // Quick recovery attempt - reuse existing connection
-            reconnectTimeoutRef.current = setTimeout(async () => {
+            reconnectTimeoutRef.current = setTimeout(() => {
               if (isActiveRef.current && currentConfig) {
-                try {
-                  console.log('useNetworkCamera: Quick stream recovery');
-                  const { url, headers } = await getProxiedUrl(currentConfig.url);
-                  
-                  fetchControllerRef.current = new AbortController();
-                  const response = await fetch(url, {
-                    headers,
-                    signal: fetchControllerRef.current.signal,
-                    cache: 'no-cache'
-                  });
-                  
-                  if (response.ok && response.body) {
-                    const newReader = response.body.getReader();
-                    await parseMJPEGStream(newReader, imgElement, config);
-                  }
-                } catch (error) {
-                  console.log('useNetworkCamera: Quick recovery failed, using full reconnection');
-                  connectToCamera(config);
-                }
+                connectToCamera(config);
               }
-            }, 1000); // Much faster recovery
+            }, 2000);
           }
           return;
         }
