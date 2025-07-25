@@ -174,11 +174,12 @@ export const useNetworkCamera = () => {
     let frameCount = 0;
     let lastFrameTime = Date.now();
     let lastQualityCheck = Date.now();
+    let lastMemoryCleanup = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 200 * 1024; // Increased to 200KB for smoother streaming
-    const maxFramesPerSession = 300; // Balanced frame limit
-    const minFrameInterval = 33; // Back to ~30 FPS for smooth playback
+    const maxBufferSize = 150 * 1024; // Optimized buffer size
+    const minFrameInterval = 33; // ~30 FPS for smooth playback
+    const memoryCleanupInterval = 60000; // Clean up memory every minute
     
     readerRef.current = reader;
     
@@ -190,16 +191,27 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // Restart stream if we've processed too many frames to prevent memory issues
-        if (frameCount > maxFramesPerSession) {
-          console.log('useNetworkCamera: Max frames reached, restarting stream for memory management');
-          setConnectionError('Refreshing stream...');
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isActiveRef.current) {
-              connectToCamera(config);
-            }
-          }, 1000);
-          return;
+        // Perform periodic memory cleanup without interrupting the stream
+        const currentTime = Date.now();
+        if (currentTime - lastMemoryCleanup > memoryCleanupInterval) {
+          lastMemoryCleanup = currentTime;
+          
+          // Clean up old blob URLs more aggressively during periodic cleanup
+          if (blobUrlsRef.current.size > 5) {
+            const urlsArray = Array.from(blobUrlsRef.current);
+            const oldUrls = urlsArray.slice(0, -3); // Keep only last 3
+            oldUrls.forEach(url => {
+              URL.revokeObjectURL(url);
+              blobUrlsRef.current.delete(url);
+            });
+            console.log(`useNetworkCamera: Periodic cleanup - removed ${oldUrls.length} blob URLs`);
+          }
+          
+          // Reset frame counter to prevent overflow
+          if (frameCount > 10000) {
+            frameCount = 0;
+            console.log('useNetworkCamera: Frame counter reset for continuous operation');
+          }
         }
 
         // Set a reasonable timeout for reading chunks
@@ -289,10 +301,10 @@ export const useNetworkCamera = () => {
           // Track blob URLs for cleanup
           blobUrlsRef.current.add(frameUrl);
           
-          // Cleanup old blob URLs to prevent memory leaks
-          if (blobUrlsRef.current.size > 10) {
+          // Dynamic blob URL cleanup to prevent memory leaks
+          if (blobUrlsRef.current.size > 8) {
             const urlsArray = Array.from(blobUrlsRef.current);
-            const oldUrls = urlsArray.slice(0, -5); // Keep only last 5
+            const oldUrls = urlsArray.slice(0, -4); // Keep only last 4
             oldUrls.forEach(url => {
               URL.revokeObjectURL(url);
               blobUrlsRef.current.delete(url);
@@ -326,9 +338,9 @@ export const useNetworkCamera = () => {
             setReconnectAttempts(0);
           }
           
-          const currentTime = Date.now();
-          if (currentTime - lastFrameTime > 10000) { // Log every 10 seconds
-            console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}, buffer size: ${buffer.length}`);
+          // Log frame processing stats periodically
+          if (currentTime - lastFrameTime > 15000) { // Log every 15 seconds
+            console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}, buffer size: ${buffer.length}, blob URLs: ${blobUrlsRef.current.size}`);
             lastFrameTime = currentTime;
           }
           
@@ -339,12 +351,18 @@ export const useNetworkCamera = () => {
           }
         }
 
-        // Prevent buffer overflow with stable cleanup
+        // Intelligent buffer management to prevent overflow
         if (buffer.length > maxBufferSize) {
-          console.log('useNetworkCamera: Buffer limit reached, stable cleanup');
-          // Keep half the buffer to maintain stream continuity
-          const keepSize = maxBufferSize / 2;
-          buffer = buffer.slice(-keepSize);
+          console.log('useNetworkCamera: Buffer optimization - maintaining stream continuity');
+          // Find the last complete JPEG frame boundary to keep partial frames intact
+          let keepPosition = buffer.length;
+          for (let i = buffer.length - 1; i > maxBufferSize / 3; i--) {
+            if (buffer[i] === 0xFF && buffer[i + 1] === 0xD9) {
+              keepPosition = i + 2;
+              break;
+            }
+          }
+          buffer = buffer.slice(keepPosition);
         }
 
         // Continue processing if still active
