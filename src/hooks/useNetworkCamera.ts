@@ -155,7 +155,7 @@ export const useNetworkCamera = () => {
     let lastMemoryCleanup = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 32 * 1024; // Much smaller buffer - process frames immediately
+    const maxBufferSize = 80 * 1024; // Larger buffer to accommodate typical MJPEG frames (40-60KB)
     const minFrameInterval = 100; // ~10 FPS to reduce processing load and prevent blocking
     const memoryCleanupInterval = 15000; // Very frequent cleanup
     
