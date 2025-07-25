@@ -204,12 +204,21 @@ export const useNetworkCamera = () => {
         const { done, value } = result;
         
         if (done) {
-          console.log('useNetworkCamera: Stream ended - stopping without reconnection');
-          // Stream ended naturally - don't reconnect automatically
-          if (isActiveRef.current) {
-            setIsConnected(false);
-            setConnectionError('Stream ended');
-            isActiveRef.current = false;
+          console.log('useNetworkCamera: Stream ended unexpectedly, attempting reconnection');
+          // Stream ended unexpectedly - attempt to reconnect
+          if (isActiveRef.current && currentConfig) {
+            console.log('useNetworkCamera: Initiating automatic reconnection');
+            
+            // Don't disconnect immediately, try to reconnect
+            setTimeout(() => {
+              if (isActiveRef.current && currentConfig) {
+                console.log('useNetworkCamera: Executing reconnection attempt');
+                connectToCamera(currentConfig).catch(error => {
+                  console.error('useNetworkCamera: Reconnection failed:', error);
+                  setConnectionError('Connection lost and reconnection failed');
+                });
+              }
+            }, 2000); // Wait 2 seconds before reconnecting
           }
           return;
         }

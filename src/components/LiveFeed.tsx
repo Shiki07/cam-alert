@@ -82,6 +82,10 @@ export const LiveFeed = ({
     scheduleEnabled,
     startHour,
     endHour,
+    detectionZonesEnabled: false,
+    cooldownPeriod: 5000,
+    minMotionDuration: 500,
+    noiseReduction: true,
     onMotionDetected: (motionLevel) => {
       console.log('Motion detected with level:', motionLevel);
       onMotionDetected(true);
