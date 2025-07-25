@@ -124,6 +124,26 @@ export const LiveFeed = ({
     setError(null);
 
     try {
+      // First check if mediaDevices is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access not supported in this browser');
+      }
+
+      // Try to enumerate devices first to check if cameras are available
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        
+        if (videoDevices.length === 0) {
+          throw new Error('No camera devices found on this device');
+        }
+        
+        console.log(`Found ${videoDevices.length} camera device(s)`);
+      } catch (enumError) {
+        console.warn('Could not enumerate devices:', enumError);
+        // Continue anyway as some browsers may restrict device enumeration
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: getVideoConstraints(),
         audio: true
@@ -140,9 +160,28 @@ export const LiveFeed = ({
           }
         };
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error accessing webcam:', err);
-      setError('Failed to access webcam. Please check permissions.');
+      
+      let errorMessage = 'Failed to access webcam';
+      
+      if (err.name === 'NotFoundError' || err.message?.includes('object can not be found')) {
+        errorMessage = 'No camera found. Please connect a camera and refresh the page.';
+      } else if (err.name === 'NotAllowedError') {
+        errorMessage = 'Camera access denied. Please allow camera permissions and try again.';
+      } else if (err.name === 'NotReadableError') {
+        errorMessage = 'Camera is being used by another application. Please close other apps using the camera.';
+      } else if (err.name === 'OverconstrainedError') {
+        errorMessage = 'Camera does not support the requested video quality. Try lowering the quality setting.';
+      } else if (err.name === 'SecurityError') {
+        errorMessage = 'Camera access blocked for security reasons. Please use HTTPS or check browser settings.';
+      } else if (err.message?.includes('not supported')) {
+        errorMessage = 'Camera access not supported in this browser.';
+      } else {
+        errorMessage = `Camera error: ${err.message || 'Unknown error'}`;
+      }
+      
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
