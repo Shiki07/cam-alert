@@ -508,8 +508,16 @@ export const useNetworkCamera = () => {
             }
           } catch (testError) {
             console.warn(`useNetworkCamera: Connection test error on attempt ${testAttempt}:`, testError);
+            
+            // If CORS error, try to proceed anyway - the actual stream might work
+            if (testError.message.includes('CORS') || testError.message.includes('NetworkError')) {
+              console.log('useNetworkCamera: CORS detected, but attempting stream connection anyway');
+              connectionTestPassed = true;
+              break;
+            }
+            
             if (testAttempt < 3) {
-              await new Promise(resolve => setTimeout(resolve, 3000 * testAttempt)); // Increasing delay
+              await new Promise(resolve => setTimeout(resolve, 2000)); // Faster retry for connection issues
             }
           }
         }
