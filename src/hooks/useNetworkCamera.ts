@@ -65,13 +65,24 @@ export const useNetworkCamera = () => {
   };
 
   const getProxiedUrl = useCallback(async (originalUrl: string) => {
-    // Try direct connection first for better compatibility
+    // Always use proxy for HTTP cameras on HTTPS sites
     const shouldUseProxy = originalUrl.startsWith('http://') && window.location.protocol === 'https:';
     
     if (shouldUseProxy) {
-      // For mixed content (HTTP on HTTPS), try direct first since many browsers allow img elements
-      console.log('useNetworkCamera: Attempting direct connection despite mixed content');
-      return { url: originalUrl, headers: {} };
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Authentication required');
+      }
+      
+      // Include the auth token as a URL parameter for img elements
+      const proxyUrl = new URL('https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy');
+      proxyUrl.searchParams.set('url', originalUrl);
+      proxyUrl.searchParams.set('token', session.access_token);
+      
+      return { 
+        url: proxyUrl.toString(),
+        headers: {} // No headers needed since token is in URL
+      };
     }
     
     return { url: originalUrl, headers: {} };
