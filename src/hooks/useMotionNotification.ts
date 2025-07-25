@@ -52,9 +52,22 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
           attachmentData,
           attachmentType,
           timestamp: new Date().toISOString(),
-          motionLevel
+          motionLevel,
+          duration: 'Unknown'
         }
       });
+
+      // Update motion event to mark email as sent
+      const { data: user } = await supabase.auth.getUser();
+      if (user.user) {
+        await supabase
+          .from('motion_events')
+          .update({ email_sent: true })
+          .eq('user_id', user.user.id)
+          .gte('detected_at', new Date(Date.now() - 30000).toISOString()) // Last 30 seconds
+          .order('detected_at', { ascending: false })
+          .limit(1);
+      }
 
       if (error) {
         console.error('Error sending motion alert:', error);
