@@ -326,7 +326,7 @@ export const useNetworkCamera = () => {
           const testResponse = await fetch(finalUrl, { 
             method: 'HEAD',
             headers,
-            signal: AbortSignal.timeout(10000)
+            signal: AbortSignal.timeout(30000) // Increase timeout to 30 seconds
           });
           
           if (!testResponse.ok) {
