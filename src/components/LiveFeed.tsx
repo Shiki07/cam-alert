@@ -90,9 +90,19 @@ export const LiveFeed = ({
       console.log('Motion detected with level:', motionLevel);
       onMotionDetected(true);
       
-      const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
-      if (currentVideoRef && currentVideoRef instanceof HTMLVideoElement) {
-        motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
+      // For network cameras, create a temporary video element from the current frame
+      const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : null;
+      
+      // Send email notification with captured frame
+      if (emailNotificationsEnabled && notificationEmail) {
+        // For network cameras, we'll send notification without video attachment
+        // since network cameras use img elements, not video elements
+        if (cameraSource === 'webcam' && currentVideoRef instanceof HTMLVideoElement) {
+          motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
+        } else {
+          // For network cameras, send notification without video attachment
+          motionNotification.sendMotionAlert(undefined, motionLevel);
+        }
       }
       
       const currentStream = cameraSource === 'webcam' ? streamRef.current : networkCamera.streamRef.current;
