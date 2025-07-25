@@ -25,6 +25,7 @@ interface LiveFeedProps {
   scheduleEnabled: boolean;
   startHour: number;
   endHour: number;
+  onConnectionChange?: (connected: boolean) => void;
 }
 
 export const LiveFeed = ({ 
@@ -40,7 +41,8 @@ export const LiveFeed = ({
   motionThreshold,
   scheduleEnabled,
   startHour,
-  endHour
+  endHour,
+  onConnectionChange
 }: LiveFeedProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -171,6 +173,7 @@ export const LiveFeed = ({
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsConnected(true);
+        onConnectionChange?.(true);
         
         videoRef.current.onloadedmetadata = () => {
           if (motionDetectionEnabled && videoRef.current) {
@@ -226,6 +229,7 @@ export const LiveFeed = ({
     }
     
     setIsConnected(false);
+    onConnectionChange?.(false);
   };
 
   const handleRecordingToggle = () => {
@@ -289,6 +293,7 @@ export const LiveFeed = ({
       const checkConnection = () => {
         if (networkCamera.isConnected) {
           setIsConnected(true);
+          onConnectionChange?.(true);
           setError(null);
           console.log('LiveFeed: Successfully connected to network camera');
           toast({
@@ -299,6 +304,7 @@ export const LiveFeed = ({
           const errorMsg = networkCamera.connectionError;
           setError(errorMsg);
           setIsConnected(false);
+          onConnectionChange?.(false);
           console.error('LiveFeed: Failed to connect:', networkCamera.connectionError);
           toast({
             title: "Connection failed",
@@ -319,6 +325,7 @@ export const LiveFeed = ({
       const errorMsg = error instanceof Error ? error.message : 'Connection failed';
       setError(errorMsg);
       setIsConnected(false);
+      onConnectionChange?.(false);
       toast({
         title: "Connection error",
         description: errorMsg,
@@ -373,17 +380,23 @@ export const LiveFeed = ({
   // Monitor network camera connection state
   useEffect(() => {
     if (cameraSource === 'network') {
+      const wasConnected = isConnected;
       setIsConnected(networkCamera.isConnected);
       setError(networkCamera.connectionError);
       
-      if (networkCamera.isConnected && !isConnected) {
+      // Notify parent of connection state change
+      if (networkCamera.isConnected !== wasConnected) {
+        onConnectionChange?.(networkCamera.isConnected);
+      }
+      
+      if (networkCamera.isConnected && !wasConnected) {
         toast({
           title: "Camera connected!",
           description: `Successfully connected to ${networkCamera.currentConfig?.name}`,
         });
       }
     }
-  }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast]);
+  }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast, onConnectionChange]);
 
   return (
     <div className="space-y-6">

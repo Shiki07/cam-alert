@@ -22,6 +22,10 @@ interface CameraGridProps {
   scheduleEnabled: boolean;
   startHour: number;
   endHour: number;
+  
+  // Connection Props
+  isConnected?: boolean;
+  onConnectionChange?: (connected: boolean) => void;
 
 
   // Settings Props
@@ -62,6 +66,8 @@ export const CameraGrid = ({
   scheduleEnabled,
   startHour,
   endHour,
+  isConnected = false,
+  onConnectionChange,
   onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
@@ -100,13 +106,14 @@ export const CameraGrid = ({
           scheduleEnabled={scheduleEnabled}
           startHour={startHour}
           endHour={endHour}
+          onConnectionChange={onConnectionChange}
         />
       </div>
       
       {/* Controls Column */}
       <div className="lg:col-span-1 space-y-6">
         <SystemStatus
-          cameraConnected={true}
+          cameraConnected={isConnected}
         />
         
         {/* Add DuckDNS Settings */}
@@ -123,6 +130,8 @@ export const CameraGrid = ({
           isRecording={isRecording} 
           onToggleRecording={onToggleRecording}
           quality={quality}
+          isConnected={isConnected}
+          storageType={storageType}
         />
         
         <MotionDetection 

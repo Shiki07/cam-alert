@@ -51,18 +51,18 @@ export const AdvancedMotionSettings = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <Card className="bg-gray-800 border-gray-700">
+    <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="text-white flex items-center justify-between">
+        <CardTitle className="text-foreground flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Target className="w-5 h-5" />
+            <Target className="w-5 h-5 text-primary" />
             Advanced Motion Detection
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-gray-400 hover:text-white"
+            className="text-muted-foreground hover:text-foreground"
           >
             {isExpanded ? "−" : "+"}
           </Button>
@@ -75,8 +75,8 @@ export const AdvancedMotionSettings = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-yellow-400" />
-                <Label className="text-gray-300">
+                <Zap className="w-4 h-4 text-accent" />
+                <Label className="text-foreground">
                   Sensitivity: {sensitivity}%
                 </Label>
               </div>
@@ -88,14 +88,14 @@ export const AdvancedMotionSettings = ({
                 step={5}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-gray-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Low (10%)</span>
                 <span>High (100%)</span>
               </div>
             </div>
 
             <div className="space-y-3">
-              <Label className="text-gray-300">
+              <Label className="text-foreground">
                 Detection Threshold: {threshold.toFixed(1)}%
               </Label>
               <Slider
@@ -106,7 +106,7 @@ export const AdvancedMotionSettings = ({
                 step={0.1}
                 className="w-full"
               />
-              <div className="flex justify-between text-xs text-gray-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Very Sensitive (0.1%)</span>
                 <span>Less Sensitive (5.0%)</span>
               </div>

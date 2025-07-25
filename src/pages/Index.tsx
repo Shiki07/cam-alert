@@ -1,4 +1,5 @@
 
+import { useState } from "react";
 import { RecordingHistory } from "@/components/RecordingHistory";
 import { CameraGrid } from "@/components/CameraGrid";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -7,6 +8,7 @@ import { useCameraSettings } from "@/hooks/useCameraSettings";
 import { useEmailSettings } from "@/hooks/useEmailSettings";
 
 const Index = () => {
+  const [isConnected, setIsConnected] = useState(false);
   const {
     // State
     isRecording,
@@ -91,6 +93,8 @@ const Index = () => {
             onMinDurationChange={handleMinDurationChange}
             noiseReduction={noiseReduction}
             onNoiseReductionToggle={toggleNoiseReduction}
+            isConnected={isConnected}
+            onConnectionChange={setIsConnected}
           />
           
           {/* Recording History - Full width */}
