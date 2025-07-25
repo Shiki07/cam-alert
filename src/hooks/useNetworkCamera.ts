@@ -16,13 +16,19 @@ export const useNetworkCamera = () => {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [currentConfig, setCurrentConfig] = useState<NetworkCameraConfig | null>(null);
+  const [connectionQuality, setConnectionQuality] = useState<'excellent' | 'good' | 'poor' | 'disconnected'>('disconnected');
   const videoRef = useRef<HTMLVideoElement | HTMLImageElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const isActiveRef = useRef(false);
   const fetchControllerRef = useRef<AbortController | null>(null);
+  const lastFrameTimeRef = useRef<number>(Date.now());
+  const frameCountRef = useRef<number>(0);
+  const bufferSizeRef = useRef<number>(0);
+  const blobUrlsRef = useRef<Set<string>>(new Set());
 
   const isLocalNetwork = (url: string) => {
     try {
@@ -97,11 +103,26 @@ export const useNetworkCamera = () => {
       readerRef.current = null;
     }
     
-    // Clear reconnect timeout
+    // Clear timeouts
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
+    
+    if (heartbeatRef.current) {
+      clearTimeout(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+    
+    // Cleanup all blob URLs
+    blobUrlsRef.current.forEach(url => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.log('useNetworkCamera: Error revoking blob URL:', error);
+      }
+    });
+    blobUrlsRef.current.clear();
     
     // Clean up image element
     if (videoRef.current && videoRef.current instanceof HTMLImageElement) {
@@ -110,17 +131,23 @@ export const useNetworkCamera = () => {
       }
       videoRef.current.src = '';
     }
+    
+    // Reset counters
+    frameCountRef.current = 0;
+    bufferSizeRef.current = 0;
+    lastFrameTimeRef.current = Date.now();
   }, []);
 
   const parseMJPEGStream = useCallback(async (reader: ReadableStreamDefaultReader<Uint8Array>, imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
     let buffer = new Uint8Array(0);
     let frameCount = 0;
     let lastFrameTime = Date.now();
-    let lastActivityTime = Date.now();
+    let lastQualityCheck = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 1024 * 1024; // Reduce buffer size to 1MB
-    const maxFramesPerSession = 1000; // Limit frames per session to prevent memory buildup
+    const maxBufferSize = 100 * 1024; // Limit buffer to 100KB
+    const maxFramesPerSession = 500; // Limit frames per session to prevent memory buildup
+    const minFrameInterval = 33; // ~30 FPS max to prevent overwhelming
     
     readerRef.current = reader;
     
@@ -171,8 +198,8 @@ export const useNetworkCamera = () => {
           return;
         }
 
-        // Update last activity time
-        lastActivityTime = Date.now();
+        // Update last quality check time
+        lastQualityCheck = Date.now();
 
         // Reset consecutive errors on successful read
         consecutiveErrors = 0;
@@ -215,13 +242,39 @@ export const useNetworkCamera = () => {
             continue;
           }
           
+          // Throttle frame updates to prevent overwhelming the browser
+          const now = Date.now();
+          if (now - lastFrameTimeRef.current < minFrameInterval) {
+            buffer = buffer.slice(jpegEnd + 2);
+            framesProcessed++;
+            continue;
+          }
+          lastFrameTimeRef.current = now;
+          
           // Create blob URL and display frame
           const blob = new Blob([jpegFrame], { type: 'image/jpeg' });
           const frameUrl = URL.createObjectURL(blob);
           
+          // Track blob URLs for cleanup
+          blobUrlsRef.current.add(frameUrl);
+          
+          // Cleanup old blob URLs to prevent memory leaks
+          if (blobUrlsRef.current.size > 10) {
+            const urlsArray = Array.from(blobUrlsRef.current);
+            const oldUrls = urlsArray.slice(0, -5); // Keep only last 5
+            oldUrls.forEach(url => {
+              URL.revokeObjectURL(url);
+              blobUrlsRef.current.delete(url);
+            });
+          }
+          
           // Update image source
           if (imgElement.src && imgElement.src.startsWith('blob:')) {
-            URL.revokeObjectURL(imgElement.src);
+            const oldUrl = imgElement.src;
+            if (blobUrlsRef.current.has(oldUrl)) {
+              URL.revokeObjectURL(oldUrl);
+              blobUrlsRef.current.delete(oldUrl);
+            }
           }
           imgElement.src = frameUrl;
           
@@ -242,10 +295,10 @@ export const useNetworkCamera = () => {
             setReconnectAttempts(0);
           }
           
-          const now = Date.now();
-          if (now - lastFrameTime > 10000) { // Log every 10 seconds
+          const currentTime = Date.now();
+          if (currentTime - lastFrameTime > 10000) { // Log every 10 seconds
             console.log(`useNetworkCamera: Processed ${frameCount} frames, latest size: ${jpegFrame.length}, buffer size: ${buffer.length}`);
-            lastFrameTime = now;
+            lastFrameTime = currentTime;
           }
           
           // Reset reconnect attempts on successful frame processing
@@ -634,6 +687,7 @@ export const useNetworkCamera = () => {
     connectionError,
     isConnected,
     currentConfig,
+    connectionQuality,
     videoRef,
     streamRef,
     reconnectAttempts,
