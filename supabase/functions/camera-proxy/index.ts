@@ -118,17 +118,22 @@ serve(async (req) => {
   }
 
   try {
+    // Get URL parameters first
+    const url = new URL(req.url);
+    const targetUrl = url.searchParams.get('url');
+    const tokenParam = url.searchParams.get('token');
+    
     // Get the authorization from header OR query parameter (for img elements)
     const authHeader = req.headers.get('authorization');
-    const url = new URL(req.url);
-    const tokenParam = url.searchParams.get('token');
     
     let jwt: string | null = null;
     
     if (authHeader && authHeader.startsWith('Bearer ')) {
       jwt = authHeader.replace('Bearer ', '');
+      console.log('Camera proxy: Using Authorization header for authentication');
     } else if (tokenParam) {
       jwt = tokenParam;
+      console.log('Camera proxy: Using URL parameter for authentication');
     }
     
     if (!jwt) {
@@ -184,10 +189,6 @@ serve(async (req) => {
         }
       );
     }
-
-    // Get the target URL from query parameters
-    const url = new URL(req.url);
-    const targetUrl = url.searchParams.get('url');
     
     if (!targetUrl) {
       return new Response(
