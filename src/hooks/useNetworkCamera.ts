@@ -467,8 +467,8 @@ export const useNetworkCamera = () => {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
-      // Wait for the DOM to be ready
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Minimal delay for DOM readiness
+      await new Promise(resolve => setTimeout(resolve, 100));
       
       if (!videoRef.current) {
         console.error('useNetworkCamera: Video element not available - videoRef.current is null');
@@ -501,45 +501,9 @@ export const useNetworkCamera = () => {
         const isLocal = isLocalNetwork(config.url);
         console.log('useNetworkCamera: Is local network camera:', isLocal);
 
-        // Test connection with multiple attempts
-        console.log('useNetworkCamera: Testing connection...');
-        let connectionTestPassed = false;
-        
-        for (let testAttempt = 1; testAttempt <= 3; testAttempt++) {
-          try {
-            console.log(`useNetworkCamera: Connection test attempt ${testAttempt}/3`);
-            
-            const testResponse = await fetch(finalUrl, { 
-              method: 'HEAD',
-              headers,
-              signal: AbortSignal.timeout(20000) // 20 seconds per attempt
-            });
-            
-            if (testResponse.ok) {
-              console.log(`useNetworkCamera: Connection test passed on attempt ${testAttempt}`);
-              connectionTestPassed = true;
-              break;
-            } else {
-              console.warn(`useNetworkCamera: Connection test failed on attempt ${testAttempt}: ${testResponse.status} ${testResponse.statusText}`);
-              if (testAttempt < 3) {
-                await new Promise(resolve => setTimeout(resolve, 3000 * testAttempt)); // Increasing delay
-              }
-            }
-          } catch (testError) {
-            console.warn(`useNetworkCamera: Connection test error on attempt ${testAttempt}:`, testError);
-            
-            // If CORS error, try to proceed anyway - the actual stream might work
-            if (testError.message.includes('CORS') || testError.message.includes('NetworkError')) {
-              console.log('useNetworkCamera: CORS detected, but attempting stream connection anyway');
-              connectionTestPassed = true;
-              break;
-            }
-            
-            if (testAttempt < 3) {
-              await new Promise(resolve => setTimeout(resolve, 2000)); // Faster retry for connection issues
-            }
-          }
-        }
+        // Skip connection test for faster startup - proceed directly to stream
+        console.log('useNetworkCamera: Skipping connection test for faster startup');
+        let connectionTestPassed = true;
 
         if (!connectionTestPassed) {
           console.error('useNetworkCamera: All connection test attempts failed');
