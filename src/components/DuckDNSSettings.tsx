@@ -105,6 +105,19 @@ export const DuckDNSSettings = () => {
             </div>
 
             <div className="space-y-2">
+              <Label className="text-gray-300">Manual IP Override (Optional)</Label>
+              <Input
+                value={config.manualIP || ''}
+                onChange={(e) => updateConfig({ manualIP: e.target.value })}
+                placeholder="82.49.10.84 (leave empty for auto-detection)"
+                className="bg-gray-700 border-gray-600 text-white"
+              />
+              <p className="text-xs text-gray-400">
+                Enter your router's actual public IP address to override automatic detection
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label className="text-gray-300">DuckDNS Token</Label>
               <div className="flex gap-2">
                 <Input

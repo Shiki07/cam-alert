@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 export interface DuckDNSConfig {
   domain: string;
   enabled: boolean;
+  manualIP?: string;
 }
 
 export const useDuckDNS = () => {
@@ -14,17 +15,20 @@ export const useDuckDNS = () => {
         const parsed = JSON.parse(saved);
         return {
           domain: parsed.domain || '',
-          enabled: parsed.enabled || false
+          enabled: parsed.enabled || false,
+          manualIP: parsed.manualIP || ''
         };
       }
       return {
         domain: '',
-        enabled: false
+        enabled: false,
+        manualIP: ''
       };
     } catch {
       return {
         domain: '',
-        enabled: false
+        enabled: false,
+        manualIP: ''
       };
     }
   });
@@ -35,6 +39,12 @@ export const useDuckDNS = () => {
   const [error, setError] = useState<string | null>(null);
 
   const getCurrentIP = useCallback(async (): Promise<string | null> => {
+    // If manual IP override is set, use it instead of auto-detection
+    if (config.manualIP && config.manualIP.trim()) {
+      console.log(`Using manual IP override: ${config.manualIP}`);
+      return config.manualIP.trim();
+    }
+
     const ipServices = [
       'https://ipv4.icanhazip.com/',
       'https://api.ipify.org?format=text',
@@ -64,7 +74,7 @@ export const useDuckDNS = () => {
 
     console.error('Failed to get current IP from all sources');
     return null;
-  }, []);
+  }, [config.manualIP]);
 
   const updateDuckDNS = useCallback(async (ip: string): Promise<boolean> => {
     if (!config.domain) {
