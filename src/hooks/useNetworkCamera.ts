@@ -338,23 +338,10 @@ export const useNetworkCamera = () => {
   };
 
   const appendQualityParams = (url: string, quality?: string) => {
-    if (!quality) return url;
-    
-    try {
-      const urlObj = new URL(url);
-      const params = getQualityParams(quality);
-      
-      // Add quality parameters to URL (many IP cameras support these)
-      Object.entries(params).forEach(([key, value]) => {
-        urlObj.searchParams.set(key, value);
-      });
-      
-      console.log(`useNetworkCamera: Enhanced URL with ${quality} quality:`, urlObj.toString());
-      return urlObj.toString();
-    } catch (error) {
-      console.warn('useNetworkCamera: Failed to parse URL for quality enhancement:', error);
-      return url;
-    }
+    // Don't append quality params by default to avoid 404s on cameras that don't support them
+    // Quality will be handled by the client-side constraints instead
+    console.log(`useNetworkCamera: Quality setting ${quality} will be handled client-side, using original URL`);
+    return url;
   };
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
@@ -392,10 +379,10 @@ export const useNetworkCamera = () => {
       if (config.type === 'mjpeg') {
         console.log('useNetworkCamera: Setting up MJPEG stream');
         
-        // Build the stream URL with auth and quality params if needed
-        let streamUrl = appendQualityParams(config.url, config.quality);
-        console.log('useNetworkCamera: Original stream URL:', config.url);
-        console.log('useNetworkCamera: Enhanced stream URL with quality params:', streamUrl);
+        // Build the stream URL (quality will be handled client-side for MJPEG)
+        let streamUrl = config.url;
+        console.log('useNetworkCamera: Using original stream URL:', streamUrl);
+        console.log('useNetworkCamera: Quality will be handled client-side for MJPEG streams');
         
         if (config.username && config.password) {
           streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
