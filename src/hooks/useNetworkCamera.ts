@@ -198,36 +198,10 @@ export const useNetworkCamera = () => {
       imgElement.onload = handleLoad;
       imgElement.onerror = handleError;
       
-      // Use fetch with credentials to handle authentication properly
-      console.log('useNetworkCamera: Fetching stream with authentication:', proxiedUrl);
-      
-      // Create new AbortController for this fetch
-      fetchControllerRef.current = new AbortController();
-      
-      const response = await fetch(proxiedUrl, {
-        method: 'GET',
-        headers: {
-          ...headers,
-          'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
-          'Cache-Control': 'no-cache'
-        },
-        credentials: 'include', // Include cookies for authentication
-        signal: fetchControllerRef.current.signal
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      console.log('useNetworkCamera: Stream response received, creating blob URL');
-      
-      // Get the response as a blob and create a URL
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      blobUrlsRef.current.add(blobUrl);
-      
-      console.log('useNetworkCamera: Setting img src to blob URL');
-      imgElement.src = blobUrl;
+      // Direct approach - let the browser handle MJPEG natively
+      // The proxy already handles authentication via Authorization header
+      console.log('useNetworkCamera: Setting img src directly to proxy URL:', proxiedUrl);
+      imgElement.src = proxiedUrl;
       
       lastFrameTimeRef.current = Date.now();
       
