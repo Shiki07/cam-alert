@@ -31,21 +31,12 @@ export const useNetworkCamera = () => {
   const bufferSizeRef = useRef<number>(0);
   const blobUrlsRef = useRef<Set<string>>(new Set());
 
-  // Connection stabilizer for proactive monitoring
+  // Connection stabilizer for proactive monitoring (disabled to prevent unnecessary reconnections)
   const connectionStabilizer = useConnectionStabilizer({
-    enabled: isConnected,
-    checkInterval: 15000, // Check every 15 seconds
+    enabled: false, // Disabled - let stream handle its own resilience
+    checkInterval: 30000,
     onConnectionLost: () => {
-      console.log('ConnectionStabilizer: Detected connection loss, attempting recovery');
-      if (currentConfig && isActiveRef.current) {
-        setConnectionError('Network connection lost - attempting recovery...');
-        // Attempt reconnection after a short delay
-        setTimeout(() => {
-          if (isActiveRef.current) {
-            connectToCamera(currentConfig);
-          }
-        }, 2000);
-      }
+      console.log('ConnectionStabilizer: Connection issues detected');
     },
     onConnectionRestored: () => {
       console.log('ConnectionStabilizer: Connection restored');
@@ -226,17 +217,36 @@ export const useNetworkCamera = () => {
         const { done, value } = result;
         
         if (done) {
-          console.log('useNetworkCamera: Stream ended normally');
-          if (isActiveRef.current && reconnectAttempts < 3) { // Reduce max attempts
-            console.log('useNetworkCamera: Stream ended unexpectedly, attempting reconnection');
-            setConnectionError('Stream ended - attempting to reconnect...');
+          console.log('useNetworkCamera: Stream ended, attempting seamless recovery');
+          // Try to recover the stream without full reconnection
+          if (isActiveRef.current && reconnectAttempts < 2) {
+            console.log('useNetworkCamera: Attempting stream recovery');
             setReconnectAttempts(prev => prev + 1);
             
-            reconnectTimeoutRef.current = setTimeout(() => {
-              if (isActiveRef.current) {
-                connectToCamera(config);
+            // Quick recovery attempt - reuse existing connection
+            reconnectTimeoutRef.current = setTimeout(async () => {
+              if (isActiveRef.current && currentConfig) {
+                try {
+                  console.log('useNetworkCamera: Quick stream recovery');
+                  const { url, headers } = await getProxiedUrl(currentConfig.url);
+                  
+                  fetchControllerRef.current = new AbortController();
+                  const response = await fetch(url, {
+                    headers,
+                    signal: fetchControllerRef.current.signal,
+                    cache: 'no-cache'
+                  });
+                  
+                  if (response.ok && response.body) {
+                    const newReader = response.body.getReader();
+                    await parseMJPEGStream(newReader, imgElement, config);
+                  }
+                } catch (error) {
+                  console.log('useNetworkCamera: Quick recovery failed, using full reconnection');
+                  connectToCamera(config);
+                }
               }
-            }, 3000); // Increase reconnect delay
+            }, 1000); // Much faster recovery
           }
           return;
         }
@@ -389,35 +399,55 @@ export const useNetworkCamera = () => {
           return;
         }
         
-        // If too many consecutive errors, force restart
-        if (consecutiveErrors > 15) { // Increase tolerance
-          console.log('useNetworkCamera: Too many consecutive errors, forcing restart');
-          setConnectionError('Stream unstable - restarting...');
-          reconnectTimeoutRef.current = setTimeout(() => {
-            if (isActiveRef.current) {
-              connectToCamera(config);
-            }
-          }, 8000); // Longer delay before restart
+        // Classify error types for intelligent recovery
+        const isRecoverableError = error.name === 'TypeError' || 
+                                  error.message?.includes('timeout') ||
+                                  error.message?.includes('network') ||
+                                  error.message?.includes('Failed to fetch');
+        
+        const isFatalError = error.message?.includes('404') ||
+                           error.message?.includes('403') ||
+                           error.message?.includes('401') ||
+                           error.message?.includes('Authentication');
+        
+        // For fatal errors, stop immediately
+        if (isFatalError) {
+          console.log('useNetworkCamera: Fatal error detected, stopping stream');
+          setIsConnected(false);
+          setConnectionError(`Connection failed: ${error.message}`);
+          isActiveRef.current = false;
           return;
         }
         
-        // Check if we should attempt reconnection
-        if (reconnectAttempts < 3) { // Reduce max attempts
-          console.log(`useNetworkCamera: Attempting reconnection ${reconnectAttempts + 1}/3`);
-          setConnectionError('Connection interrupted - attempting to reconnect...');
+        // For recoverable errors, try quick recovery first
+        if (isRecoverableError && consecutiveErrors < 25) {
+          console.log(`useNetworkCamera: Recoverable error ${consecutiveErrors}/25, continuing stream`);
+          // Brief pause then continue processing without full reconnection
+          if (isActiveRef.current) {
+            setTimeout(() => {
+              if (isActiveRef.current) {
+                processChunk();
+              }
+            }, Math.min(100 * consecutiveErrors, 2000));
+          }
+          return;
+        }
+        
+        // Only perform full reconnection for persistent errors
+        if (consecutiveErrors > 25 && reconnectAttempts < 2) {
+          console.log('useNetworkCamera: Persistent errors, attempting full reconnection');
+          setConnectionError('Stream experiencing issues - recovering...');
           setReconnectAttempts(prev => prev + 1);
           
-          // Attempt reconnection after a delay
-          const delay = Math.min(3000 * Math.pow(1.5, reconnectAttempts), 15000); // More conservative backoff
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isActiveRef.current) {
               connectToCamera(config);
             }
-          }, delay);
-        } else {
-          console.log('useNetworkCamera: Max reconnection attempts reached or stream inactive');
+          }, 5000);
+        } else if (consecutiveErrors > 25) {
+          console.log('useNetworkCamera: Max recovery attempts reached');
           setIsConnected(false);
-          setConnectionError('Connection lost. Please try reconnecting manually.');
+          setConnectionError('Stream connection unstable. Please check camera and try reconnecting.');
           isActiveRef.current = false;
         }
       }
