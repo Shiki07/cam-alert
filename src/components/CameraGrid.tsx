@@ -23,9 +23,6 @@ interface CameraGridProps {
   startHour: number;
   endHour: number;
 
-  // System Status Props
-  motionEventsToday: number;
-  lastMotionTime: Date | null;
 
   // Settings Props
   onStorageTypeChange: (type: 'cloud' | 'local') => void;
@@ -65,8 +62,6 @@ export const CameraGrid = ({
   scheduleEnabled,
   startHour,
   endHour,
-  motionEventsToday,
-  lastMotionTime,
   onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
@@ -111,11 +106,7 @@ export const CameraGrid = ({
       {/* Controls Column */}
       <div className="lg:col-span-1 space-y-6">
         <SystemStatus
-          isConnected={true}
-          motionEventsToday={motionEventsToday}
-          storageUsed={256}
-          storageTotal={1024}
-          lastEventTime={lastMotionTime}
+          cameraConnected={true}
         />
         
         {/* Add DuckDNS Settings */}
@@ -137,7 +128,7 @@ export const CameraGrid = ({
           motionDetected={motionDetected}
           motionEnabled={motionDetectionEnabled}
           onToggleMotionDetection={onToggleMotionDetection}
-          lastMotionTime={lastMotionTime}
+          lastMotionTime={null}
         />
         
         <MotionSettings

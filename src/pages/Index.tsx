@@ -72,8 +72,6 @@ const Index = () => {
             scheduleEnabled={scheduleEnabled}
             startHour={startHour}
             endHour={endHour}
-            motionEventsToday={motionEventsToday}
-            lastMotionTime={lastMotionTime}
             onStorageTypeChange={setStorageType}
             onQualityChange={setQuality}
             onToggleRecording={toggleRecording}
