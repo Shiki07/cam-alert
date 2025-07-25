@@ -372,14 +372,14 @@ export const useNetworkCamera = () => {
         }
         
         // If too many consecutive errors, force restart
-        if (consecutiveErrors > 10) {
+        if (consecutiveErrors > 15) { // Increase tolerance
           console.log('useNetworkCamera: Too many consecutive errors, forcing restart');
           setConnectionError('Stream unstable - restarting...');
           reconnectTimeoutRef.current = setTimeout(() => {
             if (isActiveRef.current) {
               connectToCamera(config);
             }
-          }, 5000);
+          }, 8000); // Longer delay before restart
           return;
         }
         
