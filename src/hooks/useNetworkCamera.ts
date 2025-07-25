@@ -155,9 +155,9 @@ export const useNetworkCamera = () => {
     let lastMemoryCleanup = Date.now();
     let connectionEstablished = false;
     let consecutiveErrors = 0;
-    const maxBufferSize = 150 * 1024; // Optimized buffer size
-    const minFrameInterval = 33; // ~30 FPS for smooth playback
-    const memoryCleanupInterval = 60000; // Clean up memory every minute
+    const maxBufferSize = 64 * 1024; // Reduced buffer size to prevent memory issues
+    const minFrameInterval = 50; // ~20 FPS for stable playback
+    const memoryCleanupInterval = 30000; // More frequent memory cleanup
     
     readerRef.current = reader;
     
