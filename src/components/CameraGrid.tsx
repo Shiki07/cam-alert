@@ -106,6 +106,10 @@ export const CameraGrid = ({
           scheduleEnabled={scheduleEnabled}
           startHour={startHour}
           endHour={endHour}
+          detectionZonesEnabled={detectionZonesEnabled}
+          cooldownPeriod={cooldownPeriod}
+          minMotionDuration={minMotionDuration}
+          noiseReduction={noiseReduction}
           onConnectionChange={onConnectionChange}
         />
       </div>
