@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, Wifi, Plus, Trash2, TestTube, Globe } from 'lucide-react';
+import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope } from 'lucide-react';
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
+import { supabase } from '@/integrations/supabase/client';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
 
 export type CameraSource = 'webcam' | 'network';
@@ -39,8 +40,46 @@ export const CameraSourceSelector = ({
   });
   const [testingConnections, setTestingConnections] = useState<Set<number>>(new Set());
   const [connectingCameras, setConnectingCameras] = useState<Set<number>>(new Set());
+  const [runningDiagnostics, setRunningDiagnostics] = useState<Set<number>>(new Set());
+  const [diagnosticsResults, setDiagnosticsResults] = useState<{[key: number]: any}>({});
   
   const { getDuckDNSUrl, config } = useDuckDNS();
+
+  const runDiagnostics = async (camera: NetworkCameraConfig, index: number) => {
+    setRunningDiagnostics(prev => new Set(prev).add(index));
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('camera-diagnostics', {
+        body: { url: camera.url }
+      });
+      
+      if (error) {
+        console.error('Diagnostics error:', error);
+        setDiagnosticsResults(prev => ({
+          ...prev,
+          [index]: { error: error.message }
+        }));
+      } else {
+        console.log('Diagnostics results:', data);
+        setDiagnosticsResults(prev => ({
+          ...prev,
+          [index]: data
+        }));
+      }
+    } catch (err) {
+      console.error('Diagnostics failed:', err);
+      setDiagnosticsResults(prev => ({
+        ...prev,
+        [index]: { error: 'Diagnostics failed to run' }
+      }));
+    } finally {
+      setRunningDiagnostics(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(index);
+        return newSet;
+      });
+    }
+  };
 
   const handleAddCamera = () => {
     if (newCamera.name && newCamera.url && newCamera.type) {
@@ -245,52 +284,114 @@ export const CameraSourceSelector = ({
             {/* Camera List */}
             <div className="space-y-2">
               {networkCameras.map((camera, index) => (
-                <div key={index} className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-medium">{camera.name}</span>
-                      <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
-                        {camera.type.toUpperCase()}
-                      </span>
-                      {camera.url.includes('.duckdns.org') && (
-                        <span className="text-xs bg-green-600 text-green-100 px-2 py-1 rounded flex items-center gap-1">
-                          <Globe className="w-3 h-3" />
-                          DuckDNS
+                <div key={index} className="space-y-2">
+                  <div className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-medium">{camera.name}</span>
+                        <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
+                          {camera.type.toUpperCase()}
                         </span>
-                      )}
+                        {camera.url.includes('.duckdns.org') && (
+                          <span className="text-xs bg-green-600 text-green-100 px-2 py-1 rounded flex items-center gap-1">
+                            <Globe className="w-3 h-3" />
+                            DuckDNS
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">{camera.url}</div>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">{camera.url}</div>
+                    
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runDiagnostics(camera, index)}
+                        disabled={runningDiagnostics.has(index)}
+                        className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
+                        title="Run detailed diagnostics"
+                      >
+                        <Stethoscope className="w-4 h-4" />
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleTestConnection(camera, index)}
+                        disabled={testingConnections.has(index)}
+                        className="border-gray-600 text-gray-300 hover:bg-gray-600"
+                      >
+                        <TestTube className="w-4 h-4" />
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        onClick={() => handleConnectCamera(camera, index)}
+                        disabled={connectingCameras.has(index)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRemoveNetworkCamera(index)}
+                        className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                   
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleTestConnection(camera, index)}
-                      disabled={testingConnections.has(index)}
-                      className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                    >
-                      <TestTube className="w-4 h-4" />
-                    </Button>
-                    
-                    <Button
-                      size="sm"
-                      onClick={() => handleConnectCamera(camera, index)}
-                      disabled={connectingCameras.has(index)}
-                      className="bg-blue-600 hover:bg-blue-700"
-                    >
-                      {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
-                    </Button>
-                    
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => onRemoveNetworkCamera(index)}
-                      className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  {/* Diagnostics Results */}
+                  {diagnosticsResults[index] && (
+                    <div className="bg-gray-800 rounded-lg p-3 max-h-64 overflow-y-auto">
+                      {diagnosticsResults[index].error ? (
+                        <div className="text-red-400">
+                          Error: {diagnosticsResults[index].error}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="text-white font-medium flex items-center justify-between">
+                            <span>Diagnostics Results</span>
+                            <span className="text-xs text-gray-400">
+                              {diagnosticsResults[index].timestamp && new Date(diagnosticsResults[index].timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          
+                          {diagnosticsResults[index].summary && (
+                            <div className={`p-2 rounded text-sm ${
+                              diagnosticsResults[index].summary.overallSuccess 
+                                ? 'bg-green-900 text-green-300' 
+                                : 'bg-red-900 text-red-300'
+                            }`}>
+                              <div className="font-medium">
+                                {diagnosticsResults[index].summary.testsPassed}/{diagnosticsResults[index].summary.testsRun} tests passed
+                              </div>
+                              <div className="mt-1">{diagnosticsResults[index].summary.recommendation}</div>
+                            </div>
+                          )}
+                          
+                          {diagnosticsResults[index].tests && (
+                            <div className="space-y-1">
+                              {diagnosticsResults[index].tests.map((test: any, testIndex: number) => (
+                                <div key={testIndex} className="flex items-start gap-2 text-sm">
+                                  <span className={`w-2 h-2 rounded-full mt-2 ${test.success ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                  <div className="flex-1">
+                                    <div className="text-white">{test.name}</div>
+                                    <div className={`text-xs ${test.success ? 'text-green-400' : 'text-red-400'}`}>
+                                      {test.message || test.error}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
               
