@@ -286,20 +286,20 @@ serve(async (req) => {
       try {
         console.log(`Camera proxy: Starting fetch to ${targetUrl}`);
         
-        // Proxy the request with timeout and connection management
+        // Proxy the request with improved connection handling for MJPEG streams
         const response = await fetch(targetUrl, {
           method: req.method,
           headers: {
             'User-Agent': 'CamAlert-Proxy/1.0',
-            'Accept': req.method === 'HEAD' ? '*/*' : 'image/jpeg, multipart/x-mixed-replace, */*',
+            'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
             'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive', // Use keep-alive for better performance
-            'Pragma': 'no-cache',
-            'DNT': '1' // Do Not Track
+            'Connection': 'close', // Use close instead of keep-alive for more reliable connections
+            'Pragma': 'no-cache'
           },
           signal: controller.signal,
-          // Add redirect handling
-          redirect: 'follow'
+          redirect: 'follow',
+          // Add connection management
+          keepalive: false
         });
         
         console.log(`Camera proxy: Fetch completed, status: ${response.status}`);
