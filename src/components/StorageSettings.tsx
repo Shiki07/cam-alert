@@ -48,7 +48,11 @@ export const StorageSettings = ({
     }
 
     try {
-      const response = await fetch(`${piEndpoint}/health`);
+      // Ensure we use HTTP for local Pi connections
+      const endpoint = piEndpoint.startsWith('https://') 
+        ? piEndpoint.replace('https://', 'http://') 
+        : piEndpoint;
+      const response = await fetch(`${endpoint}/health`);
       const data = await response.json();
       
       toast({
@@ -151,7 +155,7 @@ export const StorageSettings = ({
           </Label>
           <div className="space-y-2">
             <Input
-              placeholder="http://192.168.1.100:3001"
+              placeholder="http://192.168.178.108:3002"
               value={piEndpoint}
               onChange={(e) => setPiEndpoint(e.target.value)}
               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
