@@ -15,7 +15,7 @@ app.use(express.json());
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     // Create Videos directory if it doesn't exist
-    const videosDir = '/media/pi/SD_CARD/Videos'; // Adjust path to your SD card mount point
+    const videosDir = './Videos'; // Using local directory for testing
     await fs.ensureDir(videosDir);
     cb(null, videosDir);
   },
