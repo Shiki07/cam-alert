@@ -13,33 +13,59 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
   const { toast } = useToast();
 
   const captureFrameAsBase64 = useCallback((videoElement: HTMLVideoElement): string => {
-    const canvas = document.createElement('canvas');
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return '';
-    
-    ctx.drawImage(videoElement, 0, 0);
-    
-    // Get base64 data without the data URL prefix
-    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-    return dataURL.split(',')[1];
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = videoElement.videoWidth;
+      canvas.height = videoElement.videoHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Failed to get canvas context for video frame capture');
+        return '';
+      }
+      
+      ctx.drawImage(videoElement, 0, 0);
+      
+      // Get base64 data without the data URL prefix
+      const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+      const base64Data = dataURL.split(',')[1];
+      console.log('Video frame captured successfully, size:', base64Data.length, 'characters');
+      return base64Data;
+    } catch (error) {
+      console.error('Error capturing video frame:', error);
+      return '';
+    }
   }, []);
 
   const captureImageAsBase64 = useCallback((imageElement: HTMLImageElement): string => {
-    const canvas = document.createElement('canvas');
-    canvas.width = imageElement.naturalWidth;
-    canvas.height = imageElement.naturalHeight;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return '';
-    
-    ctx.drawImage(imageElement, 0, 0);
-    
-    // Get base64 data without the data URL prefix
-    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-    return dataURL.split(',')[1];
+    try {
+      // Check if image is loaded
+      if (!imageElement.complete || !imageElement.naturalWidth || !imageElement.naturalHeight) {
+        console.error('Image not loaded or has no dimensions');
+        return '';
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = imageElement.naturalWidth;
+      canvas.height = imageElement.naturalHeight;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('Failed to get canvas context for image capture');
+        return '';
+      }
+      
+      ctx.drawImage(imageElement, 0, 0);
+      
+      // Get base64 data without the data URL prefix
+      const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+      const base64Data = dataURL.split(',')[1];
+      console.log('Network camera image captured successfully, size:', base64Data.length, 'characters');
+      return base64Data;
+    } catch (error) {
+      console.error('Error capturing network camera image:', error);
+      return '';
+    }
   }, []);
 
   const sendMotionAlert = useCallback(async (
@@ -58,12 +84,20 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
 
       // Capture frame if video element is provided and attachments are enabled
       if (videoElement && options.includeAttachment) {
+        console.log('Attempting to capture video frame for attachment');
         attachmentData = captureFrameAsBase64(videoElement);
         attachmentType = 'image';
       } else if (imageElement && options.includeAttachment) {
         // Capture frame from network camera image
+        console.log('Attempting to capture network camera image for attachment');
         attachmentData = captureImageAsBase64(imageElement);
         attachmentType = 'image';
+      }
+
+      if (attachmentData) {
+        console.log('Attachment captured successfully, including in email');
+      } else if (options.includeAttachment) {
+        console.log('Failed to capture attachment, sending email without image');
       }
 
       const { data, error } = await supabase.functions.invoke('send-motion-alert', {
