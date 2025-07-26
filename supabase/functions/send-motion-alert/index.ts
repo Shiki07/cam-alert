@@ -205,19 +205,43 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Add attachment if provided
     if (attachmentData && attachmentType) {
-      const buffer = Uint8Array.from(atob(attachmentData), c => c.charCodeAt(0));
-      const filename = `motion-${Date.now()}.${attachmentType === 'image' ? 'jpg' : 'webm'}`;
+      console.log(`Processing attachment: type=${attachmentType}, data length=${attachmentData.length}`);
       
-      emailData.attachments = [{
-        filename,
-        content: buffer,
-        type: attachmentType === 'image' ? 'image/jpeg' : 'video/webm',
-      }];
+      try {
+        const buffer = Uint8Array.from(atob(attachmentData), c => c.charCodeAt(0));
+        const filename = `motion-${Date.now()}.${attachmentType === 'image' ? 'jpg' : 'webm'}`;
+        
+        console.log(`Attachment converted to buffer: ${buffer.length} bytes, filename: ${filename}`);
+        
+        emailData.attachments = [{
+          filename,
+          content: buffer,
+          type: attachmentType === 'image' ? 'image/jpeg' : 'video/webm',
+        }];
+        
+        console.log('Attachment added to email data successfully');
+      } catch (error) {
+        console.error('Error processing attachment:', error);
+        // Continue without attachment if there's an error
+      }
+    } else {
+      console.log('No attachment data provided');
     }
 
     const emailResponse = await resend.emails.send(emailData);
     
+    if (emailResponse.error) {
+      console.error('Resend API error:', emailResponse.error);
+      throw new Error(`Email sending failed: ${emailResponse.error.message}`);
+    }
+    
     console.log(`Motion alert email sent successfully for user: ${user.id}, email ID: ${emailResponse.data?.id}`);
+    
+    if (attachmentData) {
+      console.log('Email sent WITH attachment');
+    } else {
+      console.log('Email sent WITHOUT attachment');
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 
