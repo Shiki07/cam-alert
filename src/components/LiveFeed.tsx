@@ -144,7 +144,12 @@ export const LiveFeed = ({
       // Send email notification for network cameras
       if (emailNotificationsEnabled && notificationEmail) {
         console.log('Sending motion alert for network camera');
-        motionNotification.sendMotionAlert(undefined, motionLevel);
+        const currentImageRef = networkCamera.videoRef.current;
+        if (currentImageRef instanceof HTMLImageElement) {
+          motionNotification.sendMotionAlert(undefined, motionLevel, currentImageRef);
+        } else {
+          motionNotification.sendMotionAlert(undefined, motionLevel);
+        }
       }
     },
     onMotionCleared: () => {

@@ -27,9 +27,25 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
     return dataURL.split(',')[1];
   }, []);
 
+  const captureImageAsBase64 = useCallback((imageElement: HTMLImageElement): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = imageElement.naturalWidth;
+    canvas.height = imageElement.naturalHeight;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    
+    ctx.drawImage(imageElement, 0, 0);
+    
+    // Get base64 data without the data URL prefix
+    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+    return dataURL.split(',')[1];
+  }, []);
+
   const sendMotionAlert = useCallback(async (
     videoElement?: HTMLVideoElement,
-    motionLevel?: number
+    motionLevel?: number,
+    imageElement?: HTMLImageElement
   ) => {
     if (!options.enabled || !options.email) {
       console.log('Motion notifications disabled or no email provided');
@@ -43,6 +59,10 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
       // Capture frame if video element is provided and attachments are enabled
       if (videoElement && options.includeAttachment) {
         attachmentData = captureFrameAsBase64(videoElement);
+        attachmentType = 'image';
+      } else if (imageElement && options.includeAttachment) {
+        // Capture frame from network camera image
+        attachmentData = captureImageAsBase64(imageElement);
         attachmentType = 'image';
       }
 
@@ -93,7 +113,7 @@ export const useMotionNotification = (options: MotionNotificationOptions) => {
         variant: "destructive"
       });
     }
-  }, [options, captureFrameAsBase64, toast]);
+  }, [options, captureFrameAsBase64, captureImageAsBase64, toast]);
 
   return {
     sendMotionAlert
