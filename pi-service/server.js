@@ -15,7 +15,7 @@ app.use(express.json());
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
     // Create Videos directory if it doesn't exist
-    const videosDir = './Videos'; // Using local directory for testing
+    const videosDir = '/home/ale/Videos'; // SD card mount point
     await fs.ensureDir(videosDir);
     cb(null, videosDir);
   },
@@ -40,7 +40,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'running',
     timestamp: new Date().toISOString(),
-    videosPath: '/media/pi/SD_CARD/Videos'
+    videosPath: '/home/ale/Videos'
   });
 });
 
@@ -70,7 +70,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     };
 
     // Save upload log
-    const logPath = '/media/pi/SD_CARD/Videos/upload_log.json';
+    const logPath = '/home/ale/Videos/upload_log.json';
     let logs = [];
     
     try {
@@ -106,7 +106,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // Get recordings list
 app.get('/recordings', async (req, res) => {
   try {
-    const videosDir = '/media/pi/SD_CARD/Videos';
+    const videosDir = '/home/ale/Videos';
     const files = await fs.readdir(videosDir);
     
     const recordings = files
@@ -126,7 +126,7 @@ app.get('/recordings', async (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎥 CamAlert Pi Service running on port ${PORT}`);
-  console.log(`📁 Videos will be saved to: /media/pi/SD_CARD/Videos`);
+  console.log(`📁 Videos will be saved to: /home/ale/Videos`);
   console.log(`🌐 Access at: http://YOUR_PI_IP:${PORT}`);
   console.log('\n📋 Available endpoints:');
   console.log(`   GET  /health - Health check`);
