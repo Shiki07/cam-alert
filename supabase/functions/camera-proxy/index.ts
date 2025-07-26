@@ -223,28 +223,49 @@ serve(async (req) => {
 
     console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
 
-    // First, try to resolve DNS for better error reporting
+    // Enhanced connectivity test with more detailed diagnostics
     try {
       const urlObj = new URL(targetUrl);
-      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}`);
+      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}:${urlObj.port || '8081'}`);
       
-      // Try a simple DNS resolution test with a quick timeout
+      // First try a basic DNS lookup using a different method
+      try {
+        const dnsTest = await fetch(`https://dns.google/resolve?name=${urlObj.hostname}&type=A`);
+        const dnsResult = await dnsTest.json();
+        console.log(`Camera proxy: DNS lookup result:`, dnsResult);
+        
+        if (dnsResult.Status !== 0) {
+          console.warn(`Camera proxy: DNS resolution failed for ${urlObj.hostname}`);
+        }
+      } catch (dnsError) {
+        console.log(`Camera proxy: DNS lookup failed:`, dnsError.message);
+      }
+      
+      // Try a simple connectivity test with very short timeout
       const testController = new AbortController();
-      const testTimeout = setTimeout(() => testController.abort(), 5000);
+      const testTimeout = setTimeout(() => testController.abort(), 3000); // 3 second timeout
       
       try {
-        const testResponse = await fetch(`http://${urlObj.hostname}`, {
+        const testResponse = await fetch(`http://${urlObj.hostname}:${urlObj.port || '8081'}`, {
           method: 'HEAD',
-          signal: testController.signal
+          signal: testController.signal,
+          headers: {
+            'User-Agent': 'CamAlert-ConnTest/1.0'
+          }
         });
         clearTimeout(testTimeout);
-        console.log(`Camera proxy: DNS/connectivity test - response received from ${urlObj.hostname}`);
+        console.log(`Camera proxy: Connectivity test successful - Status: ${testResponse.status}`);
       } catch (testError) {
         clearTimeout(testTimeout);
-        console.log(`Camera proxy: DNS/connectivity test failed for ${urlObj.hostname}:`, testError.message);
+        console.log(`Camera proxy: Connectivity test failed for ${urlObj.hostname}:${urlObj.port || '8081'}:`, testError.message);
+        
+        // If connectivity test fails, provide detailed error message
+        if (testError.name === 'AbortError') {
+          console.warn(`Camera proxy: Connection timeout - camera may be offline or network unreachable`);
+        }
       }
     } catch (e) {
-      console.log(`Camera proxy: Pre-test failed:`, e.message);
+      console.log(`Camera proxy: Pre-test setup failed:`, e.message);
     }
 
     // Retry logic for unreliable connections

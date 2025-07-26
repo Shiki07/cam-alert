@@ -296,21 +296,45 @@ export const useNetworkCamera = () => {
       imgElement.onerror = (error) => {
         console.error('useNetworkCamera: Image load error:', error);
         
-        if (isActiveRef.current && reconnectAttempts < 10) {
+        // Don't retry immediately if we're already retrying
+        if (isActiveRef.current && reconnectAttempts < 3) { // Reduced max retries
           setReconnectAttempts(prev => prev + 1);
-          console.log(`useNetworkCamera: Retrying connection (attempt ${reconnectAttempts + 1}/10)`);
+          console.log(`useNetworkCamera: Retrying connection (attempt ${reconnectAttempts + 1}/3)`);
           
-          // Progressive backoff: 1s, 2s, 3s, then 5s
-          const delay = reconnectAttempts < 3 ? (reconnectAttempts + 1) * 1000 : 5000;
+          // Much longer delays for network issues
+          const delay = reconnectAttempts === 0 ? 3000 : Math.min(10000, 5000 * reconnectAttempts);
           
           setTimeout(() => {
             if (isActiveRef.current) {
-              imgElement.src = proxiedUrl + '&t=' + Date.now(); // Cache bust
+              // Add more cache-busting parameters
+              const timestamp = Date.now();
+              const refreshUrl = proxiedUrl.includes('?') 
+                ? `${proxiedUrl}&t=${timestamp}&retry=${reconnectAttempts + 1}`
+                : `${proxiedUrl}?t=${timestamp}&retry=${reconnectAttempts + 1}`;
+              
+              console.log(`useNetworkCamera: Attempting reconnection with URL: ${refreshUrl}`);
+              imgElement.src = refreshUrl;
             }
           }, delay);
         } else {
-          setConnectionError('Camera connection lost after multiple retries');
+          // After multiple failures, show detailed error message
+          let errorMsg = 'Camera connection failed after multiple attempts';
+          
+          // Check if it's a DuckDNS domain issue
+          if (config.url.includes('duckdns.org')) {
+            errorMsg = `DuckDNS camera at ${config.url} appears to be offline or unreachable. Please check:
+            
+1. Is your camera/server running and accessible on your local network?
+2. Is your DuckDNS domain pointing to the correct IP address?
+3. Is port ${config.url.split(':')[2] || '8081'} open and forwarded correctly?
+4. Is your internet connection stable?
+
+You can test by accessing ${config.url} directly in your browser.`;
+          }
+          
+          setConnectionError(errorMsg);
           setIsConnected(false);
+          setIsConnecting(false);
           isActiveRef.current = false;
         }
       };
