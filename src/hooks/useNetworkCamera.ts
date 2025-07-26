@@ -290,16 +290,23 @@ export const useNetworkCamera = () => {
 
       console.log('useNetworkCamera: Using fetch to bypass browser OpaqueResponseBlocking...');
       
-      // Use fetch to get the stream data and create blob URLs
+      // Get current session for authentication
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Authentication session required');
+      }
+      
+      // Use fetch to get the stream data with proper authentication
       const response = await fetch(proxiedUrl, {
         method: 'GET',
         signal: controller.signal,
         headers: {
+          'Authorization': `Bearer ${session.access_token}`,
           'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
           'Cache-Control': 'no-cache',
           'Pragma': 'no-cache'
         },
-        credentials: 'omit' // Don't send cookies to avoid third-party cookie issues
+        credentials: 'omit' // Omit cookies but keep authorization header
       });
 
       if (!response.ok) {
