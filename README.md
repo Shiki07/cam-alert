@@ -1,91 +1,455 @@
-This project is under construction, please wait until it's finished to use it!!!
-# CamAlert - Remote Camera Monitoring System
+# CamAlert - Smart Camera Monitoring System
 
-A comprehensive web-based camera monitoring system built with React, TypeScript, and Supabase. Monitor multiple network cameras, detect motion, receive alerts, and manage recordings from anywhere.
+A powerful web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
 
-## Features
+## 🎯 Features
 
-- 🎥 **Multi-Camera Support** - Connect and monitor multiple IP cameras simultaneously
-- 🔍 **Motion Detection** - AI-powered motion detection with customizable sensitivity
-- 📧 **Email Alerts** - Receive instant notifications when motion is detected
-- 📹 **Recording Management** - Automatic recording with cloud and local storage options
-- 🔐 **Secure Authentication** - User authentication and access control
-- 📱 **Responsive Design** - Works on desktop, tablet, and mobile devices
-- ⏰ **Scheduled Monitoring** - Set specific hours for motion detection
-- 🎛️ **Advanced Settings** - Fine-tune detection zones, cooldown periods, and more
+- **Multi-Camera Support**: Monitor multiple IP cameras simultaneously
+- **Motion Detection**: AI-powered motion detection with customizable sensitivity
+- **Email Alerts**: Instant notifications with motion snapshots
+- **Raspberry Pi Storage**: Automatic recording sync to Pi's SD card
+- **Mobile App**: Native iOS/Android app with direct device storage
+- **Secure Authentication**: User accounts with secure access
+- **Real-time Monitoring**: Live camera feeds with overlay controls
+- **Recording Management**: Manual and automatic recording capabilities
 
-## Prerequisites
+---
 
-Before setting up CamAlert, ensure you have:
+## 📋 Prerequisites
 
-- **Node.js** (v18 or higher) - [Download here](https://nodejs.org/)
-- **npm** or **yarn** package manager
-- **Supabase Account** - [Sign up here](https://supabase.com/)
-- **Resend Account** (for email notifications) - [Sign up here](https://resend.com/)
-- **Network Camera(s)** - IP cameras with MJPEG, RTSP, or HLS streaming capabilities
+- **Raspberry Pi** (3B+ or newer recommended) with SD card
+- **IP Cameras** (RTSP/HTTP streams supported)
+- **Node.js** 18+ and npm
+- **Supabase Account** (free tier available)
+- **Resend Account** (for email notifications)
 
-## Quick Start
+---
 
-### 1. Clone the Repository
+## 🍓 Raspberry Pi Setup
+
+### Step 1: Prepare Your Raspberry Pi
+
+1. **Install Raspberry Pi OS**:
+   ```bash
+   # Flash Raspberry Pi OS to SD card using Raspberry Pi Imager
+   # Enable SSH and configure WiFi during setup
+   ```
+
+2. **Update System**:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install nodejs npm git -y
+   ```
+
+3. **Create Videos Directory**:
+   ```bash
+   # Create directory on SD card for recordings
+   sudo mkdir -p /media/pi/SD_CARD/Videos
+   sudo chown pi:pi /media/pi/SD_CARD/Videos
+   
+   # Or if using internal storage:
+   mkdir -p /home/pi/Videos
+   ```
+
+### Step 2: Install CamAlert Pi Service
+
+1. **Clone and Setup**:
+   ```bash
+   # Transfer pi-service folder to your Pi
+   scp -r pi-service/ pi@YOUR_PI_IP:~/camalert-pi-service/
+   
+   # SSH into Pi
+   ssh pi@YOUR_PI_IP
+   cd ~/camalert-pi-service
+   
+   # Install dependencies
+   npm install
+   ```
+
+2. **Configure Storage Path**:
+   ```bash
+   # Edit server.js to match your SD card mount point
+   nano server.js
+   
+   # Update this line:
+   const videosDir = '/media/pi/SD_CARD/Videos'; // Your actual path
+   ```
+
+3. **Start Pi Service**:
+   ```bash
+   # Test run
+   npm start
+   
+   # Or with auto-restart for development
+   npm run dev
+   ```
+
+4. **Make Service Auto-Start** (Optional):
+   ```bash
+   # Create systemd service
+   sudo nano /etc/systemd/system/camalert-pi.service
+   ```
+   
+   Add this content:
+   ```ini
+   [Unit]
+   Description=CamAlert Pi Service
+   After=network.target
+   
+   [Service]
+   Type=simple
+   User=pi
+   WorkingDirectory=/home/pi/camalert-pi-service
+   ExecStart=/usr/bin/node server.js
+   Restart=always
+   
+   [Install]
+   WantedBy=multi-user.target
+   ```
+   
+   ```bash
+   # Enable and start
+   sudo systemctl enable camalert-pi.service
+   sudo systemctl start camalert-pi.service
+   ```
+
+5. **Test Pi Service**:
+   ```bash
+   # Check if running
+   curl http://localhost:3001/health
+   
+   # Should return: {"status":"running","timestamp":"...","videosPath":"..."}
+   ```
+
+---
+
+## 🚀 Web Application Setup
+
+### Step 1: Clone and Install
 
 ```bash
-git clone <YOUR_GIT_URL>
-cd <YOUR_PROJECT_NAME>
-```
-
-### 2. Install Dependencies
-
-```bash
+git clone <your-repo-url>
+cd camalert
 npm install
 ```
 
-### 3. Set Up Supabase
+### Step 2: Configure Supabase
 
-#### Create a New Supabase Project
-1. Go to [Supabase Dashboard](https://supabase.com/dashboard)
-2. Click "New Project"
-3. Fill in your project details
-4. Wait for the project to be created
+1. **Create Supabase Project**:
+   - Go to [supabase.com](https://supabase.com)
+   - Create new project
+   - Copy Project URL and Anon Key
 
-#### Configure Database Tables
-The project includes pre-configured database migrations. The main tables are:
-- `profiles` - User profile information
-- `recordings` - Camera recording metadata
+2. **Set Environment Variables**:
+   ```bash
+   # Create .env.local file
+   VITE_SUPABASE_URL=your_supabase_url
+   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ```
 
-#### Set Up Authentication
-1. In your Supabase dashboard, go to Authentication > Settings
-2. Configure your site URL: `https://your-domain.com` (or `http://localhost:5173` for development)
-3. Enable email authentication
-4. Optionally configure additional providers (Google, GitHub, etc.)
+3. **Run Database Migrations**:
+   ```bash
+   npx supabase login
+   npx supabase init
+   npx supabase db push
+   ```
 
-### 4. Configure Environment Variables
+### Step 3: Configure Email Service
 
-The project uses Supabase's built-in configuration. Make sure your `supabase/config.toml` file contains your project ID:
+1. **Get Resend API Key**:
+   - Sign up at [resend.com](https://resend.com)
+   - Create API key
+   - Add to Supabase secrets as `RESEND_API_KEY`
 
-```toml
-project_id = "your-project-id"
-```
-
-### 5. Set Up Email Notifications (Optional)
-
-#### Get Resend API Key
-1. Sign up at [Resend](https://resend.com/)
-2. Verify your sending domain at [Resend Domains](https://resend.com/domains)
-3. Create an API key at [Resend API Keys](https://resend.com/api-keys)
-4. Copy your API key
-
-#### Configure the Secret
-1. In your Supabase dashboard, go to Settings > Edge Functions
-2. Add a new secret named `RESEND_API_KEY`
-3. Paste your Resend API key as the value
-
-### 6. Start the Development Server
+### Step 4: Start Development Server
 
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:5173`
+---
+
+## 📱 Mobile App Setup (Optional)
+
+### For iOS/Android Direct Storage
+
+1. **Export to GitHub**:
+   - Click "Export to GitHub" in Lovable
+   - Clone your repository locally
+
+2. **Setup Mobile Development**:
+   ```bash
+   npm install
+   npm run build
+   
+   # Add platforms
+   npx cap add ios      # For iOS
+   npx cap add android  # For Android
+   
+   # Sync project
+   npx cap sync
+   ```
+
+3. **Run on Device**:
+   ```bash
+   npx cap run ios      # Requires macOS + Xcode
+   npx cap run android  # Requires Android Studio
+   ```
+
+---
+
+## 🎮 How to Use CamAlert
+
+### 1. Account Setup
+
+1. **Access the App**:
+   - Open `http://localhost:5173` (development)
+   - Or your deployed URL
+
+2. **Create Account**:
+   - Click "Sign Up"
+   - Enter email and password
+   - Verify email (if confirmation enabled)
+
+3. **Login**:
+   - Use your credentials to sign in
+
+### 2. Camera Configuration
+
+#### Finding Your Camera Stream URL
+
+**For IP Cameras**:
+- Most cameras: `rtsp://username:password@camera_ip:554/stream`
+- Some cameras: `http://camera_ip:port/mjpg/video.mjpg`
+
+**For Raspberry Pi Camera**:
+```bash
+# On your Pi with camera, install UV4L
+curl http://www.linux-projects.org/listing/uv4l_repo/lpkey.asc | sudo apt-key add -
+echo 'deb http://www.linux-projects.org/listing/uv4l_repo/raspbian/stretch stretch main' | sudo tee /etc/apt/sources.list.d/uv4l.list
+sudo apt update
+sudo apt install uv4l uv4l-raspicam uv4l-server
+
+# Start streaming
+uv4l --driver raspicam --auto-video_nr --object-detection-threshold=50000
+# Stream available at: http://PI_IP:8080/stream/video.mjpeg
+```
+
+#### Adding Cameras to CamAlert
+
+1. **Camera Setup Section**:
+   - In the web app, find "Camera Source" section
+   - Enter your camera's stream URL
+   - Test connection with "Test Connection" button
+
+2. **Configure Quality**:
+   - Select video quality (480p, 720p, 1080p)
+   - Higher quality = larger file sizes
+
+### 3. Motion Detection Setup
+
+1. **Enable Motion Detection**:
+   - Toggle "Motion Detection" switch
+   - Adjust sensitivity (1-100, higher = more sensitive)
+
+2. **Advanced Settings**:
+   - **Detection Zones**: Draw specific areas to monitor
+   - **Cooldown Period**: Time between motion alerts
+   - **Recording Duration**: How long to record after motion
+
+### 4. Email Notifications
+
+1. **Setup Email Alerts**:
+   - Toggle "Email Notifications"
+   - Enter recipient email address
+   - Choose notification types:
+     - Motion detection alerts
+     - System status alerts
+
+2. **Test Notifications**:
+   - Use "Send Test Email" button
+   - Check spam folder if not received
+
+### 5. Storage Configuration
+
+#### Option 1: Raspberry Pi Sync (Recommended)
+
+1. **Configure Pi Endpoint**:
+   - In Storage Settings, enter: `http://YOUR_PI_IP:3001`
+   - Replace `YOUR_PI_IP` with actual Pi IP address
+
+2. **How It Works**:
+   - Recordings saved to Supabase cloud storage
+   - Automatically synced to Pi's SD card
+   - Files organized as: `motion_TIMESTAMP_recording.webm` or `manual_TIMESTAMP_recording.webm`
+
+#### Option 2: Mobile App Direct Storage
+
+1. **Use Mobile App**:
+   - Install mobile app on device
+   - Recordings saved directly to device storage
+   - No cloud dependency
+
+#### Option 3: Manual Download
+
+1. **Download from Web**:
+   - View recordings in Recording History
+   - Click download button for each recording
+
+### 6. Recording Management
+
+#### Manual Recording
+
+1. **Start Recording**:
+   - Click red record button in camera controls
+   - Recording starts immediately
+
+2. **Stop Recording**:
+   - Click stop button
+   - File automatically saved to configured storage
+
+#### Motion-Triggered Recording
+
+1. **Automatic Operation**:
+   - When motion detected, recording starts automatically
+   - Continues for configured duration
+   - Saved with "motion_" prefix
+
+#### Viewing Recordings
+
+1. **Recording History**:
+   - Scroll down to see all recordings
+   - View thumbnails and details
+   - Download or delete recordings
+
+### 7. System Monitoring
+
+#### Camera Status
+
+- **Green**: Camera connected and streaming
+- **Yellow**: Connection issues
+- **Red**: Camera offline
+
+#### System Health
+
+- Monitor connection status
+- Check storage space (Pi setup)
+- View motion detection statistics
+
+---
+
+## 🔧 Troubleshooting
+
+### Camera Connection Issues
+
+1. **Check URL Format**:
+   ```
+   rtsp://username:password@192.168.1.100:554/stream
+   http://192.168.1.100:8080/stream/video.mjpeg
+   ```
+
+2. **Test Camera Directly**:
+   ```bash
+   # Test with VLC or ffmpeg
+   vlc rtsp://your_camera_url
+   ffplay rtsp://your_camera_url
+   ```
+
+3. **Network Issues**:
+   - Ensure camera and computer on same network
+   - Check firewall settings
+   - Try different ports
+
+### Pi Service Issues
+
+1. **Check Service Status**:
+   ```bash
+   # Pi service health
+   curl http://PI_IP:3001/health
+   
+   # View logs
+   sudo journalctl -u camalert-pi.service -f
+   ```
+
+2. **Storage Problems**:
+   ```bash
+   # Check SD card space
+   df -h /media/pi/SD_CARD/
+   
+   # List recordings
+   ls -la /media/pi/SD_CARD/Videos/
+   ```
+
+### Email Issues
+
+1. **Check Supabase Secrets**:
+   - Verify RESEND_API_KEY is set
+   - Check email address format
+
+2. **Test Email Function**:
+   - Use "Send Test Email" button
+   - Check Supabase Edge Function logs
+
+### Motion Detection Issues
+
+1. **Sensitivity Too High/Low**:
+   - Adjust sensitivity slider
+   - Test in different lighting conditions
+
+2. **False Positives**:
+   - Use detection zones to exclude areas
+   - Increase cooldown period
+
+---
+
+## 📁 File Organization
+
+### Raspberry Pi Storage Structure
+
+```
+/media/pi/SD_CARD/Videos/
+├── motion_2025-01-26T14-30-45-123Z_recording.webm
+├── manual_2025-01-26T14-30-45-123Z_recording.webm
+├── upload_log.json
+└── ...
+```
+
+### Mobile App Storage
+
+- **iOS**: Files app > CamAlert folder
+- **Android**: Internal storage > CamAlert folder
+
+---
+
+## 🔐 Security Notes
+
+1. **Change Default Passwords**:
+   - Update camera passwords
+   - Use strong authentication
+
+2. **Network Security**:
+   - Use VPN for remote access
+   - Keep software updated
+
+3. **Pi Security**:
+   - Change default Pi password
+   - Enable firewall if needed
+
+---
+
+## 📞 Support
+
+- **GitHub Issues**: Report bugs and feature requests
+- **Documentation**: Check troubleshooting section
+- **Community**: Join discussions for help and tips
+
+---
+
+## 🎉 You're All Set!
+
+Your CamAlert system is now ready to monitor your cameras with intelligent motion detection and automatic recording storage to your Raspberry Pi!
+
+---
 
 ## Camera Setup Guide
 
