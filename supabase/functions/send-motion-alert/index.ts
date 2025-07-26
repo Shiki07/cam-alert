@@ -188,7 +188,16 @@ const handler = async (req: Request): Promise<Response> => {
             </ul>
           </div>
           
-          <p>Motion has been detected in your camera feed. ${attachmentData ? `Please see the attached ${attachmentType} for details.` : ''}</p>
+          ${attachmentData ? `
+          <div style="text-align: center; margin: 20px 0;">
+            <h3>📸 Motion Detection Image:</h3>
+            <img src="data:image/jpeg;base64,${attachmentData}" 
+                 alt="Motion Detection Capture" 
+                 style="max-width: 100%; height: auto; border: 2px solid #dc2626; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);" />
+          </div>
+          ` : ''}
+          
+          <p>Motion has been detected in your camera feed. ${attachmentData ? 'The captured image is shown above.' : ''}</p>
           
           <div style="background: #dbeafe; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0; color: #1e40af;">
@@ -203,27 +212,9 @@ const handler = async (req: Request): Promise<Response> => {
       `,
     };
 
-    // Add attachment if provided
+    // Remove attachment logic since we're embedding the image
     if (attachmentData && attachmentType) {
-      console.log(`Processing attachment: type=${attachmentType}, data length=${attachmentData.length}`);
-      
-      try {
-        const buffer = Uint8Array.from(atob(attachmentData), c => c.charCodeAt(0));
-        const filename = `motion-${Date.now()}.${attachmentType === 'image' ? 'jpg' : 'webm'}`;
-        
-        console.log(`Attachment converted to buffer: ${buffer.length} bytes, filename: ${filename}`);
-        
-        emailData.attachments = [{
-          filename,
-          content: buffer,
-          type: attachmentType === 'image' ? 'image/jpeg' : 'video/webm',
-        }];
-        
-        console.log('Attachment added to email data successfully');
-      } catch (error) {
-        console.error('Error processing attachment:', error);
-        // Continue without attachment if there's an error
-      }
+      console.log(`Image embedded directly in email: type=${attachmentType}, data length=${attachmentData.length}`);
     } else {
       console.log('No attachment data provided');
     }
@@ -238,9 +229,9 @@ const handler = async (req: Request): Promise<Response> => {
     console.log(`Motion alert email sent successfully for user: ${user.id}, email ID: ${emailResponse.data?.id}`);
     
     if (attachmentData) {
-      console.log('Email sent WITH attachment');
+      console.log('Email sent WITH embedded image');
     } else {
-      console.log('Email sent WITHOUT attachment');
+      console.log('Email sent WITHOUT image');
     }
 
     return new Response(JSON.stringify({ 
