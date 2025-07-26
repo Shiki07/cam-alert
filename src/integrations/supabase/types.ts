@@ -125,7 +125,9 @@ export type Database = {
     }
     Functions: {
       update_motion_event_cleared: {
-        Args: { event_id: string; cleared_timestamp?: string }
+        Args:
+          | { event_id: string }
+          | { event_id: string; cleared_timestamp?: string }
         Returns: undefined
       }
     }
