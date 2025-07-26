@@ -277,7 +277,7 @@ serve(async (req) => {
       
       // Create AbortController for timeout per attempt
       const controller = new AbortController();
-      const timeout = req.method === 'HEAD' ? 10000 : 20000; // Reduced timeouts for more responsive failures
+      const timeout = req.method === 'HEAD' ? 10000 : 300000; // 5 minute timeout for streaming requests
       const timeoutId = setTimeout(() => {
         console.log(`Camera proxy: Timeout on attempt ${attempt} after ${timeout}ms`);
         controller.abort();
@@ -293,13 +293,14 @@ serve(async (req) => {
             'User-Agent': 'CamAlert-Proxy/1.0',
             'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
             'Cache-Control': 'no-cache',
-            'Connection': 'close', // Use close instead of keep-alive for more reliable connections
+            'Connection': 'keep-alive', // Use keep-alive for persistent connections
+            'Keep-Alive': 'timeout=300, max=1000', // 5 minute timeout, up to 1000 requests
             'Pragma': 'no-cache'
           },
           signal: controller.signal,
           redirect: 'follow',
-          // Add connection management
-          keepalive: false
+          // Enable connection pooling and reuse
+          keepalive: true
         });
         
         console.log(`Camera proxy: Fetch completed, status: ${response.status}`);
