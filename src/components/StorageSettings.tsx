@@ -1,8 +1,11 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Cloud, HardDrive, Settings } from 'lucide-react';
+import { Cloud, HardDrive, Settings, Wifi } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 interface StorageSettingsProps {
   storageType: 'cloud' | 'local';
@@ -17,7 +20,49 @@ export const StorageSettings = ({
   quality, 
   onQualityChange 
 }: StorageSettingsProps) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [piEndpoint, setPiEndpoint] = useState(() => {
+    try {
+      return localStorage.getItem('piEndpoint') || '';
+    } catch {
+      return '';
+    }
+  });
+  const { toast } = useToast();
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('piEndpoint', piEndpoint);
+    } catch (error) {
+      console.error('Failed to save Pi endpoint:', error);
+    }
+  }, [piEndpoint]);
+
+  const testPiConnection = async () => {
+    if (!piEndpoint) {
+      toast({
+        title: "Error",
+        description: "Please enter Pi endpoint URL",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${piEndpoint}/health`);
+      const data = await response.json();
+      
+      toast({
+        title: "Connection successful",
+        description: `Connected to Pi service at ${piEndpoint}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Connection failed", 
+        description: "Could not connect to Pi service. Check the URL and ensure the service is running.",
+        variant: "destructive"
+      });
+    }
+  };
 
   return (
     <Card className="bg-gray-800 border-gray-700">
@@ -96,6 +141,36 @@ export const StorageSettings = ({
               quality === 'high' ? '1080p' : quality === 'medium' ? '720p' : '480p'
             })</span>
           </div>
+        </div>
+        
+        {/* Pi Sync Configuration */}
+        <div className="space-y-3">
+          <Label className="text-gray-300 flex items-center gap-2">
+            <Wifi className="w-4 h-4" />
+            Raspberry Pi Sync (Optional)
+          </Label>
+          <div className="space-y-2">
+            <Input
+              placeholder="http://192.168.1.100:3001"
+              value={piEndpoint}
+              onChange={(e) => setPiEndpoint(e.target.value)}
+              className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+            />
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={testPiConnection}
+              className="w-full"
+            >
+              Test Connection
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400">
+            {piEndpoint 
+              ? "✅ Pi sync enabled - recordings will be saved to your Pi's SD card" 
+              : "Enter your Pi's IP address to enable automatic sync to SD card"
+            }
+          </p>
         </div>
       </CardContent>
     </Card>
