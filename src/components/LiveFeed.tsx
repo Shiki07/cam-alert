@@ -104,6 +104,7 @@ export const LiveFeed = ({
       
       // Send email notification
       if (emailNotificationsEnabled && notificationEmail && currentVideoRef instanceof HTMLVideoElement) {
+        console.log('Sending motion alert for webcam');
         motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
       }
       
@@ -142,6 +143,7 @@ export const LiveFeed = ({
       
       // Send email notification for network cameras
       if (emailNotificationsEnabled && notificationEmail) {
+        console.log('Sending motion alert for network camera');
         motionNotification.sendMotionAlert(undefined, motionLevel);
       }
     },

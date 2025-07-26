@@ -172,30 +172,22 @@ export const useImageMotionDetection = (config: ImageMotionDetectionConfig) => {
         
         if (motionLevel > config.threshold) {
           if (!motionDetected) {
-            if (!motionStartTimeRef.current) {
-              motionStartTimeRef.current = new Date();
-            }
+            console.log('Motion detected!', motionLevel.toFixed(2) + '%');
+            setMotionDetected(true);
+            setLastMotionTime(new Date());
+            setLastAlertTime(new Date());
+            setMotionEventsToday(prev => prev + 1);
             
-            // Check minimum motion duration
-            const motionDuration = new Date().getTime() - motionStartTimeRef.current.getTime();
-            if (motionDuration >= config.minMotionDuration) {
-              console.log('Motion detected!', motionLevel.toFixed(2) + '%');
-              setMotionDetected(true);
-              setLastMotionTime(new Date());
-              setLastAlertTime(new Date());
-              setMotionEventsToday(prev => prev + 1);
-              
-              // Save motion event to database
-              saveMotionEvent(motionLevel, true);
-              
-              config.onMotionDetected?.(motionLevel);
-              
-              toast({
-                title: "Motion Detected!",
-                description: `Movement detected (${motionLevel.toFixed(1)}% change)`,
-                variant: "default"
-              });
-            }
+            // Save motion event to database
+            saveMotionEvent(motionLevel, true);
+            
+            config.onMotionDetected?.(motionLevel);
+            
+            toast({
+              title: "Motion Detected!",
+              description: `Movement detected (${motionLevel.toFixed(1)}% change)`,
+              variant: "default"
+            });
           }
           
           if (motionTimeoutRef.current) {
@@ -233,10 +225,10 @@ export const useImageMotionDetection = (config: ImageMotionDetectionConfig) => {
     setIsDetecting(true);
     imageRef.current = imgElement;
     
-    // Start detection interval
+    // Start detection interval - less frequent to improve performance
     detectionIntervalRef.current = setInterval(() => {
       processFrame();
-    }, 200); // Check every 200ms for motion
+    }, 1000); // Check every 1000ms for motion
   }, [config.enabled, isDetecting, processFrame]);
 
   const stopDetection = useCallback(() => {
