@@ -144,12 +144,24 @@ export const LiveFeed = ({
       // Send email notification for network cameras
       if (emailNotificationsEnabled && notificationEmail) {
         console.log('Sending motion alert for network camera');
+        console.log('Email enabled:', emailNotificationsEnabled, 'Email:', notificationEmail);
+        console.log('Network camera videoRef:', networkCamera.videoRef);
+        console.log('Network camera videoRef.current:', networkCamera.videoRef.current);
+        
         const currentImageRef = networkCamera.videoRef.current;
         if (currentImageRef instanceof HTMLImageElement) {
+          console.log('Found HTMLImageElement, checking if loaded...');
+          console.log('Image complete:', currentImageRef.complete);
+          console.log('Image naturalWidth:', currentImageRef.naturalWidth);
+          console.log('Image naturalHeight:', currentImageRef.naturalHeight);
+          console.log('Image src:', currentImageRef.src);
           motionNotification.sendMotionAlert(undefined, motionLevel, currentImageRef);
         } else {
+          console.log('Network camera element is not HTMLImageElement:', typeof currentImageRef);
           motionNotification.sendMotionAlert(undefined, motionLevel);
         }
+      } else {
+        console.log('Email notifications not enabled or no email set:', { emailNotificationsEnabled, notificationEmail });
       }
     },
     onMotionCleared: () => {
