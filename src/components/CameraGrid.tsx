@@ -89,9 +89,9 @@ export const CameraGrid = ({
   onNoiseReductionToggle
 }: CameraGridProps) => {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Live Feed - Takes up 2 columns on desktop */}
-      <div className="lg:col-span-2">
+    <div className="space-y-6">
+      {/* Live Feed - Full width */}
+      <div className="w-full">
         <LiveFeed 
           isRecording={isRecording} 
           onRecordingChange={onRecordingChange}
@@ -114,13 +114,12 @@ export const CameraGrid = ({
         />
       </div>
       
-      {/* Controls Column */}
-      <div className="lg:col-span-1 space-y-6">
+      {/* Controls Grid - Under the feed */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <SystemStatus
           cameraConnected={isConnected}
         />
         
-        {/* Add DuckDNS Settings */}
         <DuckDNSSettings />
         
         <StorageSettings
