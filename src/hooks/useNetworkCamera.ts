@@ -338,24 +338,33 @@ export const useNetworkCamera = () => {
 
       console.log('useNetworkCamera: Using fetch to bypass browser OpaqueResponseBlocking...');
       
-      // Get current session for authentication
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication session required');
-      }
+      // Add timeout to prevent hanging connections
+      const fetchTimeout = setTimeout(() => {
+        console.log('useNetworkCamera: Fetch timeout, aborting connection');
+        controller.abort();
+      }, 30000); // 30 second timeout
       
-      // Use fetch to get the stream data with proper authentication
-      const response = await fetch(proxiedUrl, {
-        method: 'GET',
-        signal: controller.signal,
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        },
-        credentials: 'omit' // Omit cookies but keep authorization header
-      });
+      try {
+        // Get current session for authentication
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error('Authentication session required');
+        }
+        
+        // Use fetch to get the stream data with proper authentication
+        const response = await fetch(proxiedUrl, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          },
+          credentials: 'omit' // Omit cookies but keep authorization header
+        });
+        
+        clearTimeout(fetchTimeout);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -388,20 +397,27 @@ export const useNetworkCamera = () => {
                 // Smart reconnection logic - distinguish between natural cycling and errors
                 console.log(`useNetworkCamera: Stream ended naturally. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Rate: ${frameRateRef.current.toFixed(1)}fps`);
                 
-                // Only reconnect if this seems like a premature disconnection
-                if (connectionAge < 30000 && framesProcessed < 100) { // Less than 30s and few frames = likely error
+                // Increase thresholds for better reliability
+                if (connectionAge < 60000 && framesProcessed < 50) { // Less than 60s and few frames = likely error
                   console.log('useNetworkCamera: Premature disconnection detected, reconnecting...');
-                  if (isActiveRef.current && reconnectAttempts < 3) {
+                  if (isActiveRef.current && reconnectAttempts < 5) { // Increased retry attempts
                     setReconnectAttempts(prev => prev + 1);
+                    const delay = Math.min(2000 * reconnectAttempts, 10000); // Progressive backoff
+                    console.log(`useNetworkCamera: Retrying in ${delay}ms (attempt ${reconnectAttempts + 1})`);
                     setTimeout(() => {
                       if (isActiveRef.current) {
                         connectToMJPEGStream(imgElement, config);
                       }
-                    }, 2000);
+                    }, delay);
+                  } else {
+                    console.log('useNetworkCamera: Max reconnection attempts reached');
+                    setIsConnected(false);
+                    setConnectionError('Camera connection failed after multiple attempts');
                   }
                 } else {
                   // Natural stream end - restart with graceful handover
                   console.log('useNetworkCamera: Natural stream cycle, graceful restart...');
+                  setReconnectAttempts(0); // Reset on successful connection
                   if (isActiveRef.current) {
                     // Start overlapping connection for smoother transition
                     startOverlappingConnection(imgElement, config);
@@ -568,8 +584,9 @@ export const useNetworkCamera = () => {
         setReconnectAttempts(0);
       }
 
-    } catch (error) {
-      console.error('useNetworkCamera: Fetch-based connection failed:', error);
+      } catch (error) {
+        clearTimeout(fetchTimeout);
+        console.error('useNetworkCamera: Fetch-based connection failed:', error);
       
       if (error instanceof Error && error.name === 'AbortError') {
         console.log('useNetworkCamera: Fetch operation aborted');
@@ -578,9 +595,9 @@ export const useNetworkCamera = () => {
       
       // Exponential backoff retry logic for failed attempts
       const delay = Math.min(1000 * (reconnectAttempts + 1), 5000);
-      console.log(`useNetworkCamera: Retrying fetch-based connection (${reconnectAttempts + 1}/2)`);
+      console.log(`useNetworkCamera: Retrying fetch-based connection (${reconnectAttempts + 1}/3)`);
       
-      if (reconnectAttempts < 2 && isActiveRef.current) {
+      if (reconnectAttempts < 3 && isActiveRef.current) {
         setReconnectAttempts(prev => prev + 1);
         setTimeout(() => {
           if (isActiveRef.current) {
@@ -588,11 +605,18 @@ export const useNetworkCamera = () => {
           }
         }, delay);
       } else {
-        setConnectionError(`Fetch-based connection failed: ${error instanceof Error ? error.message : 'Unknown error'}. Your camera stream is confirmed working (diagnostics passed), but there may be a temporary network issue. Try again in a moment.`);
+        setConnectionError(`Camera connection failed after multiple attempts. Please check if your camera is online and accessible.`);
         setIsConnected(false);
         setIsConnecting(false);
         isActiveRef.current = false;
       }
+    }
+    } catch (error) {
+      console.error('useNetworkCamera: connectToMJPEGStream error:', error);
+      setConnectionError('Failed to establish camera connection');
+      setIsConnected(false);
+      setIsConnecting(false);
+      isActiveRef.current = false;
     }
   }, [getProxiedUrl, reconnectAttempts, startOverlappingConnection]);
 
