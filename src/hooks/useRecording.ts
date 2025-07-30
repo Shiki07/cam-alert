@@ -32,9 +32,29 @@ export const useRecording = () => {
     try {
       recordedChunksRef.current = [];
       
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'video/webm;codecs=vp9'
-      });
+      // Try different codecs in order of preference, with fallbacks for browser compatibility
+      let mediaRecorderOptions: MediaRecorderOptions | undefined;
+      const codecOptions = [
+        'video/webm;codecs=vp8',  // More widely supported than vp9
+        'video/webm',             // Let browser choose codec
+        'video/mp4',              // Fallback for Safari/other browsers
+        undefined                 // No codec specified, browser default
+      ];
+      
+      for (const codec of codecOptions) {
+        try {
+          const options = codec ? { mimeType: codec } : undefined;
+          if (!codec || MediaRecorder.isTypeSupported(codec)) {
+            mediaRecorderOptions = options;
+            console.log('Using codec:', codec || 'browser default');
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, mediaRecorderOptions);
       
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {

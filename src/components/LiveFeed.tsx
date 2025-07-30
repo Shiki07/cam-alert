@@ -68,6 +68,7 @@ export const LiveFeed = ({
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const lastRecordingAttemptRef = useRef<number>(0);
   const { toast } = useToast();
   
   const recording = useRecording();
@@ -109,8 +110,13 @@ export const LiveFeed = ({
       }
       
       const currentStream = streamRef.current;
-      if (!recording.isRecording && currentStream && currentVideoRef) {
+      const now = Date.now();
+      const minRecordingInterval = 10000; // 10 seconds between auto-recording attempts
+      
+      if (!recording.isRecording && currentStream && currentVideoRef && 
+          (now - lastRecordingAttemptRef.current > minRecordingInterval)) {
         console.log('Auto-starting recording due to webcam motion detection');
+        lastRecordingAttemptRef.current = now;
         recording.startRecording(currentStream, {
           storageType,
           fileType: 'video',
@@ -118,6 +124,8 @@ export const LiveFeed = ({
           motionDetected: true
         });
         onRecordingChange(true);
+      } else if (!recording.isRecording && currentStream && currentVideoRef) {
+        console.log('Recording rate limited - too frequent motion detection attempts');
       }
     },
     onMotionCleared: () => {
