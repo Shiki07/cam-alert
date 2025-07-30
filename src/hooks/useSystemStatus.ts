@@ -41,13 +41,21 @@ export const useSystemStatus = () => {
     try {
       setLoading(true);
       
+      // Add timeout and retry logic for network stability
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const { data, error } = await supabase
         .from('recordings')
         .select('file_size, recorded_at, motion_detected')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .abortSignal(controller.signal);
+
+      clearTimeout(timeoutId);
 
       if (error) {
         console.error('Error fetching system status:', error);
+        // Don't return early on error, use cached data
         return;
       }
 

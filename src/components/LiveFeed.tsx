@@ -244,6 +244,19 @@ export const LiveFeed = ({
         setIsConnected(true);
         onConnectionChange?.(true);
         
+        // Add stream health monitoring
+        const tracks = stream.getVideoTracks();
+        if (tracks[0]) {
+          tracks[0].addEventListener('ended', () => {
+            console.log('Webcam track ended unexpectedly, attempting restart...');
+            setTimeout(() => {
+              if (!streamRef.current) { // Only restart if not manually stopped
+                startWebcam();
+              }
+            }, 2000);
+          });
+        }
+        
         videoRef.current.onloadedmetadata = () => {
           if (motionDetectionEnabled && videoRef.current) {
             motionDetection.startDetection(videoRef.current);

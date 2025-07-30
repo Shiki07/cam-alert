@@ -45,11 +45,9 @@ export const useDuckDNS = () => {
       return config.manualIP.trim();
     }
 
+    // Only use CORS-safe services to avoid network errors
     const ipServices = [
-      'https://ipv4.icanhazip.com/',
-      'https://api.ipify.org?format=text',
-      'https://checkip.amazonaws.com/',
-      'https://ipinfo.io/ip'
+      'https://checkip.amazonaws.com/'
     ];
 
     for (const service of ipServices) {
@@ -57,13 +55,8 @@ export const useDuckDNS = () => {
         console.log(`Trying IP service: ${service}`);
         const response = await fetch(service, {
           method: 'GET',
-          mode: 'cors',
           cache: 'no-cache',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+          signal: AbortSignal.timeout(5000), // 5 second timeout
         });
         
         if (response.ok) {
