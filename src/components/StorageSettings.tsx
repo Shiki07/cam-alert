@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Cloud, HardDrive, Settings, Wifi, AlertCircle, CheckCircle } from 'lucide-react';
+import { Cloud, HardDrive, Settings, Wifi } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 
 interface StorageSettingsProps {
   storageType: 'cloud' | 'local';
@@ -49,33 +48,22 @@ export const StorageSettings = ({
     }
 
     try {
-      // Use Supabase edge function to test Pi connectivity (bypasses CORS)
-      const { data, error } = await supabase.functions.invoke('pi-health-check', {
-        body: { pi_endpoint: piEndpoint }
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      if (data?.success) {
-        toast({
-          title: "Connection successful",
-          description: `Pi service is accessible at ${piEndpoint}`,
-        });
-      } else {
-        toast({
-          title: "Connection failed",
-          description: data?.message || "Could not connect to Pi service",
-          variant: "destructive"
-        });
-      }
-    } catch (error) {
-      // Connection test failed, but sync may still work
+      // Ensure we use HTTP for local Pi connections
+      const endpoint = piEndpoint.startsWith('https://') 
+        ? piEndpoint.replace('https://', 'http://') 
+        : piEndpoint;
+      const response = await fetch(`${endpoint}/health`);
+      const data = await response.json();
+      
       toast({
-        title: "Test failed (CORS blocked)",
-        description: "Direct test blocked by browser security. Recordings will still sync via secure backend.",
-        variant: "default"
+        title: "Connection successful",
+        description: `Connected to Pi service at ${piEndpoint}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Connection failed", 
+        description: "Could not connect to Pi service. Check the URL and ensure the service is running.",
+        variant: "destructive"
       });
     }
   };
@@ -181,28 +169,12 @@ export const StorageSettings = ({
               Test Connection
             </Button>
           </div>
-          
-          {/* Pi Sync Status Indicator */}
-          <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              {piEndpoint ? (
-                <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 flex-shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
-              )}
-              <div className="text-xs">
-                <p className="text-gray-300 font-medium mb-1">
-                  {piEndpoint ? "Pi Sync Enabled" : "Pi Sync Disabled"}
-                </p>
-                <p className="text-gray-400">
-                  {piEndpoint 
-                    ? "Recordings will be automatically synced to your Pi's SD card via secure backend connection. Connection test may fail due to browser security, but sync will still work." 
-                    : "Enter your Pi's IP address to enable automatic backup to SD card."
-                  }
-                </p>
-              </div>
-            </div>
-          </div>
+          <p className="text-xs text-gray-400">
+            {piEndpoint 
+              ? "✅ Pi sync enabled - recordings will be saved to your Pi's SD card" 
+              : "Enter your Pi's IP address to enable automatic sync to SD card"
+            }
+          </p>
         </div>
       </CardContent>
     </Card>
