@@ -23,14 +23,6 @@ export const NotificationSettings = ({
 }: NotificationSettingsProps) => {
   const [email, setEmail] = useState(currentEmail);
   const [isLoading, setIsLoading] = useState(false);
-  const [systemAlerts, setSystemAlerts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cameraSystemAlerts');
-      return saved ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
   const { toast } = useToast();
 
   // Check if we're in a restricted environment (preview/iframe)
@@ -186,18 +178,7 @@ export const NotificationSettings = ({
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-400">System alerts</span>
-              <Switch 
-                checked={systemAlerts}
-                onCheckedChange={(checked) => {
-                  setSystemAlerts(checked);
-                  try {
-                    localStorage.setItem('cameraSystemAlerts', JSON.stringify(checked));
-                  } catch (error) {
-                    console.error('Failed to save system alerts setting:', error);
-                  }
-                }}
-                disabled={!emailEnabled} 
-              />
+              <Switch disabled={!emailEnabled} />
             </div>
           </div>
         </div>

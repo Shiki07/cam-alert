@@ -86,9 +86,6 @@ export type Database = {
           filename: string
           id: string
           motion_detected: boolean | null
-          pi_sync_error: string | null
-          pi_sync_status: string | null
-          pi_synced_at: string | null
           recorded_at: string
           storage_type: string
           thumbnail_path: string | null
@@ -102,9 +99,6 @@ export type Database = {
           filename: string
           id?: string
           motion_detected?: boolean | null
-          pi_sync_error?: string | null
-          pi_sync_status?: string | null
-          pi_synced_at?: string | null
           recorded_at?: string
           storage_type: string
           thumbnail_path?: string | null
@@ -118,9 +112,6 @@ export type Database = {
           filename?: string
           id?: string
           motion_detected?: boolean | null
-          pi_sync_error?: string | null
-          pi_sync_status?: string | null
-          pi_synced_at?: string | null
           recorded_at?: string
           storage_type?: string
           thumbnail_path?: string | null
@@ -134,9 +125,7 @@ export type Database = {
     }
     Functions: {
       update_motion_event_cleared: {
-        Args:
-          | { event_id: string }
-          | { event_id: string; cleared_timestamp?: string }
+        Args: { event_id: string; cleared_timestamp?: string }
         Returns: undefined
       }
     }

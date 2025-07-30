@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useRecording } from "@/hooks/useRecording";
 import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
-import { useImageMotionDetection } from "@/hooks/useImageMotionDetection";
 import { useMotionNotification } from "@/hooks/useMotionNotification";
 import { useNetworkCamera, NetworkCameraConfig } from "@/hooks/useNetworkCamera";
 import { useConnectionMonitor } from "@/hooks/useConnectionMonitor";
@@ -26,10 +25,6 @@ interface LiveFeedProps {
   scheduleEnabled: boolean;
   startHour: number;
   endHour: number;
-  detectionZonesEnabled: boolean;
-  cooldownPeriod: number;
-  minMotionDuration: number;
-  noiseReduction: boolean;
   onConnectionChange?: (connected: boolean) => void;
 }
 
@@ -47,10 +42,6 @@ export const LiveFeed = ({
   scheduleEnabled,
   startHour,
   endHour,
-  detectionZonesEnabled,
-  cooldownPeriod,
-  minMotionDuration,
-  noiseReduction,
   onConnectionChange
 }: LiveFeedProps) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -84,33 +75,39 @@ export const LiveFeed = ({
     includeAttachment: true
   });
 
-  // Webcam motion detection (video element)
   const motionDetection = useEnhancedMotionDetection({
     sensitivity: motionSensitivity,
     threshold: motionThreshold,
-    enabled: motionDetectionEnabled && isConnected && cameraSource === 'webcam',
+    enabled: motionDetectionEnabled && isConnected,
     scheduleEnabled,
     startHour,
     endHour,
-    detectionZonesEnabled,
-    cooldownPeriod,
-    minMotionDuration,
-    noiseReduction,
+    detectionZonesEnabled: false,
+    cooldownPeriod: 5000,
+    minMotionDuration: 500,
+    noiseReduction: true,
     onMotionDetected: (motionLevel) => {
-      console.log('Webcam motion detected with level:', motionLevel);
+      console.log('Motion detected with level:', motionLevel);
       onMotionDetected(true);
       
-      const currentVideoRef = videoRef.current;
+      // For network cameras, create a temporary video element from the current frame
+      const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : null;
       
-      // Send email notification
-      if (emailNotificationsEnabled && notificationEmail && currentVideoRef instanceof HTMLVideoElement) {
-        console.log('Sending motion alert for webcam');
-        motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
+      // Send email notification with captured frame
+      if (emailNotificationsEnabled && notificationEmail) {
+        // For network cameras, we'll send notification without video attachment
+        // since network cameras use img elements, not video elements
+        if (cameraSource === 'webcam' && currentVideoRef instanceof HTMLVideoElement) {
+          motionNotification.sendMotionAlert(currentVideoRef, motionLevel);
+        } else {
+          // For network cameras, send notification without video attachment
+          motionNotification.sendMotionAlert(undefined, motionLevel);
+        }
       }
       
-      const currentStream = streamRef.current;
+      const currentStream = cameraSource === 'webcam' ? streamRef.current : networkCamera.streamRef.current;
       if (!recording.isRecording && currentStream && currentVideoRef) {
-        console.log('Auto-starting recording due to webcam motion detection');
+        console.log('Auto-starting recording due to motion detection');
         recording.startRecording(currentStream, {
           storageType,
           fileType: 'video',
@@ -118,50 +115,6 @@ export const LiveFeed = ({
           motionDetected: true
         });
         onRecordingChange(true);
-      }
-    },
-    onMotionCleared: () => {
-      onMotionDetected(false);
-    }
-  });
-
-  // Network camera motion detection (img element)
-  const imageMotionDetection = useImageMotionDetection({
-    sensitivity: motionSensitivity,
-    threshold: motionThreshold,
-    enabled: motionDetectionEnabled && isConnected && cameraSource === 'network',
-    scheduleEnabled,
-    startHour,
-    endHour,
-    detectionZonesEnabled,
-    cooldownPeriod,
-    minMotionDuration,
-    noiseReduction,
-    onMotionDetected: (motionLevel) => {
-      console.log('Network camera motion detected with level:', motionLevel);
-      onMotionDetected(true);
-      
-      // Send email notification for network cameras
-      if (emailNotificationsEnabled && notificationEmail) {
-        console.log('Sending motion alert for network camera');
-        console.log('Email enabled:', emailNotificationsEnabled, 'Email:', notificationEmail);
-        console.log('Network camera videoRef:', networkCamera.videoRef);
-        console.log('Network camera videoRef.current:', networkCamera.videoRef.current);
-        
-        const currentImageRef = networkCamera.videoRef.current;
-        if (currentImageRef instanceof HTMLImageElement) {
-          console.log('Found HTMLImageElement, checking if loaded...');
-          console.log('Image complete:', currentImageRef.complete);
-          console.log('Image naturalWidth:', currentImageRef.naturalWidth);
-          console.log('Image naturalHeight:', currentImageRef.naturalHeight);
-          console.log('Image src:', currentImageRef.src);
-          motionNotification.sendMotionAlert(undefined, motionLevel, currentImageRef);
-        } else {
-          console.log('Network camera element is not HTMLImageElement:', typeof currentImageRef);
-          motionNotification.sendMotionAlert(undefined, motionLevel);
-        }
-      } else {
-        console.log('Email notifications not enabled or no email set:', { emailNotificationsEnabled, notificationEmail });
       }
     },
     onMotionCleared: () => {
@@ -276,7 +229,6 @@ export const LiveFeed = ({
     }
     
     motionDetection.stopDetection();
-    imageMotionDetection.stopDetection();
     
     if (cameraSource === 'webcam') {
       if (streamRef.current) {
@@ -358,13 +310,6 @@ export const LiveFeed = ({
           onConnectionChange?.(true);
           setError(null);
           console.log('LiveFeed: Successfully connected to network camera');
-          
-          // Start motion detection for network cameras
-          if (motionDetectionEnabled && networkCamera.videoRef.current instanceof HTMLImageElement) {
-            console.log('Starting motion detection for network camera');
-            imageMotionDetection.startDetection(networkCamera.videoRef.current);
-          }
-          
           toast({
             title: "Camera connected!",
             description: `Successfully connected to ${config.name}`,
@@ -406,22 +351,16 @@ export const LiveFeed = ({
   };
 
   useEffect(() => {
-    if (isConnected) {
-      if (cameraSource === 'webcam' && videoRef.current instanceof HTMLVideoElement) {
-        if (motionDetectionEnabled) {
-          motionDetection.startDetection(videoRef.current);
-        } else {
-          motionDetection.stopDetection();
-        }
-      } else if (cameraSource === 'network' && networkCamera.videoRef.current instanceof HTMLImageElement) {
-        if (motionDetectionEnabled) {
-          imageMotionDetection.startDetection(networkCamera.videoRef.current);
-        } else {
-          imageMotionDetection.stopDetection();
-        }
+    const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
+    
+    if (isConnected && currentVideoRef && currentVideoRef instanceof HTMLVideoElement) {
+      if (motionDetectionEnabled) {
+        motionDetection.startDetection(currentVideoRef);
+      } else {
+        motionDetection.stopDetection();
       }
     }
-  }, [motionDetectionEnabled, isConnected, motionSensitivity, motionThreshold, scheduleEnabled, startHour, endHour, cameraSource, detectionZonesEnabled, cooldownPeriod, minMotionDuration, noiseReduction]);
+  }, [motionDetectionEnabled, isConnected, motionSensitivity, motionThreshold, scheduleEnabled, startHour, endHour, cameraSource]);
 
   useEffect(() => {
     return () => {
@@ -430,7 +369,6 @@ export const LiveFeed = ({
       }
       networkCamera.disconnect();
       motionDetection.stopDetection();
-      imageMotionDetection.stopDetection();
     };
   }, []);
 
@@ -497,10 +435,10 @@ export const LiveFeed = ({
           <h2 className="text-xl font-semibold text-white">Live Feed</h2>
           <CameraStatus
             motionDetectionEnabled={motionDetectionEnabled}
-            motionDetected={cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected}
+            motionDetected={motionDetection.motionDetected}
             scheduleEnabled={scheduleEnabled}
-            isWithinSchedule={cameraSource === 'webcam' ? motionDetection.isWithinSchedule : imageMotionDetection.isWithinSchedule}
-            currentMotionLevel={cameraSource === 'webcam' ? motionDetection.currentMotionLevel : imageMotionDetection.currentMotionLevel}
+            isWithinSchedule={motionDetection.isWithinSchedule}
+            currentMotionLevel={motionDetection.currentMotionLevel}
             storageType={storageType}
             emailNotificationsEnabled={emailNotificationsEnabled}
             notificationEmail={notificationEmail}
@@ -533,9 +471,9 @@ export const LiveFeed = ({
           <CameraOverlays
             isRecording={recording.isRecording || isRecording}
             storageType={storageType}
-            motionDetected={cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected}
+            motionDetected={motionDetection.motionDetected}
             scheduleEnabled={scheduleEnabled}
-            isWithinSchedule={cameraSource === 'webcam' ? motionDetection.isWithinSchedule : imageMotionDetection.isWithinSchedule}
+            isWithinSchedule={motionDetection.isWithinSchedule}
             isProcessing={recording.isProcessing}
           />
         </VideoDisplay>

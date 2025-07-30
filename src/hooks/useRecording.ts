@@ -173,7 +173,7 @@ export const useRecording = () => {
       
       console.log('Upload successful, saving metadata to database');
       
-      const { data: recording, error: dbError } = await supabase
+      const { error: dbError } = await supabase
         .from('recordings')
         .insert({
           user_id: user!.id,
@@ -182,51 +182,17 @@ export const useRecording = () => {
           storage_type: 'cloud',
           file_path: filePath,
           file_size: blob.size,
-          motion_detected: motionDetected || false,
-          pi_sync_status: 'pending'
-        })
-        .select()
-        .single();
+          motion_detected: motionDetected || false
+        });
       
       if (dbError) {
         console.error('Database error:', dbError);
         throw dbError;
       }
       
-      // Trigger Pi sync if enabled
-      try {
-        const piEndpoint = localStorage.getItem('piEndpoint');
-        if (piEndpoint && recording) {
-          console.log('Triggering Pi sync for recording:', recording.id);
-          
-          // Call Pi sync function in background
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            supabase.functions.invoke('pi-sync', {
-              body: {
-                recording_id: recording.id,
-                pi_endpoint: piEndpoint
-              },
-              headers: {
-                Authorization: `Bearer ${session.access_token}`
-              }
-            }).then(({ data, error }) => {
-              if (error) {
-                console.error('Pi sync failed:', error);
-              } else {
-                console.log('Pi sync initiated successfully');
-              }
-            });
-          }
-        }
-      } catch (piError) {
-        // Don't fail the main save if Pi sync fails
-        console.warn('Pi sync error (non-critical):', piError);
-      }
-      
       toast({
         title: "Saved to cloud",
-        description: `${fileType} saved successfully to Supabase Storage${localStorage.getItem('piEndpoint') ? ' and queued for Pi sync' : ''}`
+        description: `${fileType} saved successfully to Supabase Storage`
       });
     } catch (error) {
       console.error('Error saving to cloud:', error);

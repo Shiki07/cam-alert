@@ -32,12 +32,3 @@ verify_jwt = true
 
 [functions.save-duckdns-token]
 verify_jwt = true
-
-[functions.pi-health-check]
-verify_jwt = true
-
-[functions.camera-diagnostics]
-verify_jwt = true
-
-[functions.pi-sync]
-verify_jwt = true

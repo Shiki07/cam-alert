@@ -58,12 +58,7 @@ export const useDuckDNS = () => {
         const response = await fetch(service, {
           method: 'GET',
           mode: 'cors',
-          cache: 'no-cache',
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0'
-          }
+          cache: 'no-cache'
         });
         
         if (response.ok) {
@@ -181,28 +176,11 @@ export const useDuckDNS = () => {
         console.log('DuckDNS: IP changed or first run, updating...', { previous: currentIP, new: newIP });
         
         const success = await updateDuckDNS(newIP);
-        if (success) {
-          console.log('DuckDNS: Update successful');
-          // Force DNS cache refresh by triggering diagnostics after a delay
-          setTimeout(async () => {
-            console.log('DuckDNS: Triggering camera diagnostics to clear DNS cache...');
-            try {
-              const domain = config.domain.includes('.duckdns.org') 
-                ? config.domain 
-                : `${config.domain}.duckdns.org`;
-              const cameraUrl = `http://${domain}:8081`;
-              
-              await supabase.functions.invoke('camera-diagnostics', {
-                body: { url: cameraUrl }
-              });
-              console.log('DuckDNS: Camera diagnostics completed after IP update');
-            } catch (error) {
-              console.log('DuckDNS: Failed to trigger diagnostics:', error);
-            }
-          }, 10000); // Wait 10 seconds for DNS propagation
-        } else {
+        if (!success) {
           // Error is already set in updateDuckDNS
           console.log('DuckDNS: Update failed, error already set');
+        } else {
+          console.log('DuckDNS: Update successful');
         }
       } else {
         console.log('DuckDNS: IP unchanged, no update needed');
@@ -254,13 +232,11 @@ export const useDuckDNS = () => {
   useEffect(() => {
     if (!config.enabled) return;
 
-    // Initial check after 3 seconds
     const initialTimeout = setTimeout(() => {
       checkAndUpdateIP();
     }, 3000);
 
-    // Regular checks every 5 minutes (more frequent for better IP change detection)
-    const interval = setInterval(checkAndUpdateIP, 5 * 60 * 1000);
+    const interval = setInterval(checkAndUpdateIP, 15 * 60 * 1000);
 
     return () => {
       clearTimeout(initialTimeout);
