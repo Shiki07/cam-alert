@@ -342,7 +342,7 @@ export const useNetworkCamera = () => {
       const fetchTimeout = setTimeout(() => {
         console.log('useNetworkCamera: Fetch timeout, aborting connection');
         controller.abort();
-      }, 30000); // 30 second timeout
+      }, 60000); // 60 second timeout for better stability
       
       try {
         // Get current session for authentication
@@ -397,12 +397,12 @@ export const useNetworkCamera = () => {
                 // Smart reconnection logic - distinguish between natural cycling and errors
                 console.log(`useNetworkCamera: Stream ended naturally. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Rate: ${frameRateRef.current.toFixed(1)}fps`);
                 
-                // Increase thresholds for better reliability
-                if (connectionAge < 60000 && framesProcessed < 50) { // Less than 60s and few frames = likely error
+                // Increase thresholds for better reliability  
+                if (connectionAge < 120000 && framesProcessed < 100) { // Less than 2min and few frames = likely error
                   console.log('useNetworkCamera: Premature disconnection detected, reconnecting...');
-                  if (isActiveRef.current && reconnectAttempts < 5) { // Increased retry attempts
+                  if (isActiveRef.current && reconnectAttempts < 3) { // Reduce retry attempts to prevent spam
                     setReconnectAttempts(prev => prev + 1);
-                    const delay = Math.min(2000 * reconnectAttempts, 10000); // Progressive backoff
+                    const delay = Math.min(5000 * (reconnectAttempts + 1), 15000); // Longer delays for stability
                     console.log(`useNetworkCamera: Retrying in ${delay}ms (attempt ${reconnectAttempts + 1})`);
                     setTimeout(() => {
                       if (isActiveRef.current) {
@@ -415,12 +415,16 @@ export const useNetworkCamera = () => {
                     setConnectionError('Camera connection failed after multiple attempts');
                   }
                 } else {
-                  // Natural stream end - restart with graceful handover
-                  console.log('useNetworkCamera: Natural stream cycle, graceful restart...');
+                  // Natural stream end - restart immediately with minimal delay
+                  console.log('useNetworkCamera: Natural stream cycle, immediate restart...');
                   setReconnectAttempts(0); // Reset on successful connection
                   if (isActiveRef.current) {
-                    // Start overlapping connection for smoother transition
-                    startOverlappingConnection(imgElement, config);
+                    // Immediate restart for natural cycles
+                    setTimeout(() => {
+                      if (isActiveRef.current) {
+                        connectToMJPEGStream(imgElement, config);
+                      }
+                    }, 1000); // 1 second delay for graceful restart
                   }
                 }
                 break;
