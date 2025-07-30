@@ -8,6 +8,23 @@ export const useCameraSettings = () => {
   const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState('');
+  
+  // Load settings from localStorage on mount
+  useEffect(() => {
+    try {
+      const savedEmailEnabled = localStorage.getItem('cameraEmailEnabled');
+      if (savedEmailEnabled) {
+        setEmailEnabled(JSON.parse(savedEmailEnabled));
+      }
+      
+      const savedEmail = localStorage.getItem('cameraNotificationEmail');
+      if (savedEmail) {
+        setNotificationEmail(savedEmail);
+      }
+    } catch (error) {
+      console.error('Failed to load settings from localStorage:', error);
+    }
+  }, []);
   const [storageType, setStorageType] = useState<'cloud' | 'local'>('local');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
   
@@ -45,11 +62,24 @@ export const useCameraSettings = () => {
   };
 
   const toggleEmailNotifications = () => {
-    setEmailEnabled(!emailEnabled);
+    const newValue = !emailEnabled;
+    setEmailEnabled(newValue);
+    // Save email enabled state to localStorage
+    try {
+      localStorage.setItem('cameraEmailEnabled', JSON.stringify(newValue));
+    } catch (error) {
+      console.error('Failed to save email enabled state to localStorage:', error);
+    }
   };
 
   const handleEmailChange = (email: string) => {
     setNotificationEmail(email);
+    // Save to localStorage when email changes
+    try {
+      localStorage.setItem('cameraNotificationEmail', email);
+    } catch (error) {
+      console.error('Failed to save email to localStorage:', error);
+    }
   };
 
   const handleScheduleChange = (start: number, end: number) => {

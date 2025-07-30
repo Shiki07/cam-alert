@@ -8,7 +8,6 @@ import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope } from 'lucide
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
 import { supabase } from '@/integrations/supabase/client';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export type CameraSource = 'webcam' | 'network';
 
@@ -304,79 +303,44 @@ export const CameraSourceSelector = ({
                     </div>
                     
                     <div className="flex items-center gap-2">
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleTestConnection(camera, index)}
-                              disabled={testingConnections.has(index)}
-                              className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                            >
-                              <TestTube className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Test connection to camera</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => runDiagnostics(camera, index)}
+                        disabled={runningDiagnostics.has(index)}
+                        className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
+                        title="Run detailed diagnostics"
+                      >
+                        <Stethoscope className="w-4 h-4" />
+                      </Button>
                       
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              onClick={() => handleConnectCamera(camera, index)}
-                              disabled={connectingCameras.has(index)}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Connect to this camera</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => runDiagnostics(camera, index)}
-                              disabled={runningDiagnostics.has(index)}
-                              className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
-                            >
-                              <Stethoscope className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Run detailed diagnostics</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleTestConnection(camera, index)}
+                        disabled={testingConnections.has(index)}
+                        className="border-gray-600 text-gray-300 hover:bg-gray-600"
+                      >
+                        <TestTube className="w-4 h-4" />
+                      </Button>
                       
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onRemoveNetworkCamera(index)}
-                              className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Remove camera from list</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      <Button
+                        size="sm"
+                        onClick={() => handleConnectCamera(camera, index)}
+                        disabled={connectingCameras.has(index)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
+                      </Button>
+                      
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRemoveNetworkCamera(index)}
+                        className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                   
