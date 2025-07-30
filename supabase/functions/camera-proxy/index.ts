@@ -223,47 +223,95 @@ serve(async (req) => {
 
     console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
 
-    // Enhanced connectivity test with more detailed diagnostics
+    // Enhanced connectivity test with DNS fallback and improved diagnostics
     try {
       const urlObj = new URL(targetUrl);
       console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}:${urlObj.port || '8081'}`);
       
-      // First try a basic DNS lookup using a different method
+      let resolvedIP: string | null = null;
+      
+      // Try multiple DNS resolution methods
       try {
+        // First try Google DNS
+        console.log('Camera proxy: Attempting DNS resolution via Google DNS...');
         const dnsTest = await fetch(`https://dns.google/resolve?name=${urlObj.hostname}&type=A`);
         const dnsResult = await dnsTest.json();
-        console.log(`Camera proxy: DNS lookup result:`, dnsResult);
+        console.log(`Camera proxy: DNS lookup result:`, JSON.stringify(dnsResult, null, 2));
         
-        if (dnsResult.Status !== 0) {
-          console.warn(`Camera proxy: DNS resolution failed for ${urlObj.hostname}`);
+        if (dnsResult.Status === 0 && dnsResult.Answer && dnsResult.Answer.length > 0) {
+          // Found A record
+          const aRecord = dnsResult.Answer.find((record: any) => record.type === 1);
+          if (aRecord) {
+            resolvedIP = aRecord.data;
+            console.log(`Camera proxy: DNS resolved ${urlObj.hostname} to IP: ${resolvedIP}`);
+          }
+        } else {
+          console.warn(`Camera proxy: DNS resolution failed for ${urlObj.hostname} - Status: ${dnsResult.Status}`);
+          
+          // Try Cloudflare DNS as fallback
+          try {
+            console.log('Camera proxy: Trying Cloudflare DNS as fallback...');
+            const cfDnsTest = await fetch(`https://cloudflare-dns.com/dns-query?name=${urlObj.hostname}&type=A`, {
+              headers: { 'Accept': 'application/dns-json' }
+            });
+            const cfDnsResult = await cfDnsTest.json();
+            console.log(`Camera proxy: Cloudflare DNS result:`, JSON.stringify(cfDnsResult, null, 2));
+            
+            if (cfDnsResult.Status === 0 && cfDnsResult.Answer && cfDnsResult.Answer.length > 0) {
+              const aRecord = cfDnsResult.Answer.find((record: any) => record.type === 1);
+              if (aRecord) {
+                resolvedIP = aRecord.data;
+                console.log(`Camera proxy: Cloudflare DNS resolved ${urlObj.hostname} to IP: ${resolvedIP}`);
+              }
+            }
+          } catch (cfError) {
+            console.log(`Camera proxy: Cloudflare DNS fallback failed:`, cfError.message);
+          }
         }
       } catch (dnsError) {
         console.log(`Camera proxy: DNS lookup failed:`, dnsError.message);
       }
       
-      // Try a simple connectivity test with very short timeout
-      const testController = new AbortController();
-      const testTimeout = setTimeout(() => testController.abort(), 3000); // 3 second timeout
+      // Test connectivity - try both hostname and resolved IP if available
+      const testTargets = [urlObj.hostname];
+      if (resolvedIP && resolvedIP !== urlObj.hostname) {
+        testTargets.push(resolvedIP);
+      }
       
-      try {
-        const testResponse = await fetch(`http://${urlObj.hostname}:${urlObj.port || '8081'}`, {
-          method: 'HEAD',
-          signal: testController.signal,
-          headers: {
-            'User-Agent': 'CamAlert-ConnTest/1.0'
-          }
-        });
-        clearTimeout(testTimeout);
-        console.log(`Camera proxy: Connectivity test successful - Status: ${testResponse.status}`);
-      } catch (testError) {
-        clearTimeout(testTimeout);
-        console.log(`Camera proxy: Connectivity test failed for ${urlObj.hostname}:${urlObj.port || '8081'}:`, testError.message);
+      let connectivitySuccess = false;
+      
+      for (const target of testTargets) {
+        const testController = new AbortController();
+        const testTimeout = setTimeout(() => testController.abort(), 5000); // 5 second timeout
         
-        // If connectivity test fails, provide detailed error message
-        if (testError.name === 'AbortError') {
-          console.warn(`Camera proxy: Connection timeout - camera may be offline or network unreachable`);
+        try {
+          console.log(`Camera proxy: Testing connectivity to ${target}:${urlObj.port || '8081'}`);
+          const testResponse = await fetch(`http://${target}:${urlObj.port || '8081'}`, {
+            method: 'HEAD',
+            signal: testController.signal,
+            headers: {
+              'User-Agent': 'CamAlert-ConnTest/1.0',
+              'Host': urlObj.hostname // Preserve original hostname for virtual hosting
+            }
+          });
+          clearTimeout(testTimeout);
+          console.log(`Camera proxy: Connectivity test successful to ${target} - Status: ${testResponse.status}`);
+          connectivitySuccess = true;
+          break; // If one succeeds, we're good
+        } catch (testError) {
+          clearTimeout(testTimeout);
+          console.log(`Camera proxy: Connectivity test failed for ${target}:${urlObj.port || '8081'}:`, testError.message);
+          
+          if (testError.name === 'AbortError') {
+            console.warn(`Camera proxy: Connection timeout to ${target} - camera may be offline or network unreachable`);
+          }
         }
       }
+      
+      if (!connectivitySuccess) {
+        console.warn('Camera proxy: All connectivity tests failed - proceeding anyway as camera may block HEAD requests');
+      }
+      
     } catch (e) {
       console.log(`Camera proxy: Pre-test setup failed:`, e.message);
     }
@@ -277,7 +325,7 @@ serve(async (req) => {
       
       // Create AbortController for timeout per attempt
       const controller = new AbortController();
-      const timeout = req.method === 'HEAD' ? 10000 : 300000; // 5 minute timeout for streaming requests
+      const timeout = req.method === 'HEAD' ? 15000 : 300000; // Increased timeout for HEAD requests
       const timeoutId = setTimeout(() => {
         console.log(`Camera proxy: Timeout on attempt ${attempt} after ${timeout}ms`);
         controller.abort();
