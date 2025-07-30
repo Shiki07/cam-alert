@@ -33,8 +33,8 @@ export const NotificationSettings = ({
   });
   const { toast } = useToast();
 
-  // Check if we're in a restricted environment (preview/iframe)
-  const isRestrictedEnvironment = window.location !== window.parent.location;
+  // Allow email functionality in all environments
+  const isRestrictedEnvironment = false;
 
   const motionNotification = useMotionNotification({
     email: email,
