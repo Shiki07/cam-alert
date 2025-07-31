@@ -161,21 +161,19 @@ export const useNetworkCamera = () => {
     }
   }, []);
 
-  // Instant seamless restart without any delays
+  // Zero-delay instant restart for truly seamless experience
   const startOverlappingConnection = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
-    console.log('useNetworkCamera: Starting instant seamless restart');
+    console.log('useNetworkCamera: Executing zero-delay instant restart');
     
-    // Reset counters immediately and restart without any delay
+    // Reset counters immediately
     frameCountRef.current = 0;
-    connectionAgeRef.current = Date.now();
     setReconnectAttempts(0);
+    connectionAgeRef.current = Date.now();
     
-    // Start new connection immediately
-    setTimeout(() => {
-      if (isActiveRef.current) {
-        connectToMJPEGStream(imgElement, config);
-      }
-    }, 50); // Minimal delay to prevent race conditions
+    // Start new connection with absolutely zero delay
+    if (isActiveRef.current) {
+      connectToMJPEGStream(imgElement, config);
+    }
     
   }, []);
 
@@ -466,7 +464,6 @@ export const useNetworkCamera = () => {
                 const now = Date.now();
                 lastFrameTimeRef.current = now;
                 
-                // Frame rate monitoring only - no pre-emptive reconnection
                 
                 // Calculate frame rate for quality monitoring
                 if (now - lastFrameRateCheckRef.current > 5000) { // Check every 5 seconds
