@@ -163,34 +163,27 @@ export const useNetworkCamera = () => {
 
   // Graceful handover function for smooth transitions
   const startOverlappingConnection = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
-    console.log('useNetworkCamera: Starting overlapping connection for graceful handover');
+    console.log('useNetworkCamera: Starting seamless connection handover');
     
     const controller = new AbortController();
     overlappingConnectionRef.current = controller;
     
     try {
-      const { url: proxiedUrl } = await getProxiedUrl(config.url);
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        throw new Error('Authentication session required');
+      // For natural cycling, restart immediately without delay for seamless experience
+      if (isActiveRef.current && overlappingConnectionRef.current === controller) {
+        console.log('useNetworkCamera: Immediate seamless restart for natural cycle');
+        // Reset connection state for smooth transition
+        frameCountRef.current = 0;
+        connectionAgeRef.current = Date.now();
+        setReconnectAttempts(0);
+        
+        // Start new connection immediately for truly seamless experience
+        connectToMJPEGStream(imgElement, config);
       }
       
-      // Start new connection in background
-      setTimeout(() => {
-        if (isActiveRef.current && overlappingConnectionRef.current === controller) {
-          console.log('useNetworkCamera: Switching to overlapping connection');
-          // Reset connection state for smooth transition
-          frameCountRef.current = 0;
-          connectionAgeRef.current = Date.now();
-          setReconnectAttempts(0);
-          connectToMJPEGStream(imgElement, config);
-        }
-      }, 1000); // 1 second overlap
-      
     } catch (error) {
-      console.error('useNetworkCamera: Overlapping connection failed:', error);
-      // Fallback to regular reconnection
+      console.error('useNetworkCamera: Seamless connection handover failed:', error);
+      // Fallback to immediate reconnection
       if (isActiveRef.current) {
         connectToMJPEGStream(imgElement, config);
       }
@@ -394,15 +387,14 @@ export const useNetworkCamera = () => {
                 const connectionAge = Date.now() - connectionAgeRef.current;
                 const framesProcessed = frameCountRef.current;
                 
-                // Smart reconnection logic - distinguish between natural cycling and errors
-                console.log(`useNetworkCamera: Stream ended naturally. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Rate: ${frameRateRef.current.toFixed(1)}fps`);
+                console.log(`useNetworkCamera: Stream ended. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Rate: ${frameRateRef.current.toFixed(1)}fps`);
                 
-                // Increase thresholds for better reliability
-                if (connectionAge < 60000 && framesProcessed < 50) { // Less than 60s and few frames = likely error
-                  console.log('useNetworkCamera: Premature disconnection detected, reconnecting...');
-                  if (isActiveRef.current && reconnectAttempts < 5) { // Increased retry attempts
+                // Distinguish between natural cycling and actual errors
+                if (connectionAge < 10000 && framesProcessed < 10) { // Less than 10s and very few frames = error
+                  console.log('useNetworkCamera: Connection error detected, reconnecting with delay...');
+                  if (isActiveRef.current && reconnectAttempts < 5) {
                     setReconnectAttempts(prev => prev + 1);
-                    const delay = Math.min(2000 * reconnectAttempts, 10000); // Progressive backoff
+                    const delay = Math.min(2000 * reconnectAttempts, 8000); // Progressive backoff
                     console.log(`useNetworkCamera: Retrying in ${delay}ms (attempt ${reconnectAttempts + 1})`);
                     setTimeout(() => {
                       if (isActiveRef.current) {
@@ -415,11 +407,11 @@ export const useNetworkCamera = () => {
                     setConnectionError('Camera connection failed after multiple attempts');
                   }
                 } else {
-                  // Natural stream end - restart with graceful handover
-                  console.log('useNetworkCamera: Natural stream cycle, graceful restart...');
-                  setReconnectAttempts(0); // Reset on successful connection
+                  // Natural stream cycling (600+ frames) - immediate seamless restart
+                  console.log('useNetworkCamera: Natural stream cycle detected, immediate seamless restart...');
+                  setReconnectAttempts(0); // Reset counter for natural cycles
                   if (isActiveRef.current) {
-                    // Start overlapping connection for smoother transition
+                    // Start overlapping connection immediately for seamless transition
                     startOverlappingConnection(imgElement, config);
                   }
                 }
@@ -532,16 +524,16 @@ export const useNetworkCamera = () => {
           const connectionAge = Date.now() - connectionAgeRef.current;
           const framesProcessed = frameCountRef.current;
           
-          if (framesProcessed > 500) { // Had a good run, restart immediately
-            console.log('useNetworkCamera: Good stream run completed, immediate restart');
+          if (framesProcessed > 200) { // Had a good run, restart immediately with seamless transition
+            console.log('useNetworkCamera: Good stream run completed, seamless restart');
             if (isActiveRef.current) {
               setReconnectAttempts(0); // Reset attempts for good connections
-              connectToMJPEGStream(imgElement, config);
+              startOverlappingConnection(imgElement, config); // Use seamless transition
             }
           } else if (isActiveRef.current && reconnectAttempts < 3) {
             setReconnectAttempts(prev => prev + 1);
-            // Exponential backoff only for actual errors, not natural cycling
-            const delay = connectionAge > 20000 ? 1000 : Math.min(3000 * reconnectAttempts, 10000);
+            // Minimal delay for actual errors
+            const delay = Math.min(1000 * reconnectAttempts, 3000); // Reduced delays
             setTimeout(() => {
               if (isActiveRef.current) {
                 connectToMJPEGStream(imgElement, config);
