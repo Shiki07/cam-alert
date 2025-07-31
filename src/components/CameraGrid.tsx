@@ -1,9 +1,8 @@
 import { LiveFeed } from "@/components/LiveFeed";
 import { CameraControls } from "@/components/CameraControls";
-import { MotionDetection } from "@/components/MotionDetection";
+import { UnifiedMotionDetection } from "@/components/UnifiedMotionDetection";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { StorageSettings } from "@/components/StorageSettings";
-import { MotionSettings } from "@/components/MotionSettings";
 import { SystemStatus } from "@/components/SystemStatus";
 import { DuckDNSSettings } from "@/components/DuckDNSSettings";
 
@@ -137,14 +136,11 @@ export const CameraGrid = ({
           storageType={storageType}
         />
         
-        <MotionDetection 
+        <UnifiedMotionDetection 
           motionDetected={motionDetected}
           motionEnabled={motionDetectionEnabled}
           onToggleMotionDetection={onToggleMotionDetection}
           lastMotionTime={null}
-        />
-        
-        <MotionSettings
           sensitivity={motionSensitivity}
           onSensitivityChange={onSensitivityChange}
           threshold={motionThreshold}
