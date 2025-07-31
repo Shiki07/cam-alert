@@ -161,34 +161,23 @@ export const useNetworkCamera = () => {
     }
   }, []);
 
-  // Graceful handover function for smooth transitions
+  // Instant seamless restart without any delays
   const startOverlappingConnection = useCallback(async (imgElement: HTMLImageElement, config: NetworkCameraConfig) => {
-    console.log('useNetworkCamera: Starting seamless connection handover');
+    console.log('useNetworkCamera: Starting instant seamless restart');
     
-    const controller = new AbortController();
-    overlappingConnectionRef.current = controller;
+    // Reset counters immediately and restart without any delay
+    frameCountRef.current = 0;
+    connectionAgeRef.current = Date.now();
+    setReconnectAttempts(0);
     
-    try {
-      // For natural cycling, restart immediately without delay for seamless experience
-      if (isActiveRef.current && overlappingConnectionRef.current === controller) {
-        console.log('useNetworkCamera: Immediate seamless restart for natural cycle');
-        // Reset connection state for smooth transition
-        frameCountRef.current = 0;
-        connectionAgeRef.current = Date.now();
-        setReconnectAttempts(0);
-        
-        // Start new connection immediately for truly seamless experience
-        connectToMJPEGStream(imgElement, config);
-      }
-      
-    } catch (error) {
-      console.error('useNetworkCamera: Seamless connection handover failed:', error);
-      // Fallback to immediate reconnection
+    // Start new connection immediately
+    setTimeout(() => {
       if (isActiveRef.current) {
         connectToMJPEGStream(imgElement, config);
       }
-    }
-  }, [getProxiedUrl]);
+    }, 50); // Minimal delay to prevent race conditions
+    
+  }, []);
 
   const connectToCamera = useCallback(async (config: NetworkCameraConfig) => {
     console.log('=== useNetworkCamera: Starting connection ===');
@@ -476,6 +465,8 @@ export const useNetworkCamera = () => {
                 frameCountRef.current = frameCount;
                 const now = Date.now();
                 lastFrameTimeRef.current = now;
+                
+                // Frame rate monitoring only - no pre-emptive reconnection
                 
                 // Calculate frame rate for quality monitoring
                 if (now - lastFrameRateCheckRef.current > 5000) { // Check every 5 seconds
