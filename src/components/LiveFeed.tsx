@@ -69,6 +69,8 @@ export const LiveFeed = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastRecordingAttemptRef = useRef<number>(0);
+  const healthCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRestartAttemptRef = useRef<number>(0);
   const { toast } = useToast();
   
   const recording = useRecording();
@@ -244,18 +246,45 @@ export const LiveFeed = ({
         setIsConnected(true);
         onConnectionChange?.(true);
         
-        // Add stream health monitoring
+        // Add comprehensive stream health monitoring
         const tracks = stream.getVideoTracks();
         if (tracks[0]) {
           tracks[0].addEventListener('ended', () => {
             console.log('Webcam track ended unexpectedly, attempting restart...');
-            setTimeout(() => {
-              if (!streamRef.current) { // Only restart if not manually stopped
-                startWebcam();
-              }
-            }, 2000);
+            const now = Date.now();
+            const minRestartInterval = 5000; // 5 seconds between restart attempts
+            
+            if (now - lastRestartAttemptRef.current > minRestartInterval) {
+              lastRestartAttemptRef.current = now;
+              setTimeout(() => {
+                if (!streamRef.current && isConnected) { // Only restart if not manually stopped and still supposed to be connected
+                  startWebcam();
+                }
+              }, 2000);
+            } else {
+              console.log('Restart attempt rate limited');
+            }
           });
         }
+        
+        // Start periodic health check for webcam
+        if (healthCheckIntervalRef.current) {
+          clearInterval(healthCheckIntervalRef.current);
+        }
+        
+        healthCheckIntervalRef.current = setInterval(() => {
+          if (cameraSource === 'webcam' && videoRef.current && streamRef.current) {
+            const tracks = streamRef.current.getVideoTracks();
+            if (tracks.length === 0 || tracks[0].readyState === 'ended') {
+              console.log('Health check detected dead webcam stream, restarting...');
+              const now = Date.now();
+              if (now - lastRestartAttemptRef.current > 5000) {
+                lastRestartAttemptRef.current = now;
+                startWebcam();
+              }
+            }
+          }
+        }, 30000); // Check every 30 seconds
         
         videoRef.current.onloadedmetadata = () => {
           if (motionDetectionEnabled && videoRef.current) {
@@ -298,6 +327,12 @@ export const LiveFeed = ({
     
     motionDetection.stopDetection();
     imageMotionDetection.stopDetection();
+    
+    // Clear health check interval
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+      healthCheckIntervalRef.current = null;
+    }
     
     if (cameraSource === 'webcam') {
       if (streamRef.current) {
