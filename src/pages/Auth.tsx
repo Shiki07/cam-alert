@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { Camera, Mail, CheckCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -96,6 +97,29 @@ const Auth = () => {
     setIsLoading(false);
   };
 
+  const handleResend = async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.toLowerCase().trim(),
+        options: { emailRedirectTo: `${window.location.origin}/` }
+      } as any);
+      if (error) {
+        setError(error.message || 'Could not resend verification email. Please try again.');
+      } else {
+        toast({
+          title: 'Verification email resent',
+          description: `We’ve resent the verification link to ${email}.`,
+        });
+      }
+    } catch (err: any) {
+      setError('Unexpected error while resending verification email.');
+    }
+    setIsLoading(false);
+  };
+
   if (showEmailSent) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
@@ -122,7 +146,14 @@ const Auth = () => {
               </p>
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col gap-3">
+            <Button 
+              className="w-full"
+              onClick={handleResend}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Resending...' : 'Resend verification email'}
+            </Button>
             <Button 
               variant="outline" 
               className="w-full" 
