@@ -7,6 +7,63 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+// Basic per-user rate limiting
+const rateLimits = new Map<string, { count: number; resetTime: number }>();
+const checkRateLimit = (userId: string): boolean => {
+  const now = Date.now();
+  const limit = rateLimits.get(userId);
+  if (!limit || now > limit.resetTime) {
+    rateLimits.set(userId, { count: 1, resetTime: now + 60000 });
+    return true;
+  }
+  if (limit.count >= 20) return false; // 20 diagnostics/min
+  limit.count++;
+  return true;
+};
+
+const isPrivateIp = (ip: string): boolean => {
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.|127\.)/.test(ip)) return true;
+  if (/^(::1)$/.test(ip)) return true;
+  if (/^(fc|fd)/i.test(ip)) return true;
+  if (/^fe80:/i.test(ip)) return true;
+  return false;
+};
+
+const resolveAndValidateHost = async (hostname: string): Promise<boolean> => {
+  try {
+    const [a, aaaa] = await Promise.all([
+      fetch(`https://dns.google/resolve?name=${hostname}&type=A`).then(r => r.ok ? r.json() : { Answer: [] }).catch(() => ({ Answer: [] })),
+      fetch(`https://dns.google/resolve?name=${hostname}&type=AAAA`).then(r => r.ok ? r.json() : { Answer: [] }).catch(() => ({ Answer: [] }))
+    ]);
+    const ips: string[] = [];
+    for (const rec of [a, aaaa]) {
+      if (rec && Array.isArray(rec.Answer)) {
+        for (const ans of rec.Answer) {
+          if (ans.data) ips.push(ans.data);
+        }
+      }
+    }
+    return ips.length > 0 && ips.every(ip => !isPrivateIp(ip));
+  } catch {
+    return false;
+  }
+};
+
+const validateTargetUrl = async (raw: string): Promise<{ ok: boolean; reason?: string }> => {
+  try {
+    const u = new URL(raw);
+    if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, reason: 'protocol' };
+    if (['localhost', '127.0.0.1', '::1'].includes(u.hostname.toLowerCase())) return { ok: false, reason: 'localhost' };
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+    const allowedPorts = ['80', '443', '8080', '8081'];
+    if (!allowedPorts.includes(port)) return { ok: false, reason: 'port' };
+    if (!(await resolveAndValidateHost(u.hostname))) return { ok: false, reason: 'dns' };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: 'parse' };
+  }
+};
+
 serve(async (req) => {
   console.log(`Camera diagnostics: Received ${req.method} request`);
   

@@ -34,72 +34,79 @@ const checkRateLimit = (userId: string): boolean => {
 };
 
 // SECURITY: Validate and sanitize camera URLs to prevent SSRF
-const validateCameraURL = (url: string): boolean => {
+const isPrivateIp = (ip: string): boolean => {
+  // IPv4
+  if (/^(10\.\d+\.\d+\.\d+)|(192\.168\.\d+\.\d+)|(172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)|(169\.254\.\d+\.\d+)|(127\.\d+\.\d+\.\d+)$/.test(ip)) {
+    return true;
+  }
+  // IPv6
+  if (/^(::1)$/.test(ip)) return true; // loopback
+  if (/^(fc|fd)/i.test(ip)) return true; // unique local
+  if (/^fe80:/i.test(ip)) return true; // link-local
+  return false;
+};
+
+const resolveAndValidateHost = async (hostname: string): Promise<boolean> => {
+  try {
+    const queries = [
+      fetch(`https://dns.google/resolve?name=${hostname}&type=A`).then(r => r.ok ? r.json() : { Answer: [] }).catch(() => ({ Answer: [] })),
+      fetch(`https://dns.google/resolve?name=${hostname}&type=AAAA`).then(r => r.ok ? r.json() : { Answer: [] }).catch(() => ({ Answer: [] }))
+    ];
+    const [aRec, aaaaRec] = await Promise.all(queries);
+    const ips: string[] = [];
+    for (const rec of [aRec, aaaaRec]) {
+      if (rec && Array.isArray(rec.Answer)) {
+        for (const ans of rec.Answer) {
+          if (ans.data && typeof ans.data === 'string') ips.push(ans.data);
+        }
+      }
+    }
+    if (!ips.length) return false;
+    // Ensure all resolved IPs are public
+    return ips.every(ip => !isPrivateIp(ip));
+  } catch (_) {
+    return false;
+  }
+};
+
+const validateCameraURL = async (url: string): Promise<boolean> => {
   try {
     const urlObj = new URL(url);
-    
     // Only allow HTTP/HTTPS protocols
     if (!['http:', 'https:'].includes(urlObj.protocol)) {
       console.log(`Camera proxy: Blocked non-HTTP(S) protocol: ${urlObj.protocol}`);
       return false;
     }
-    
-    // Block localhost and private IP ranges
+
     const hostname = urlObj.hostname.toLowerCase();
-    
-    // Allow DuckDNS domains explicitly
-    if (hostname.endsWith('.duckdns.org')) {
-      console.log(`Camera proxy: Allowing DuckDNS domain: ${hostname}`);
-      // Still check the port
-      const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
-      const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
-      if (!allowedPorts.includes(port)) {
-        console.log(`Camera proxy: Blocked DuckDNS domain with invalid port: ${port}`);
-        return false;
-      }
-      return true;
-    }
-    
-    // Block localhost variations
+
+    // Block localhost variations early
     if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
       console.log(`Camera proxy: Blocked localhost: ${hostname}`);
       return false;
     }
-    
-    // Block private IP ranges
-    if (hostname.match(/^10\./)) {
+
+    // Block obvious private IPv4 literals
+    if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.)/.test(hostname)) {
       console.log(`Camera proxy: Blocked private IP: ${hostname}`);
       return false;
     }
-    if (hostname.match(/^192\.168\./)) {
-      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
-      return false;
-    }
-    if (hostname.match(/^172\.(1[6-9]|2[0-9]|3[0-1])\./)) {
-      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
-      return false;
-    }
-    if (hostname.match(/^169\.254\./)) {
-      console.log(`Camera proxy: Blocked link-local IP: ${hostname}`);
-      return false;
-    }
-    
-    // Block metadata services
-    if (hostname.includes('metadata') || hostname === '169.254.169.254') {
-      console.log(`Camera proxy: Blocked metadata service: ${hostname}`);
-      return false;
-    }
-    
+
     // Only allow common camera ports
     const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
     const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
-    
     if (!allowedPorts.includes(port)) {
       console.log(`Camera proxy: Blocked invalid port: ${port}`);
       return false;
     }
-    
-    console.log(`Camera proxy: URL validation passed for: ${hostname}:${port}`);
+
+    // Resolve DNS and ensure public IPs only (prevents DNS rebinding)
+    const dnsOk = await resolveAndValidateHost(hostname);
+    if (!dnsOk) {
+      console.log(`Camera proxy: DNS validation failed or resolved to private IPs for ${hostname}`);
+      return false;
+    }
+
     return true;
   } catch (e) {
     console.log(`Camera proxy: URL parsing failed: ${e.message}`);
@@ -201,9 +208,8 @@ serve(async (req) => {
     }
 
     // SECURITY: Validate the camera URL
-    if (!validateCameraURL(targetUrl)) {
-      console.warn(`Camera proxy: Blocked potentially dangerous URL: ${targetUrl} - Failed validation`);
-      console.log(`Camera proxy: URL validation details for ${targetUrl}:`);
+    if (!(await validateCameraURL(targetUrl))) {
+      console.warn(`Camera proxy: Blocked potentially dangerous URL (failed validation)`);
       try {
         const urlObj = new URL(targetUrl);
         console.log(`  - Protocol: ${urlObj.protocol}`);
@@ -298,7 +304,7 @@ serve(async (req) => {
             'Pragma': 'no-cache'
           },
           signal: controller.signal,
-          redirect: 'follow',
+          redirect: 'manual',
           // Enable connection pooling and reuse
           keepalive: true
         });
