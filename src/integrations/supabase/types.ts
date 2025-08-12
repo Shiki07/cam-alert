@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      camera_credentials: {
+        Row: {
+          camera_label: string
+          created_at: string
+          host: string
+          id: string
+          password_ciphertext: string | null
+          path: string
+          port: number
+          scheme: string
+          updated_at: string
+          user_id: string
+          username: string | null
+        }
+        Insert: {
+          camera_label: string
+          created_at?: string
+          host: string
+          id?: string
+          password_ciphertext?: string | null
+          path?: string
+          port?: number
+          scheme?: string
+          updated_at?: string
+          user_id: string
+          username?: string | null
+        }
+        Update: {
+          camera_label?: string
+          created_at?: string
+          host?: string
+          id?: string
+          password_ciphertext?: string | null
+          path?: string
+          port?: number
+          scheme?: string
+          updated_at?: string
+          user_id?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
       motion_events: {
         Row: {
           cleared_at: string | null
@@ -134,9 +176,7 @@ export type Database = {
     }
     Functions: {
       update_motion_event_cleared: {
-        Args:
-          | { event_id: string }
-          | { event_id: string; cleared_timestamp?: string }
+        Args: { event_id: string; cleared_timestamp?: string }
         Returns: undefined
       }
     }
