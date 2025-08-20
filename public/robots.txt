@@ -1,7 +1,19 @@
+User-agent: *
+Allow: /
+
+# Block access to sensitive areas
+Disallow: /api/
+Disallow: /.env
+Disallow: /config/
+
+# Allow important crawlers
 User-agent: Googlebot
 Allow: /
 
 User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
 Allow: /
 
 User-agent: Twitterbot
@@ -10,5 +22,5 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
-User-agent: *
-Allow: /
+# Sitemap location
+Sitemap: https://www.rpicamalert.xyz/sitemap.xml
