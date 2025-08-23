@@ -75,50 +75,51 @@ def initialize_camera():
     """Initialize camera with proper error handling for Pi Zero 2 W"""
     try:
         logger.info("Initializing Raspberry Pi Camera...")
-        
-        # Create Picamera2 instance
-        picam2 = Picamera2()
-        
-        # Get available cameras - this is where the original error likely occurred
+
+        # Check available cameras BEFORE constructing Picamera2 (avoids 'list index out of range')
         cameras = Picamera2.global_camera_info()
         logger.info(f"Found {len(cameras)} camera(s)")
-        
+
         if len(cameras) == 0:
-            raise RuntimeError("No cameras detected. Please check:\n"
-                             "1. Camera ribbon cable is connected properly\n"
-                             "2. Camera is enabled in raspi-config\n"
-                             "3. Camera is compatible with your Pi model")
-        
-        # Print camera info
+            raise RuntimeError(
+                "No cameras detected. Please check:\n"
+                "1. Camera ribbon cable is connected properly\n"
+                "2. Camera is enabled in raspi-config (Interface Options → Camera)\n"
+                "3. Camera module is compatible and detected by firmware\n"
+                "4. Reboot after enabling camera"
+            )
+
         for i, camera in enumerate(cameras):
             logger.info(f"Camera {i}: {camera}")
-        
-        # Configure camera for streaming
-        # Use a smaller resolution for better performance on Pi Zero 2 W
+
+        # Create Picamera2 instance targeting the first camera explicitly
+        picam2 = Picamera2(camera_num=0)
+
+        # Configure camera for streaming (balanced for Pi Zero 2 W)
         config = picam2.create_video_configuration(
             main={"size": (640, 480), "format": "RGB888"},
             lores={"size": (320, 240), "format": "YUV420"}
         )
-        
+
         logger.info(f"Camera configuration: {config}")
         picam2.configure(config)
-        
+
         # Set camera controls for better quality
         picam2.set_controls({
             "AwbEnable": True,
             "AeEnable": True,
             "FrameRate": 30.0
         })
-        
+
         # Start camera
         picam2.start()
         logger.info("✅ Camera initialized successfully")
-        
+
         # Wait for camera to warm up
         time.sleep(2)
-        
+
         return picam2
-        
+
     except Exception as e:
         logger.error(f"❌ Failed to initialize camera: {str(e)}")
         logger.error("Make sure:")
