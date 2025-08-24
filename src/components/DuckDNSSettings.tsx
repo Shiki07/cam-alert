@@ -251,7 +251,7 @@ export const DuckDNSSettings = () => {
             </div>
 
             <div className="text-xs text-gray-400 space-y-1">
-              <p>• IP is checked every 15 minutes automatically</p>
+              <p>• IP is checked every 5 minutes automatically</p>
               <p>• Use your DuckDNS domain in camera URLs for external access</p>
               <p>• HTTP URLs are automatically proxied through HTTPS for security</p>
               <p>• All tokens are stored securely on the server</p>

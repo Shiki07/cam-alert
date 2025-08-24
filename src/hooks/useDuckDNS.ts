@@ -45,24 +45,43 @@ export const useDuckDNS = () => {
       return config.manualIP.trim();
     }
 
-    // Only use CORS-safe services to avoid network errors
+    // Use multiple reliable IP services with better error handling
     const ipServices = [
-      'https://checkip.amazonaws.com/'
+      'https://checkip.amazonaws.com/',
+      'https://ipv4.icanhazip.com/',
+      'https://api.ipify.org'
     ];
 
     for (const service of ipServices) {
       try {
         console.log(`Trying IP service: ${service}`);
+        
+        // Create a manual timeout for better browser compatibility
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
         const response = await fetch(service, {
           method: 'GET',
           cache: 'no-cache',
-          signal: AbortSignal.timeout(5000), // 5 second timeout
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'Mozilla/5.0'
+          }
         });
+        
+        clearTimeout(timeoutId);
         
         if (response.ok) {
           const ip = (await response.text()).trim();
           console.log(`Successfully got IP from ${service}: ${ip}`);
-          return ip;
+          
+          // Basic IP validation
+          if (ip && /^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
+            return ip;
+          } else {
+            console.log(`Invalid IP format from ${service}: ${ip}`);
+            continue;
+          }
         }
       } catch (error) {
         console.log(`Failed to get IP from ${service}:`, error);
@@ -88,29 +107,29 @@ export const useDuckDNS = () => {
       console.log(`Updating DuckDNS via Edge Function for domain: ${config.domain} with IP: ${ip}`);
       
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('Authentication required for DuckDNS update');
+      if (!session?.access_token) {
+        throw new Error('Authentication required for DuckDNS update. Please log in.');
       }
 
+      console.log('Calling DuckDNS update function...');
       const { data, error: functionError } = await supabase.functions.invoke('duckdns-update', {
         body: {
           domain: config.domain,
           ip: ip
-        },
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
         }
       });
 
       if (functionError) {
         console.error('DuckDNS function error:', functionError);
         // Handle different types of function errors
-        if (functionError.message?.includes('FunctionsFetchError')) {
+        if (functionError.message?.includes('FunctionsFetchError') || functionError.message?.includes('Failed to fetch')) {
           throw new Error('Network connection failed. Please check your internet connection and try again.');
         } else if (functionError.message?.includes('timeout')) {
           throw new Error('Request timeout. The DuckDNS service may be temporarily unavailable.');
+        } else if (functionError.message?.includes('401') || functionError.message?.includes('Unauthorized')) {
+          throw new Error('Authentication failed. Please log in again.');
         } else {
-          throw new Error(`Service error: ${functionError.message}`);
+          throw new Error(`Service error: ${functionError.message || 'Unknown error'}`);
         }
       }
 
@@ -161,13 +180,15 @@ export const useDuckDNS = () => {
 
     try {
       setError(null);
+      console.log('DuckDNS: Starting IP check...');
       const newIP = await getCurrentIP();
       
       if (!newIP) {
-        setError('Unable to detect current IP address. This may be due to browser security restrictions.');
+        setError('Unable to detect current IP address. Please check your internet connection or use manual IP override.');
         return;
       }
 
+      console.log('DuckDNS: Current IP detected:', newIP);
       setCurrentIP(newIP);
 
       if (!lastUpdate || newIP !== currentIP) {
