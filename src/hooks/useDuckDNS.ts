@@ -38,6 +38,7 @@ export const useDuckDNS = () => {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [updatePromise, setUpdatePromise] = useState<Promise<boolean> | null>(null);
+  const [lastKnownIP, setLastKnownIP] = useState<string | null>(null);
 
   const getCurrentIP = useCallback(async (): Promise<string | null> => {
     // If manual IP override is set, use it instead of auto-detection
@@ -206,11 +207,12 @@ export const useDuckDNS = () => {
       console.log('DuckDNS: Current IP detected:', newIP);
       setCurrentIP(newIP);
 
-      if (!lastUpdate || newIP !== currentIP) {
-        console.log('DuckDNS: IP changed or first run, updating...', { previous: currentIP, new: newIP });
+      if (!lastUpdate || newIP !== lastKnownIP) {
+        console.log('DuckDNS: IP changed or first run, updating...', { previous: lastKnownIP, new: newIP });
         
         const success = await updateDuckDNS(newIP);
         if (success) {
+          setLastKnownIP(newIP); // Store the IP we just updated
           console.log('DuckDNS: Update successful');
           // Force DNS cache refresh by triggering diagnostics after a delay
           setTimeout(async () => {
@@ -240,7 +242,7 @@ export const useDuckDNS = () => {
       console.error('DuckDNS check error:', error);
       setError(error instanceof Error ? error.message : 'IP check failed');
     }
-  }, [config.enabled, currentIP, lastUpdate, getCurrentIP, updateDuckDNS]);
+  }, [config.enabled, lastKnownIP, lastUpdate, getCurrentIP, updateDuckDNS]);
 
   const updateConfig = useCallback((newConfig: Partial<DuckDNSConfig>) => {
     const updatedConfig = { ...config, ...newConfig };
