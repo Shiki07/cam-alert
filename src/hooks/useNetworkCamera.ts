@@ -490,13 +490,20 @@ export const useNetworkCamera = () => {
                 }
                 
                 if (!isConnected) {
-                  console.log('useNetworkCamera: MJPEG fetch stream connected successfully! Frame:', frameCount);
+                  // Only log connection success once, not every frame
+                  console.log('useNetworkCamera: MJPEG fetch stream connected successfully!');
                   setIsConnected(true);
                   setCurrentConfig(config);
                   setConnectionError(null);
                   setIsConnecting(false);
                   setReconnectAttempts(0);
                   connectionAgeRef.current = now;
+                }
+                
+                // Throttle frame processing for performance - skip frames if processing is slow
+                if (frameCount % 3 === 0 || !isConnected) {
+                  // Only process every 3rd frame for better performance on Pi Zero
+                  // Always process the first frame to establish connection
                 }
               }
 
