@@ -384,11 +384,11 @@ export const useNetworkCamera = () => {
         let lastFrameTime = Date.now();
         let skippedFrames = 0;
         
-        // Optimize for Pi Zero 2 W - target 5-10 FPS max to reduce CPU load
+        // Optimize for Pi Zero 2 W - balance performance vs smoothness
         const FRAME_THROTTLE_MS =
-          config.quality === 'low' ? 160 :
-          config.quality === 'medium' ? 110 :
-          90;
+          config.quality === 'low' ? 120 :    // ~8 FPS
+          config.quality === 'medium' ? 100 : // ~10 FPS  
+          80;                                  // ~12 FPS high
 
         const processStream = async () => {
           while (isActiveRef.current) {
@@ -736,8 +736,9 @@ export const useNetworkCamera = () => {
         clearTimeout(timeout);
         console.log('useNetworkCamera: Connection test result:', response.status, response.statusText);
         
-        // Accept any response that indicates the camera is reachable
-        return response.status >= 200 && response.status < 500;
+        // Accept successful responses and redirects as camera being reachable
+        const isSuccess = (response.status >= 200 && response.status < 400) || response.status === 501;
+        return isSuccess;
         
       } catch (error) {
         clearTimeout(timeout);

@@ -255,26 +255,30 @@ serve(async (req) => {
       });
     }
 
-    // Adjust Port 80 test to informational success when critical tests pass
+    // Adjust Port 80 test to informational success when target stream tests pass
     const dnsOk = (results.tests.find((t: any) => t.name === 'DNS Resolution')?.success ?? false);
     const targetOk = (results.tests.find((t: any) => t.name === 'Target URL Connectivity')?.success ?? false);
     const streamOk = (results.tests.find((t: any) => t.name === 'MJPEG Stream')?.success ?? false);
     const basicIdx = results.tests.findIndex((t: any) => t.name === 'Basic HTTP (Port 80)');
-    if (dnsOk && targetOk && streamOk && basicIdx >= 0 && results.tests[basicIdx].success === false) {
+    
+    // Make Port 80 informational when the actual camera functionality works
+    if (targetOk && streamOk && basicIdx >= 0 && results.tests[basicIdx].success === false) {
       results.tests[basicIdx].success = true;
-      results.tests[basicIdx].message = 'Port 80 is closed (informational) — no web server is required on port 80.';
+      results.tests[basicIdx].message = 'Port 80 closed (informational) — camera works without web server on port 80.';
     }
 
     // Summary
     const successCount = results.tests.filter((test: any) => test.success).length;
     const totalTests = results.tests.length;
     
+    // Camera is functional if target and stream work, regardless of DNS/Port 80 issues
+    const functionalCamera = targetOk && streamOk;
+    
     results.summary = {
       testsRun: totalTests,
       testsPassed: successCount,
       testsFailed: totalTests - successCount,
-      // Consider camera "overallSuccess" when DNS + Target + Stream pass, even if Port 80 is closed
-      overallSuccess: (dnsOk && targetOk && streamOk),
+      overallSuccess: functionalCamera,
       recommendation: generateRecommendation(results.tests)
     };
 
@@ -299,22 +303,25 @@ function generateRecommendation(tests: any[]): string {
   const targetTest = tests.find(t => t.name === 'Target URL Connectivity');
   const streamTest = tests.find(t => t.name === 'MJPEG Stream');
 
-  if (!dnsTest?.success) {
-    return "DNS resolution failed. Check if your DuckDNS domain is configured correctly.";
+  // Camera is functional if target and stream work
+  if (targetTest?.success && streamTest?.success) {
+    if (!dnsTest?.success) {
+      return "Camera is accessible and working! DNS resolution issue is temporary and doesn't affect camera functionality.";
+    }
+    return "Camera is accessible and working perfectly!";
   }
   
-  if (!basicHttpTest?.success && !targetTest?.success) {
-    return "Basic connectivity failed. Your server/router may be offline, or firewall is blocking all connections.";
+  if (!dnsTest?.success && !targetTest?.success) {
+    return "DNS resolution failed. This might be a temporary DNS issue. Try again in a few minutes, or check if your DuckDNS domain is configured correctly.";
   }
   
   if (!targetTest?.success) {
-    return "Port 8081 is not accessible. Check port forwarding rules in your router and ensure the camera service is running.";
+    return "Camera target port is not accessible. Check port forwarding rules in your router and ensure the camera service is running on the correct port.";
   }
   
-  // Camera accessible even if Port 80 is closed
-  if (dnsTest?.success && targetTest?.success && streamTest?.success && !basicHttpTest?.success) {
-    return "Camera accessible. Port 80 is closed (informational) — this is normal if no web server runs on port 80.";
+  if (!streamTest?.success) {
+    return "Camera service is running but MJPEG stream is not accessible. Check camera configuration and stream URL.";
   }
   
-  return "All critical tests passed. Your camera is accessible.";
+  return "Camera diagnostics completed.";
 }

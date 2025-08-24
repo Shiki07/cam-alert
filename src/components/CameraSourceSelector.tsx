@@ -385,17 +385,17 @@ export const CameraSourceSelector = ({
                               {diagnosticsResults[index].tests.map((test: any, testIndex: number) => (
                                 <div key={testIndex} className="flex items-start gap-2 text-sm">
                                   {(() => {
-                                    const isPort80Info = test.name === 'Basic HTTP (Port 80)' && diagnosticsResults[index]?.summary?.overallSuccess;
-                                    const dotClass = isPort80Info ? 'bg-yellow-500' : (test.success ? 'bg-green-500' : 'bg-red-500');
-                                    const textClass = isPort80Info ? 'text-yellow-400' : (test.success ? 'text-green-400' : 'text-red-400');
-                                    const message = isPort80Info ? 'Port 80 closed (informational) — no web server detected on port 80' : (test.message || test.error);
+                                    const isPort80Info = test.name === 'Basic HTTP (Port 80)' && test.message?.includes('informational');
+                                    const isDnsWarn = test.name === 'DNS Resolution' && !test.success && diagnosticsResults[index]?.summary?.overallSuccess;
+                                    const dotClass = isPort80Info || isDnsWarn ? 'bg-yellow-500' : (test.success ? 'bg-green-500' : 'bg-red-500');
+                                    const textClass = isPort80Info || isDnsWarn ? 'text-yellow-400' : (test.success ? 'text-green-400' : 'text-red-400');
                                     return (
                                       <>
                                         <span className={`w-2 h-2 rounded-full mt-2 ${dotClass}`}></span>
                                         <div className="flex-1">
                                           <div className="text-white">{test.name}</div>
                                           <div className={`text-xs ${textClass}`}>
-                                            {message}
+                                            {test.message || test.error}
                                           </div>
                                         </div>
                                       </>
