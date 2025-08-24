@@ -756,16 +756,31 @@ export const useNetworkCamera = () => {
         // Accept successful responses and redirects as camera being reachable
         const isSuccess = (response.status >= 200 && response.status < 400) || response.status === 501;
         console.log('testConnection: Is success?', isSuccess, '(status', response.status, ')');
-        return isSuccess;
-        
-      } catch (error) {
+        if (isSuccess) return true;
+      } catch (error: any) {
         clearTimeout(timeout);
         console.error('testConnection: Fetch failed:', error);
         if (error.name === 'AbortError') {
           console.log('testConnection: Request was aborted due to timeout');
         }
+        // Continue to diagnostics fallback below
+      }
+
+      // Fallback: use diagnostics function to decide
+      console.log('testConnection: Falling back to diagnostics check...');
+      const { data, error } = await supabase.functions.invoke('camera-diagnostics', {
+        body: { url: config.url }
+      });
+      if (error) {
+        console.error('testConnection: Diagnostics fallback failed:', error);
         return false;
       }
+      const tests = data?.tests || [];
+      const targetOk = tests.find((t: any) => t.name === 'Target URL Connectivity')?.success;
+      const streamOk = tests.find((t: any) => t.name === 'MJPEG Stream')?.success;
+      const diagSuccess = Boolean(targetOk && streamOk);
+      console.log('testConnection: Diagnostics-based success?', diagSuccess);
+      return diagSuccess;
     } catch (error) {
       console.error('testConnection: Setup failed:', error);
       return false;
