@@ -381,6 +381,11 @@ export const useNetworkCamera = () => {
 
         let buffer = new Uint8Array();
         let frameCount = 0;
+        let lastFrameTime = Date.now();
+        let skippedFrames = 0;
+        
+        // Optimize for Pi Zero 2 W - target 5-10 FPS max to reduce CPU load
+        const FRAME_THROTTLE_MS = 150; // Max 6.7 FPS
 
         const processStream = async () => {
           while (isActiveRef.current) {
@@ -391,14 +396,14 @@ export const useNetworkCamera = () => {
                 const connectionAge = Date.now() - connectionAgeRef.current;
                 const framesProcessed = frameCountRef.current;
                 
-                console.log(`useNetworkCamera: Stream ended. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Rate: ${frameRateRef.current.toFixed(1)}fps`);
+                console.log(`useNetworkCamera: Stream ended. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Skipped: ${skippedFrames}`);
                 
                 // Distinguish between natural cycling and actual errors
-                if (connectionAge < 10000 && framesProcessed < 10) { // Less than 10s and very few frames = error
+                if (connectionAge < 10000 && framesProcessed < 5) { // Less than 10s and very few frames = error
                   console.log('useNetworkCamera: Connection error detected, reconnecting with delay...');
-                  if (isActiveRef.current && reconnectAttempts < 5) {
+                  if (isActiveRef.current && reconnectAttempts < 3) { // Reduce max attempts
                     setReconnectAttempts(prev => prev + 1);
-                    const delay = Math.min(2000 * reconnectAttempts, 8000); // Progressive backoff
+                    const delay = Math.min(3000 * reconnectAttempts, 10000); // Slower backoff
                     console.log(`useNetworkCamera: Retrying in ${delay}ms (attempt ${reconnectAttempts + 1})`);
                     setTimeout(() => {
                       if (isActiveRef.current) {
@@ -411,7 +416,7 @@ export const useNetworkCamera = () => {
                     setConnectionError('Camera connection failed after multiple attempts');
                   }
                 } else {
-                  // Natural stream cycling (600+ frames) - immediate seamless restart
+                  // Natural stream cycling - immediate seamless restart
                   console.log('useNetworkCamera: Natural stream cycle detected, immediate seamless restart...');
                   setReconnectAttempts(0); // Reset counter for natural cycles
                   if (isActiveRef.current) {
@@ -452,59 +457,59 @@ export const useNetworkCamera = () => {
 
               // If we have a complete JPEG frame, display it
               if (startIdx !== -1 && endIdx !== -1) {
-                const frameData = buffer.slice(startIdx, endIdx);
-                const blob = new Blob([frameData], { type: 'image/jpeg' });
-                
-                // Revoke previous blob URL
-                if (imgElement.src && imgElement.src.startsWith('blob:')) {
-                  URL.revokeObjectURL(imgElement.src);
-                  blobUrlsRef.current.delete(imgElement.src);
-                }
-                
-                const blobUrl = URL.createObjectURL(blob);
-                imgElement.src = blobUrl;
-                
-                // Track blob URL for cleanup - increase buffer size for smoother streaming
-                blobUrlsRef.current.add(blobUrl);
-                if (blobUrlsRef.current.size > 10) {
-                  const oldestUrl = blobUrlsRef.current.values().next().value;
-                  URL.revokeObjectURL(oldestUrl);
-                  blobUrlsRef.current.delete(oldestUrl);
-                }
-                
-                // Remove processed data from buffer
-                buffer = buffer.slice(endIdx);
-                
-                // Update connection status and frame rate monitoring
-                frameCount++;
-                frameCountRef.current = frameCount;
                 const now = Date.now();
-                lastFrameTimeRef.current = now;
                 
+                // Throttle frames for Pi Zero performance - target 6-8 FPS max
+                const shouldProcessFrame = !isConnected || (now - lastFrameTime) >= FRAME_THROTTLE_MS;
                 
-                // Calculate frame rate for quality monitoring
-                if (now - lastFrameRateCheckRef.current > 5000) { // Check every 5 seconds
-                  const timeDiff = (now - lastFrameRateCheckRef.current) / 1000;
-                  frameRateRef.current = frameCount / timeDiff;
-                  lastFrameRateCheckRef.current = now;
+                if (shouldProcessFrame) {
+                  const frameData = buffer.slice(startIdx, endIdx);
+                  const blob = new Blob([frameData], { type: 'image/jpeg' });
+                  
+                  // Revoke previous blob URL
+                  if (imgElement.src && imgElement.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(imgElement.src);
+                    blobUrlsRef.current.delete(imgElement.src);
+                  }
+                  
+                  const blobUrl = URL.createObjectURL(blob);
+                  imgElement.src = blobUrl;
+                  
+                  // Reduce blob URL buffer for Pi Zero memory optimization
+                  blobUrlsRef.current.add(blobUrl);
+                  if (blobUrlsRef.current.size > 3) { // Reduced from 10 to 3
+                    const oldestUrl = blobUrlsRef.current.values().next().value;
+                    URL.revokeObjectURL(oldestUrl);
+                    blobUrlsRef.current.delete(oldestUrl);
+                  }
+                  
+                  frameCount++;
+                  frameCountRef.current = frameCount;
+                  lastFrameTime = now;
+                  lastFrameTimeRef.current = now;
+                  
+                  // Less frequent frame rate calculation
+                  if (frameCount % 20 === 0 && now - lastFrameRateCheckRef.current > 3000) {
+                    const timeDiff = (now - lastFrameRateCheckRef.current) / 1000;
+                    frameRateRef.current = frameCount / timeDiff;
+                    lastFrameRateCheckRef.current = now;
+                  }
+                  
+                  if (!isConnected) {
+                    console.log('useNetworkCamera: MJPEG fetch stream connected successfully!');
+                    setIsConnected(true);
+                    setCurrentConfig(config);
+                    setConnectionError(null);
+                    setIsConnecting(false);
+                    setReconnectAttempts(0);
+                    connectionAgeRef.current = now;
+                  }
+                } else {
+                  skippedFrames++;
                 }
                 
-                if (!isConnected) {
-                  // Only log connection success once, not every frame
-                  console.log('useNetworkCamera: MJPEG fetch stream connected successfully!');
-                  setIsConnected(true);
-                  setCurrentConfig(config);
-                  setConnectionError(null);
-                  setIsConnecting(false);
-                  setReconnectAttempts(0);
-                  connectionAgeRef.current = now;
-                }
-                
-                // Throttle frame processing for performance - skip frames if processing is slow
-                if (frameCount % 3 === 0 || !isConnected) {
-                  // Only process every 3rd frame for better performance on Pi Zero
-                  // Always process the first frame to establish connection
-                }
+                // Always remove processed data from buffer
+                buffer = buffer.slice(endIdx);
               }
 
               // Enhanced buffer management with larger limits for stability

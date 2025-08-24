@@ -292,7 +292,7 @@ function generateRecommendation(tests: any[]): string {
     return "DNS resolution failed. Check if your DuckDNS domain is configured correctly.";
   }
   
-  if (!basicHttpTest?.success) {
+  if (!basicHttpTest?.success && !targetTest?.success) {
     return "Basic connectivity failed. Your server/router may be offline, or firewall is blocking all connections.";
   }
   
