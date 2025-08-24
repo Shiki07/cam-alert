@@ -157,7 +157,7 @@ serve(async (req) => {
       setTimeout(() => controller.abort(), 10000);
       
       const response = await fetch(basicUrl, {
-        method: 'HEAD',
+        method: 'GET',
         signal: controller.signal
       });
       
@@ -183,7 +183,7 @@ serve(async (req) => {
       setTimeout(() => controller.abort(), 15000);
       
       const response = await fetch(targetUrl, {
-        method: 'HEAD',
+        method: 'GET',
         signal: controller.signal,
         headers: {
           'User-Agent': 'CamAlert-Diagnostics/1.0'
