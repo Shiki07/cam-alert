@@ -355,7 +355,16 @@ export const useNetworkCamera = () => {
         clearTimeout(fetchTimeout);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        let details = '';
+        try {
+          const data = await response.clone().json();
+          details = data?.error || data?.code || JSON.stringify(data);
+        } catch (_) {
+          try {
+            details = await response.clone().text();
+          } catch { /* ignore */ }
+        }
+        throw new Error(`HTTP ${response.status}: ${details || response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type');

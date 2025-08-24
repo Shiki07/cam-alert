@@ -218,7 +218,31 @@ serve(async (req) => {
       );
     }
 
-    // SECURITY: Validate the camera URL
+    // SECURITY: Validate the camera URL (and provide clear errors)
+    try {
+      const tUrl = new URL(targetUrl);
+      const hostname = tUrl.hostname;
+      const isLan = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.|127\.|\[?::1\]?)/.test(hostname);
+
+      // IMPORTANT: Supabase Edge cannot reach private LAN IPs. Return a clear error early.
+      if (isLan) {
+        console.warn(`Camera proxy: LAN/private address not reachable from cloud: ${hostname}`);
+        return new Response(
+          JSON.stringify({
+            error: 'LAN address not reachable from cloud',
+            code: 'lan_not_accessible',
+            details: `Supabase Edge cannot access ${hostname}. Expose the camera via your router (port forward) and a DNS (e.g., DuckDNS) or open the app on the same LAN over HTTP.`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    } catch (_) {
+      // fallthrough to validation
+    }
+
     if (!(await validateCameraURL(targetUrl))) {
       console.warn(`Camera proxy: Blocked potentially dangerous URL (failed validation)`);
       try {
@@ -230,7 +254,7 @@ serve(async (req) => {
         console.log(`  - URL parsing failed: ${e.message}`);
       }
       return new Response(
-        JSON.stringify({ error: 'Invalid or blocked URL' }),
+        JSON.stringify({ error: 'Invalid or blocked URL', code: 'validation_failed' }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
