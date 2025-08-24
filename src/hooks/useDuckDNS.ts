@@ -121,12 +121,29 @@ export const useDuckDNS = () => {
         }
 
         console.log('Calling DuckDNS update function...');
-        const { data, error: functionError } = await supabase.functions.invoke('duckdns-update', {
-          body: {
-            domain: config.domain,
-            ip: ip
+        
+        // Retry invoke to handle transient network/routing issues
+        let data: any = null;
+        let functionError: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          const resp = await supabase.functions.invoke('duckdns-update', {
+            body: { domain: config.domain, ip }
+          });
+          data = resp.data;
+          functionError = resp.error;
+
+          if (!functionError) break;
+
+          const msg = functionError.message || '';
+          const retryable = msg.includes('FunctionsFetchError') || msg.includes('Failed to send') || msg.includes('Failed to fetch');
+          if (retryable && attempt < 3) {
+            console.log(`DuckDNS: invoke failed (attempt ${attempt}/3). Retrying...`);
+            await new Promise(r => setTimeout(r, 500 * attempt));
+            continue;
           }
-        });
+          break;
+        }
+
 
         if (functionError) {
           console.error('DuckDNS function error:', functionError);
@@ -221,12 +238,16 @@ export const useDuckDNS = () => {
               const domain = config.domain.includes('.duckdns.org') 
                 ? config.domain 
                 : `${config.domain}.duckdns.org`;
-              const cameraUrl = `http://${domain}:8081`;
-              
-              await supabase.functions.invoke('camera-diagnostics', {
-                body: { url: cameraUrl }
-              });
-              console.log('DuckDNS: Camera diagnostics completed after IP update');
+              const ports = [8000, 8081];
+              for (const port of ports) {
+                const cameraUrl = `http://${domain}:${port}`;
+                try {
+                  await supabase.functions.invoke('camera-diagnostics', { body: { url: cameraUrl } });
+                  console.log(`DuckDNS: Camera diagnostics completed after IP update on port ${port}`);
+                } catch (e) {
+                  console.log(`DuckDNS: Failed to trigger diagnostics on port ${port}:`, e);
+                }
+              }
             } catch (error) {
               console.log('DuckDNS: Failed to trigger diagnostics:', error);
             }
