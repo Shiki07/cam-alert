@@ -68,8 +68,18 @@ export const useNetworkCamera = () => {
   };
 
   const getProxiedUrl = useCallback(async (originalUrl: string) => {
-    // Always use proxy for HTTP cameras on HTTPS sites
-    const shouldUseProxy = originalUrl.startsWith('http://') && window.location.protocol === 'https:';
+    // Use proxy only when needed and only for public hosts
+    const isHttpsSite = window.location.protocol === 'https:';
+    const isHttpCamera = originalUrl.startsWith('http://');
+    const isLocal = isLocalNetwork(originalUrl);
+
+    // If it's a local/LAN camera, avoid proxy (Supabase cannot reach private IPs)
+    if (isHttpCamera && isHttpsSite && isLocal) {
+      console.log('useNetworkCamera: Skipping proxy for local network camera');
+      return { url: originalUrl, headers: {} };
+    }
+
+    const shouldUseProxy = isHttpCamera && isHttpsSite;
     
     if (shouldUseProxy) {
       const { data: { session } } = await supabase.auth.getSession();
