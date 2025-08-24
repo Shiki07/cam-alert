@@ -35,11 +35,11 @@ const checkRateLimit = (userId: string): boolean => {
 
 // SECURITY: Validate and sanitize camera URLs to prevent SSRF
 const isPrivateIp = (ip: string): boolean => {
-  // IPv4
+  // IPv4 private ranges - be more permissive for camera access
   if (/^(10\.\d+\.\d+\.\d+)|(192\.168\.\d+\.\d+)|(172\.(1[6-9]|2[0-9]|3[0-1])\.\d+\.\d+)|(169\.254\.\d+\.\d+)|(127\.\d+\.\d+\.\d+)$/.test(ip)) {
     return true;
   }
-  // IPv6
+  // IPv6 private ranges
   if (/^(::1)$/.test(ip)) return true; // loopback
   if (/^(fc|fd)/i.test(ip)) return true; // unique local
   if (/^fe80:/i.test(ip)) return true; // link-local
@@ -80,19 +80,7 @@ const validateCameraURL = async (url: string): Promise<boolean> => {
 
     const hostname = urlObj.hostname.toLowerCase();
 
-    // Block localhost variations early
-    if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
-      console.log(`Camera proxy: Blocked localhost: ${hostname}`);
-      return false;
-    }
-
-    // Block obvious private IPv4 literals
-    if (/^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|169\.254\.)/.test(hostname)) {
-      console.log(`Camera proxy: Blocked private IP: ${hostname}`);
-      return false;
-    }
-
-    // Allow any port for DuckDNS and other dynamic DNS services
+    // Allow any port for cameras (including common local camera ports)
     const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
     const allowedPorts = ['80', '443', '8000', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
     if (!allowedPorts.includes(port)) {
@@ -106,6 +94,18 @@ const validateCameraURL = async (url: string): Promise<boolean> => {
         hostname.includes('.ddns.net')) {
       console.log(`Camera proxy: Allowing dynamic DNS domain: ${hostname}`);
       return true;
+    }
+
+    // Allow private IP ranges for authenticated camera access (local networks)
+    if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname)) {
+      console.log(`Camera proxy: Allowing private IP camera: ${hostname}`);
+      return true;
+    }
+
+    // Block localhost variations for security
+    if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
+      console.log(`Camera proxy: Blocked localhost: ${hostname}`);
+      return false;
     }
 
     // Resolve DNS and ensure public IPs only (prevents DNS rebinding)
