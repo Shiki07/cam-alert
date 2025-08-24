@@ -255,8 +255,18 @@ serve(async (req) => {
       });
     }
 
+    // Adjust Port 80 test to informational success when critical tests pass
+    const dnsOk = (results.tests.find((t: any) => t.name === 'DNS Resolution')?.success ?? false);
+    const targetOk = (results.tests.find((t: any) => t.name === 'Target URL Connectivity')?.success ?? false);
+    const streamOk = (results.tests.find((t: any) => t.name === 'MJPEG Stream')?.success ?? false);
+    const basicIdx = results.tests.findIndex((t: any) => t.name === 'Basic HTTP (Port 80)');
+    if (dnsOk && targetOk && streamOk && basicIdx >= 0 && results.tests[basicIdx].success === false) {
+      results.tests[basicIdx].success = true;
+      results.tests[basicIdx].message = 'Port 80 is closed (informational) — no web server is required on port 80.';
+    }
+
     // Summary
-    const successCount = results.tests.filter(test => test.success).length;
+    const successCount = results.tests.filter((test: any) => test.success).length;
     const totalTests = results.tests.length;
     
     results.summary = {
@@ -264,11 +274,7 @@ serve(async (req) => {
       testsPassed: successCount,
       testsFailed: totalTests - successCount,
       // Consider camera "overallSuccess" when DNS + Target + Stream pass, even if Port 80 is closed
-      overallSuccess: (
-        (results.tests.find((t: any) => t.name === 'DNS Resolution')?.success ?? false) &&
-        (results.tests.find((t: any) => t.name === 'Target URL Connectivity')?.success ?? false) &&
-        (results.tests.find((t: any) => t.name === 'MJPEG Stream')?.success ?? false)
-      ),
+      overallSuccess: (dnsOk && targetOk && streamOk),
       recommendation: generateRecommendation(results.tests)
     };
 

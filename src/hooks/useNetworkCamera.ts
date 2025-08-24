@@ -385,7 +385,10 @@ export const useNetworkCamera = () => {
         let skippedFrames = 0;
         
         // Optimize for Pi Zero 2 W - target 5-10 FPS max to reduce CPU load
-        const FRAME_THROTTLE_MS = 150; // Max 6.7 FPS
+        const FRAME_THROTTLE_MS =
+          config.quality === 'low' ? 160 :
+          config.quality === 'medium' ? 110 :
+          90;
 
         const processStream = async () => {
           while (isActiveRef.current) {
@@ -709,7 +712,7 @@ export const useNetworkCamera = () => {
 
       // Test connection with shorter timeout for responsiveness
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
+      const timeout = setTimeout(() => controller.abort(), 8000);
 
       try {
         const { data: { session } } = await supabase.auth.getSession();

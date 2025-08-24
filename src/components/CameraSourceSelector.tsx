@@ -8,6 +8,7 @@ import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope } from 'lucide
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
 import { supabase } from '@/integrations/supabase/client';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
+import { useToast } from '@/components/ui/use-toast';
 
 export type CameraSource = 'webcam' | 'network';
 
@@ -44,6 +45,7 @@ export const CameraSourceSelector = ({
   const [diagnosticsResults, setDiagnosticsResults] = useState<{[key: number]: any}>({});
   
   const { getDuckDNSUrl, config } = useDuckDNS();
+  const { toast } = useToast();
 
   const runDiagnostics = async (camera: NetworkCameraConfig, index: number) => {
     setRunningDiagnostics(prev => new Set(prev).add(index));
@@ -94,6 +96,11 @@ export const CameraSourceSelector = ({
     try {
       const success = await onTestConnection(config);
       console.log(`Connection test ${success ? 'passed' : 'failed'} for ${config.name}`);
+      toast({
+        title: success ? 'Connection successful' : 'Connection failed',
+        description: success ? `Camera ${config.name} is reachable` : `Could not reach ${config.name}`,
+        variant: success ? undefined : 'destructive',
+      });
     } finally {
       setTestingConnections(prev => {
         const newSet = new Set(prev);
@@ -377,13 +384,23 @@ export const CameraSourceSelector = ({
                             <div className="space-y-1">
                               {diagnosticsResults[index].tests.map((test: any, testIndex: number) => (
                                 <div key={testIndex} className="flex items-start gap-2 text-sm">
-                                  <span className={`w-2 h-2 rounded-full mt-2 ${test.success ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                  <div className="flex-1">
-                                    <div className="text-white">{test.name}</div>
-                                    <div className={`text-xs ${test.success ? 'text-green-400' : 'text-red-400'}`}>
-                                      {test.message || test.error}
-                                    </div>
-                                  </div>
+                                  {(() => {
+                                    const isPort80Info = test.name === 'Basic HTTP (Port 80)' && diagnosticsResults[index]?.summary?.overallSuccess;
+                                    const dotClass = isPort80Info ? 'bg-yellow-500' : (test.success ? 'bg-green-500' : 'bg-red-500');
+                                    const textClass = isPort80Info ? 'text-yellow-400' : (test.success ? 'text-green-400' : 'text-red-400');
+                                    const message = isPort80Info ? 'Port 80 closed (informational) — no web server detected on port 80' : (test.message || test.error);
+                                    return (
+                                      <>
+                                        <span className={`w-2 h-2 rounded-full mt-2 ${dotClass}`}></span>
+                                        <div className="flex-1">
+                                          <div className="text-white">{test.name}</div>
+                                          <div className={`text-xs ${textClass}`}>
+                                            {message}
+                                          </div>
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               ))}
                             </div>
