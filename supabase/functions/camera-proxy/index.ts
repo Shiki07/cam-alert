@@ -92,18 +92,29 @@ const validateCameraURL = async (url: string): Promise<boolean> => {
       return false;
     }
 
-    // Only allow common camera ports
+    // Allow any port for DuckDNS and other dynamic DNS services
     const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
-    const allowedPorts = ['80', '443', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
+    const allowedPorts = ['80', '443', '8000', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
     if (!allowedPorts.includes(port)) {
       console.log(`Camera proxy: Blocked invalid port: ${port}`);
       return false;
+    }
+
+    // Special handling for DuckDNS and other dynamic DNS services
+    if (hostname.includes('.duckdns.org') || 
+        hostname.includes('.no-ip.') || 
+        hostname.includes('.ddns.net')) {
+      console.log(`Camera proxy: Allowing dynamic DNS domain: ${hostname}`);
+      return true;
     }
 
     // Resolve DNS and ensure public IPs only (prevents DNS rebinding)
     const dnsOk = await resolveAndValidateHost(hostname);
     if (!dnsOk) {
       console.log(`Camera proxy: DNS validation failed or resolved to private IPs for ${hostname}`);
+      console.log(`  - Protocol: ${urlObj.protocol}`);
+      console.log(`  - Hostname: ${hostname}`);
+      console.log(`  - Port: ${port}`);
       return false;
     }
 

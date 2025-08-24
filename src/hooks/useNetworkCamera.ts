@@ -214,7 +214,15 @@ export const useNetworkCamera = () => {
         
         // Build the stream URL (quality will be handled client-side for MJPEG)
         let streamUrl = config.url;
-        console.log('useNetworkCamera: Using original stream URL:', streamUrl);
+        
+        // Fix malformed URLs where port appears in path instead of hostname
+        if (streamUrl.includes('/8000.stream.mjpg') || streamUrl.includes('/8081.stream.mjpg')) {
+          streamUrl = streamUrl.replace('/8000.stream.mjpg', ':8000/stream.mjpg')
+                              .replace('/8081.stream.mjpg', ':8081/stream.mjpg');
+          console.log('useNetworkCamera: Fixed malformed URL to:', streamUrl);
+        }
+        
+        console.log('useNetworkCamera: Using stream URL:', streamUrl);
         console.log('useNetworkCamera: Quality will be handled client-side for MJPEG streams');
         
         if (config.username && config.password) {
