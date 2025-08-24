@@ -190,72 +190,96 @@ serve(async (req) => {
       );
     }
     
-    // Make request to DuckDNS with timeout
+    // Make request to DuckDNS with retry logic for DNS failures
     const duckdnsUrl = `https://www.duckdns.org/update?domains=${encodeURIComponent(cleanDomain)}&token=${encodeURIComponent(token)}&ip=${encodeURIComponent(cleanIP)}`;
     
     console.log(`Updating DuckDNS - Domain: ${cleanDomain}, IP: ${cleanIP}, User: ${user.id}`);
     
-    // Add timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    // Add retry logic for DNS failures
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    try {
-      const response = await fetch(duckdnsUrl, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'CamAlert/1.0'
+    while (retryCount <= maxRetries) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      try {
+        const response = await fetch(duckdnsUrl, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'CamAlert/1.0'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.text();
-      
-      console.log(`DuckDNS response: ${result}`);
-      
-      if (result.trim() === 'OK') {
-        return new Response(
-          JSON.stringify({ success: true, message: 'DuckDNS updated successfully' }),
-          { 
-            status: 200, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      } else {
-        return new Response(
-          JSON.stringify({ error: 'DuckDNS update failed' }),
-          { 
-            status: 400, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      
-      if (fetchError.name === 'AbortError') {
-        console.error('DuckDNS request timeout');
-        return new Response(
-          JSON.stringify({ error: 'Request timeout' }),
-          { 
-            status: 408, 
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-      
-      console.error('DuckDNS fetch error:', fetchError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to update DuckDNS' }),
-        { 
-          status: 500, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        
+        const result = await response.text();
+        
+        console.log(`DuckDNS response: ${result}`);
+        
+        if (result.trim() === 'OK') {
+          return new Response(
+            JSON.stringify({ success: true, message: 'DuckDNS updated successfully' }),
+            { 
+              status: 200, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        } else {
+          return new Response(
+            JSON.stringify({ error: 'DuckDNS update failed' }),
+            { 
+              status: 400, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
         }
-      );
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          console.error('DuckDNS request timeout');
+          if (retryCount < maxRetries) {
+            retryCount++;
+            console.log(`Retrying DuckDNS request (${retryCount}/${maxRetries}) after timeout...`);
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+            continue;
+          }
+          return new Response(
+            JSON.stringify({ error: 'Request timeout after retries' }),
+            { 
+              status: 408, 
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+            }
+          );
+        }
+        
+        // Check if it's a DNS-related error
+        const errorString = String(fetchError);
+        if ((errorString.includes('dns error') || 
+             errorString.includes('failed to lookup') ||
+             errorString.includes('Name or service not known') ||
+             errorString.includes('Temporary failure in name resolution')) && 
+            retryCount < maxRetries) {
+          retryCount++;
+          console.log(`DNS error detected, retrying DuckDNS request (${retryCount}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000 * retryCount)); // Progressive delay
+          continue;
+        }
+        
+        console.error('DuckDNS fetch error:', fetchError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to update DuckDNS', details: errorString }),
+          { 
+            status: 500, 
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+          }
+        );
+      }
     }
   } catch (error) {
     console.error('DuckDNS update error:', error);
