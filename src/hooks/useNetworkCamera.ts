@@ -80,7 +80,7 @@ export const useNetworkCamera = () => {
       // Include the auth token as a URL parameter for img elements
       const proxyUrl = new URL('https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/camera-proxy');
       proxyUrl.searchParams.set('url', originalUrl);
-      proxyUrl.searchParams.set('token', session.access_token);
+      // token sent via Authorization header instead of query param
       
       return { 
         url: proxyUrl.toString(),
@@ -584,30 +584,75 @@ export const useNetworkCamera = () => {
       } catch (error) {
         clearTimeout(fetchTimeout);
         console.error('useNetworkCamera: Fetch-based connection failed:', error);
-      
-      if (error instanceof Error && error.name === 'AbortError') {
-        console.log('useNetworkCamera: Fetch operation aborted');
-        return;
-      }
-      
-      // Exponential backoff retry logic for failed attempts
-      const delay = Math.min(1000 * (reconnectAttempts + 1), 5000);
-      console.log(`useNetworkCamera: Retrying fetch-based connection (${reconnectAttempts + 1}/3)`);
-      
-      if (reconnectAttempts < 3 && isActiveRef.current) {
-        setReconnectAttempts(prev => prev + 1);
-        setTimeout(() => {
-          if (isActiveRef.current) {
-            connectToMJPEGStream(imgElement, config);
+
+        // If cloud proxy cannot reach LAN, try DuckDNS fallback on port 8000 automatically
+        const msg = (error instanceof Error ? error.message : String(error)) || '';
+        if (msg.includes('LAN address not reachable from cloud')) {
+          try {
+            const duckCfgRaw = localStorage.getItem('duckdns-config');
+            if (duckCfgRaw) {
+              const duckCfg = JSON.parse(duckCfgRaw);
+              if (duckCfg?.enabled && duckCfg?.domain) {
+                const domain = duckCfg.domain.includes('.duckdns.org') ? duckCfg.domain : `${duckCfg.domain}.duckdns.org`;
+                const fallbackUrl = `http://${domain}:8000/stream.mjpg`;
+                console.log('useNetworkCamera: Trying DuckDNS fallback:', fallbackUrl);
+                const { url: fallbackProxied } = await getProxiedUrl(fallbackUrl);
+
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) throw new Error('Authentication session required');
+
+                const fbResp = await fetch(fallbackProxied, {
+                  method: 'GET',
+                  signal: controller.signal,
+                  headers: {
+                    'Authorization': `Bearer ${session.access_token}`,
+                    'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                  },
+                  credentials: 'omit'
+                });
+
+                if (fbResp.ok) {
+                  console.log('useNetworkCamera: DuckDNS fallback succeeded');
+                  // Replace response with fallback and continue normal flow
+                  // Re-run logic by recursively calling with updated config URL
+                  const newConfig = { ...config, url: fallbackUrl } as NetworkCameraConfig;
+                  connectToMJPEGStream(imgElement, newConfig);
+                  return;
+                } else {
+                  console.log('useNetworkCamera: DuckDNS fallback failed with status', fbResp.status);
+                }
+              }
+            }
+          } catch (fbErr) {
+            console.log('useNetworkCamera: DuckDNS fallback attempt errored:', fbErr);
           }
-        }, delay);
-      } else {
-        setConnectionError(`Camera connection failed after multiple attempts. Please check if your camera is online and accessible.`);
-        setIsConnected(false);
-        setIsConnecting(false);
-        isActiveRef.current = false;
+        }
+      
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('useNetworkCamera: Fetch operation aborted');
+          return;
+        }
+        
+        // Exponential backoff retry logic for failed attempts
+        const delay = Math.min(1000 * (reconnectAttempts + 1), 5000);
+        console.log(`useNetworkCamera: Retrying fetch-based connection (${reconnectAttempts + 1}/3)`);
+        
+        if (reconnectAttempts < 3 && isActiveRef.current) {
+          setReconnectAttempts(prev => prev + 1);
+          setTimeout(() => {
+            if (isActiveRef.current) {
+              connectToMJPEGStream(imgElement, config);
+            }
+          }, delay);
+        } else {
+          setConnectionError(`Camera connection failed after multiple attempts. If this is a local IP, enable DuckDNS and forward port 8000, then use your DuckDNS URL.`);
+          setIsConnected(false);
+          setIsConnecting(false);
+          isActiveRef.current = false;
+        }
       }
-    }
     } catch (error) {
       console.error('useNetworkCamera: connectToMJPEGStream error:', error);
       setConnectionError('Failed to establish camera connection');

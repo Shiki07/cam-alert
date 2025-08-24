@@ -73,7 +73,23 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const targetUrl = url.searchParams.get('url') || 'http://alepava.duckdns.org:8081';
+    let targetUrl = url.searchParams.get('url') || '';
+
+    // Also accept JSON body with { url }
+    if (!targetUrl && (req.method === 'POST' || req.method === 'PUT')) {
+      try {
+        const body = await req.json();
+        if (body?.url && typeof body.url === 'string') {
+          targetUrl = body.url;
+        }
+      } catch (_) {
+        // ignore body parse errors
+      }
+    }
+
+    if (!targetUrl) {
+      targetUrl = 'http://alepava.duckdns.org:8081';
+    }
     
     // Authenticate user
     const authHeader = req.headers.get('authorization');
