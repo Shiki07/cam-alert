@@ -698,28 +698,42 @@ export const useNetworkCamera = () => {
   }, [currentConfig, disconnect, connectToCamera]);
 
   const testConnection = useCallback(async (config: NetworkCameraConfig): Promise<boolean> => {
+    console.log('=== testConnection: Starting test for:', config.name, config.url);
+    
     try {
-      console.log('useNetworkCamera: Testing connection to:', config.url);
-      
       // Build stream URL with credentials if provided
       let testUrl = config.url;
       if (config.username && config.password) {
         testUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
+        console.log('testConnection: Added credentials to URL');
       }
 
       // Get proxied URL for testing
+      console.log('testConnection: Getting proxied URL for:', testUrl);
       const { url: proxiedUrl } = await getProxiedUrl(testUrl);
+      console.log('testConnection: Proxied URL:', proxiedUrl);
 
-      // Test connection with shorter timeout for responsiveness
+      // Test connection with longer timeout
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      const timeout = setTimeout(() => {
+        console.log('testConnection: Timeout reached, aborting');
+        controller.abort();
+      }, 10000); // 10 seconds
 
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          throw new Error('Authentication required');
+        console.log('testConnection: Getting authentication session...');
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('testConnection: Session error:', sessionError);
+          throw new Error('Authentication session error: ' + sessionError.message);
         }
+        if (!session) {
+          console.error('testConnection: No session found');
+          throw new Error('No authentication session found');
+        }
+        console.log('testConnection: Session valid, user:', session.user?.email);
 
+        console.log('testConnection: Making fetch request...');
         const response = await fetch(proxiedUrl, {
           method: 'GET',
           signal: controller.signal,
@@ -734,19 +748,24 @@ export const useNetworkCamera = () => {
         });
 
         clearTimeout(timeout);
-        console.log('useNetworkCamera: Connection test result:', response.status, response.statusText);
+        console.log('testConnection: Response received - Status:', response.status, 'StatusText:', response.statusText);
+        console.log('testConnection: Response headers:', Object.fromEntries(response.headers.entries()));
         
         // Accept successful responses and redirects as camera being reachable
         const isSuccess = (response.status >= 200 && response.status < 400) || response.status === 501;
+        console.log('testConnection: Is success?', isSuccess, '(status', response.status, ')');
         return isSuccess;
         
       } catch (error) {
         clearTimeout(timeout);
-        console.log('useNetworkCamera: Connection test failed:', error);
+        console.error('testConnection: Fetch failed:', error);
+        if (error.name === 'AbortError') {
+          console.log('testConnection: Request was aborted due to timeout');
+        }
         return false;
       }
     } catch (error) {
-      console.error('useNetworkCamera: Connection test setup failed:', error);
+      console.error('testConnection: Setup failed:', error);
       return false;
     }
   }, [getProxiedUrl]);
