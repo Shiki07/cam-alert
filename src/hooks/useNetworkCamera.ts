@@ -718,11 +718,14 @@ export const useNetworkCamera = () => {
         }
 
         const response = await fetch(proxiedUrl, {
-          method: 'HEAD',
+          method: 'GET',
           signal: controller.signal,
           headers: {
             'Authorization': `Bearer ${session.access_token}`,
-            'User-Agent': 'CamAlert-ConnectionTest/1.0'
+            'User-Agent': 'CamAlert-ConnectionTest/1.0',
+            'Accept': 'multipart/x-mixed-replace, image/jpeg, */*',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
           },
           credentials: 'omit'
         });

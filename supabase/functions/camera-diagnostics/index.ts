@@ -263,7 +263,12 @@ serve(async (req) => {
       testsRun: totalTests,
       testsPassed: successCount,
       testsFailed: totalTests - successCount,
-      overallSuccess: successCount === totalTests,
+      // Consider camera "overallSuccess" when DNS + Target + Stream pass, even if Port 80 is closed
+      overallSuccess: (
+        (results.tests.find((t: any) => t.name === 'DNS Resolution')?.success ?? false) &&
+        (results.tests.find((t: any) => t.name === 'Target URL Connectivity')?.success ?? false) &&
+        (results.tests.find((t: any) => t.name === 'MJPEG Stream')?.success ?? false)
+      ),
       recommendation: generateRecommendation(results.tests)
     };
 
@@ -300,9 +305,10 @@ function generateRecommendation(tests: any[]): string {
     return "Port 8081 is not accessible. Check port forwarding rules in your router and ensure the camera service is running.";
   }
   
-  if (!streamTest?.success) {
-    return "Camera service is running but MJPEG stream is not accessible. Check camera configuration.";
+  // Camera accessible even if Port 80 is closed
+  if (dnsTest?.success && targetTest?.success && streamTest?.success && !basicHttpTest?.success) {
+    return "Camera accessible. Port 80 is closed (informational) — this is normal if no web server runs on port 80.";
   }
   
-  return "All tests passed! Your camera should be accessible.";
+  return "All critical tests passed. Your camera is accessible.";
 }
