@@ -385,10 +385,11 @@ export const useNetworkCamera = () => {
         let skippedFrames = 0;
         
         // Optimize for Pi Zero 2 W - balance performance vs smoothness
-        const FRAME_THROTTLE_MS =
-          config.quality === 'low' ? 120 :    // ~8 FPS
-          config.quality === 'medium' ? 100 : // ~10 FPS  
-          80;                                  // ~12 FPS high
+        const BASE_THROTTLE_MS =
+          config.quality === 'low' ? 90 :    // ~11 FPS
+          config.quality === 'medium' ? 75 : // ~13 FPS
+          60;                                 // ~16-17 FPS high
+
 
         const processStream = async () => {
           while (isActiveRef.current) {
@@ -462,8 +463,10 @@ export const useNetworkCamera = () => {
               if (startIdx !== -1 && endIdx !== -1) {
                 const now = Date.now();
                 
-                // Throttle frames for Pi Zero performance - target 6-8 FPS max
-                const shouldProcessFrame = !isConnected || (now - lastFrameTime) >= FRAME_THROTTLE_MS;
+                // Adaptive throttle: faster for first 5s, then settle based on quality
+                const connectionAge = now - connectionAgeRef.current;
+                const effectiveThrottleMs = connectionAge < 5000 ? Math.max(BASE_THROTTLE_MS - 30, 40) : BASE_THROTTLE_MS;
+                const shouldProcessFrame = !isConnected || (now - lastFrameTime) >= effectiveThrottleMs;
                 
                 if (shouldProcessFrame) {
                   const frameData = buffer.slice(startIdx, endIdx);
@@ -515,10 +518,9 @@ export const useNetworkCamera = () => {
                 buffer = buffer.slice(endIdx);
               }
 
-              // Enhanced buffer management with larger limits for stability
-              if (buffer.length > 8 * 1024 * 1024) { // Increased from 2MB to 8MB
-                console.log('useNetworkCamera: Buffer too large, using circular buffer strategy');
-                buffer = buffer.slice(-4 * 1024 * 1024); // Keep 4MB instead of 1MB
+              // Tighter buffer limits to reduce scanning overhead
+              if (buffer.length > 2 * 1024 * 1024) {
+                buffer = buffer.slice(-1 * 1024 * 1024); // keep last 1MB
               }
               
             } catch (readError: any) {

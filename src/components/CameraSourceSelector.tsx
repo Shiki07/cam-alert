@@ -8,7 +8,7 @@ import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope } from 'lucide
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
 import { supabase } from '@/integrations/supabase/client';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 
 export type CameraSource = 'webcam' | 'network';
 
