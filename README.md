@@ -77,7 +77,7 @@ If you're using a Raspberry Pi Camera Module:
 2. **Install Camera Streaming Service**:
    ```bash
    # Clone the pi-service repository to your Pi
-   git clone https://github.com/YOUR_USERNAME/camalert.git
+   git clone https://github.com/Shiki07/camalert.git
    cd camalert/pi-service
    
    # Install dependencies
