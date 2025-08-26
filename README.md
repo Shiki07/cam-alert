@@ -275,52 +275,6 @@ If you're using a Raspberry Pi Camera Module:
 
 ---
 
-## 🚀 Web Application Setup
-
-### Step 1: Clone and Install
-
-```bash
-git clone https://github.com/YOUR_USERNAME/camalert.git
-cd camalert
-npm install
-```
-
-### Step 2: Configure Supabase
-
-1. **Create Supabase Project**:
-   - Go to [supabase.com](https://supabase.com)
-   - Create new project
-   - Copy Project URL and Anon Key
-
-2. **Set Environment Variables**:
-   ```bash
-   # Create .env.local file
-   VITE_SUPABASE_URL=your_supabase_url
-   VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
-3. **Run Database Migrations**:
-   ```bash
-   npx supabase login
-   npx supabase init
-   npx supabase db push
-   ```
-
-### Step 3: Configure Email Service
-
-1. **Get Resend API Key**:
-   - Sign up at [resend.com](https://resend.com)
-   - Create API key
-   - Add to Supabase secrets as `RESEND_API_KEY`
-
-### Step 4: Start Development Server
-
-```bash
-npm run dev
-```
-
----
-
 ## 🎮 Connecting Your Pi to the Webapp
 
 ### Step 1: Configure Camera Source
