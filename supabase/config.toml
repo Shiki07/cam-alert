@@ -32,3 +32,6 @@ verify_jwt = true
 
 [functions.save-duckdns-token]
 verify_jwt = true
+
+[functions.test-pi-connection]
+verify_jwt = true
