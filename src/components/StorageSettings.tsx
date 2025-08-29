@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Cloud, HardDrive, Settings, Wifi } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface StorageSettingsProps {
   storageType: 'cloud' | 'local';
@@ -38,32 +39,47 @@ export const StorageSettings = ({
   }, [piEndpoint]);
 
   const testPiConnection = async () => {
-    if (!piEndpoint) {
+    if (!piEndpoint.trim()) {
       toast({
         title: "Error",
-        description: "Please enter Pi endpoint URL",
-        variant: "destructive"
+        description: "Please enter a Pi endpoint first",
+        variant: "destructive",
       });
       return;
     }
 
     try {
-      // Ensure we use HTTP for local Pi connections
-      const endpoint = piEndpoint.startsWith('https://') 
-        ? piEndpoint.replace('https://', 'http://') 
-        : piEndpoint;
-      const response = await fetch(`${endpoint}/health`);
-      const data = await response.json();
-      
-      toast({
-        title: "Connection successful",
-        description: `Connected to Pi service at ${piEndpoint}`,
+      // Use cloud-based test via Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('test-pi-connection', {
+        body: { pi_endpoint: piEndpoint.trim() }
       });
+
+      if (error) {
+        toast({
+          title: "Test Failed",
+          description: `Cloud test error: ${error.message}`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.success) {
+        toast({
+          title: "Connection Successful ✅",
+          description: `Pi service is reachable from cloud. ${data.healthData?.videosPath ? `Videos path: ${data.healthData.videosPath}` : ''}`,
+        });
+      } else {
+        toast({
+          title: "Connection Failed ❌",
+          description: `${data.error}${!data.reachable ? ' - Check port forwarding and firewall settings.' : ''}`,
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       toast({
-        title: "Connection failed", 
-        description: "Could not connect to Pi service. Check the URL and ensure the service is running.",
-        variant: "destructive"
+        title: "Test Error",
+        description: "Could not perform cloud test. Try again.",
+        variant: "destructive",
       });
     }
   };
