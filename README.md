@@ -2,6 +2,8 @@
 
 A powerful web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
 
+> ⚠️ **VPN Compatibility Notice**: This system currently does not work when connected through a VPN. If you're using a VPN on your viewing device, Raspberry Pi, or router, you may experience connection issues. VPN support is planned for a future update.
+
 ## 🎯 Features
 
 - **Multi-Camera Support**: Monitor multiple IP cameras simultaneously
