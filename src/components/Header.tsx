@@ -47,7 +47,7 @@ const Header = () => {
             className="text-gray-300 border-gray-600 hover:bg-gray-700"
           >
             <a 
-              href="https://github.com/your-username/rpi-camalert" 
+              href="https://github.com/Shiki07/rpi-camalert" 
               target="_blank" 
               rel="noopener noreferrer"
             >
