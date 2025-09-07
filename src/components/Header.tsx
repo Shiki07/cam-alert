@@ -2,7 +2,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, Github } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const Header = () => {
@@ -40,6 +40,21 @@ const Header = () => {
             <User className="w-4 h-4" />
             <span className="text-sm">{user.email}</span>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            asChild
+            className="text-gray-300 border-gray-600 hover:bg-gray-700"
+          >
+            <a 
+              href="https://github.com/your-username/rpi-camalert" 
+              target="_blank" 
+              rel="noopener noreferrer"
+            >
+              <Github className="w-4 h-4 mr-2" />
+              GitHub
+            </a>
+          </Button>
           <Button 
             variant="outline" 
             size="sm" 
