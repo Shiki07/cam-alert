@@ -41,10 +41,10 @@ const Header = () => {
             <span className="text-sm">{user.email}</span>
           </div>
           <Button 
-            variant="outline" 
+            variant="secondary" 
             size="sm" 
             asChild
-            className="text-gray-300 border-gray-600 hover:bg-gray-700"
+            className="bg-white text-gray-900 hover:bg-gray-100"
           >
             <a 
               href="https://github.com/Shiki07/cam-alert" 
