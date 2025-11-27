@@ -16,7 +16,8 @@ export const useMobileRecording = () => {
   const saveToDeviceStorage = useCallback(async (
     blob: Blob, 
     filename: string, 
-    motionDetected: boolean = false
+    motionDetected: boolean = false,
+    customFolder?: string
   ) => {
     if (!isNativePlatform) {
       throw new Error('Device storage only available on mobile platforms');
@@ -26,8 +27,8 @@ export const useMobileRecording = () => {
       // Convert blob to base64
       const base64Data = await blobToBase64(blob);
       
-      // Create Videos folder structure
-      const folderPath = motionDetected ? 'Videos/Motion' : 'Videos/Manual';
+      // Use custom folder if provided, otherwise use motion-based folder
+      const folderPath = customFolder || (motionDetected ? 'Videos/Motion' : 'Videos/Manual');
       
       // Save to device storage
       const result = await Filesystem.writeFile({
