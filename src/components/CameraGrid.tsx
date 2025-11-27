@@ -26,6 +26,9 @@ interface CameraGridProps {
   isConnected?: boolean;
   onConnectionChange?: (connected: boolean) => void;
 
+  // Camera Control Actions
+  onSnapshot?: () => void;
+  liveFeedRef?: React.RefObject<any>;
 
   // Settings Props
   onStorageTypeChange: (type: 'cloud' | 'local') => void;
@@ -67,6 +70,8 @@ export const CameraGrid = ({
   endHour,
   isConnected = false,
   onConnectionChange,
+  onSnapshot,
+  liveFeedRef,
   onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
@@ -92,6 +97,7 @@ export const CameraGrid = ({
       {/* Live Feed - Full width */}
       <div className="w-full">
         <LiveFeed 
+          ref={liveFeedRef}
           isRecording={isRecording} 
           onRecordingChange={onRecordingChange}
           storageType={storageType}
@@ -134,6 +140,7 @@ export const CameraGrid = ({
           quality={quality}
           isConnected={isConnected}
           storageType={storageType}
+          onSnapshot={onSnapshot}
         />
         
         <UnifiedMotionDetection 

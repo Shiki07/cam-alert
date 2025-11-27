@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
@@ -175,10 +175,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      requesting_user_id: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      requesting_user_id: { Args: never; Returns: string }
       update_motion_event_cleared: {
         Args: { cleared_timestamp?: string; event_id: string }
         Returns: undefined

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { useRecording } from "@/hooks/useRecording";
 import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
 import { useImageMotionDetection } from "@/hooks/useImageMotionDetection";
@@ -33,7 +33,11 @@ interface LiveFeedProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
-export const LiveFeed = ({ 
+export interface LiveFeedHandle {
+  takeSnapshot: () => void;
+}
+
+export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({ 
   isRecording, 
   onRecordingChange, 
   storageType, 
@@ -52,7 +56,7 @@ export const LiveFeed = ({
   minMotionDuration,
   noiseReduction,
   onConnectionChange
-}: LiveFeedProps) => {
+}, ref) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -530,6 +534,11 @@ export const LiveFeed = ({
     }
   }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast, onConnectionChange]);
 
+  // Expose snapshot method to parent via ref
+  useImperativeHandle(ref, () => ({
+    takeSnapshot: handleSnapshot
+  }));
+
   return (
     <div className="space-y-6">
       {/* Camera Source Selector */}
@@ -614,4 +623,4 @@ export const LiveFeed = ({
       </div>
     </div>
   );
-};
+});
