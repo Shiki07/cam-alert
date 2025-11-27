@@ -3,6 +3,7 @@ import { useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { useDirectoryPicker } from './useDirectoryPicker';
 
 export interface RecordingOptions {
   storageType: 'cloud' | 'local';
@@ -16,6 +17,7 @@ export const useRecording = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  const { saveFileToDirectory } = useDirectoryPicker();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
 
@@ -261,14 +263,20 @@ export const useRecording = () => {
 
   const saveToLocal = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean) => {
     try {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Try to save to selected directory first (if available)
+      const savedToDirectory = await saveFileToDirectory(blob, filename);
+      
+      if (!savedToDirectory) {
+        // Fall back to regular download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }
       
       const { error } = await supabase
         .from('recordings')
