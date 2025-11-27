@@ -1,14 +1,17 @@
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { RecordingHistory } from "@/components/RecordingHistory";
 import { CameraGrid } from "@/components/CameraGrid";
 import { AuthGuard } from "@/components/AuthGuard";
 import Header from "@/components/Header";
 import { useCameraSettings } from "@/hooks/useCameraSettings";
 import { useEmailSettings } from "@/hooks/useEmailSettings";
+import { LiveFeedHandle } from "@/components/LiveFeed";
 
 const Index = () => {
   const [isConnected, setIsConnected] = useState(false);
+  const liveFeedRef = useRef<LiveFeedHandle>(null);
+  
   const {
     // State
     isRecording,
@@ -54,6 +57,10 @@ const Index = () => {
   // Initialize email settings
   useEmailSettings(notificationEmail, handleEmailChange);
 
+  const handleSnapshot = () => {
+    liveFeedRef.current?.takeSnapshot();
+  };
+
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gray-900">
@@ -95,6 +102,8 @@ const Index = () => {
             onNoiseReductionToggle={toggleNoiseReduction}
             isConnected={isConnected}
             onConnectionChange={setIsConnected}
+            onSnapshot={handleSnapshot}
+            liveFeedRef={liveFeedRef}
           />
           
           {/* Recording History - Full width */}
