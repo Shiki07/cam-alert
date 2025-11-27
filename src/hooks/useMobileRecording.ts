@@ -4,6 +4,7 @@ import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { getRecordingPath } from '@/utils/folderStructure';
 
 export const useMobileRecording = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -17,7 +18,8 @@ export const useMobileRecording = () => {
     blob: Blob, 
     filename: string, 
     motionDetected: boolean = false,
-    customFolder?: string
+    customFolder?: string,
+    dateOrganizedFolders: boolean = true
   ) => {
     if (!isNativePlatform) {
       throw new Error('Device storage only available on mobile platforms');
@@ -27,8 +29,12 @@ export const useMobileRecording = () => {
       // Convert blob to base64
       const base64Data = await blobToBase64(blob);
       
-      // Use custom folder if provided, otherwise use motion-based folder
-      const folderPath = customFolder || (motionDetected ? 'Videos/Motion' : 'Videos/Manual');
+      // Use custom folder if provided, otherwise use organized path
+      const folderPath = customFolder || getRecordingPath({
+        basePath: 'Videos',
+        dateOrganized: dateOrganizedFolders,
+        motionDetected
+      });
       
       // Save to device storage
       const result = await Filesystem.writeFile({

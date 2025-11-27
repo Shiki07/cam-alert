@@ -4,12 +4,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useDirectoryPicker } from './useDirectoryPicker';
+import { getRecordingPath } from '@/utils/folderStructure';
 
 export interface RecordingOptions {
   storageType: 'cloud' | 'local';
   fileType: 'video' | 'image';
   quality?: 'high' | 'medium' | 'low';
   motionDetected?: boolean;
+  dateOrganizedFolders?: boolean;
 }
 
 export const useRecording = () => {
@@ -158,9 +160,9 @@ export const useRecording = () => {
     const filename = `recording_${timestamp}.webm`;
     
     if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'video', options.motionDetected);
+      await saveToCloud(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
     } else {
-      await saveToLocal(blob, filename, 'video', options.motionDetected);
+      await saveToLocal(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
     }
   };
 
@@ -169,15 +171,23 @@ export const useRecording = () => {
     const filename = `snapshot_${timestamp}.jpg`;
     
     if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'image', options.motionDetected);
+      await saveToCloud(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
     } else {
-      await saveToLocal(blob, filename, 'image', options.motionDetected);
+      await saveToLocal(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
     }
   };
 
-  const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean) => {
+  const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean, dateOrganizedFolders?: boolean) => {
     try {
-      const filePath = `${user!.id}/${filename}`;
+      // Get organized path
+      const dateOrganized = dateOrganizedFolders ?? true; // Default to true
+      const folderPath = getRecordingPath({
+        basePath: user!.id,
+        dateOrganized,
+        motionDetected
+      });
+      
+      const filePath = `${folderPath}/${filename}`;
       
       console.log('Uploading to cloud:', { filePath, size: blob.size, type: blob.type });
       
@@ -261,8 +271,16 @@ export const useRecording = () => {
     }
   };
 
-  const saveToLocal = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean) => {
+  const saveToLocal = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean, dateOrganizedFolders?: boolean) => {
     try {
+      // Get organized path for local storage
+      const dateOrganized = dateOrganizedFolders ?? true; // Default to true
+      const folderPath = getRecordingPath({
+        basePath: 'downloads',
+        dateOrganized,
+        motionDetected
+      });
+      
       // Try to save to selected directory first (if available)
       const savedToDirectory = await saveFileToDirectory(blob, filename);
       
@@ -285,7 +303,7 @@ export const useRecording = () => {
           filename,
           file_type: fileType,
           storage_type: 'local',
-          file_path: `/downloads/${filename}`,
+          file_path: `/${folderPath}/${filename}`,
           file_size: blob.size,
           motion_detected: motionDetected || false
         });

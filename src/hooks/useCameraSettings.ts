@@ -27,6 +27,14 @@ export const useCameraSettings = () => {
   }, []);
   const [storageType, setStorageType] = useState<'cloud' | 'local'>('local');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
+  const [dateOrganizedFolders, setDateOrganizedFolders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dateOrganizedFolders');
+      return saved ? JSON.parse(saved) : true; // Default to enabled
+    } catch {
+      return true;
+    }
+  });
   
   // Enhanced motion detection settings
   const [motionSensitivity, setMotionSensitivity] = useState(70);
@@ -103,6 +111,15 @@ export const useCameraSettings = () => {
     setNoiseReduction(enabled);
   };
 
+  const toggleDateOrganizedFolders = (enabled: boolean) => {
+    setDateOrganizedFolders(enabled);
+    try {
+      localStorage.setItem('dateOrganizedFolders', JSON.stringify(enabled));
+    } catch (error) {
+      console.error('Failed to save date organized folders setting:', error);
+    }
+  };
+
   return {
     // State
     isRecording,
@@ -123,6 +140,7 @@ export const useCameraSettings = () => {
     cooldownPeriod,
     minMotionDuration,
     noiseReduction,
+    dateOrganizedFolders,
     
     // Setters
     setIsRecording,
@@ -142,6 +160,7 @@ export const useCameraSettings = () => {
     toggleDetectionZones,
     handleCooldownChange,
     handleMinDurationChange,
-    toggleNoiseReduction
+    toggleNoiseReduction,
+    toggleDateOrganizedFolders
   };
 };
