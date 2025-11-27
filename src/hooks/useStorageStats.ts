@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect } from 'react';
+
+export type StorageTier = '5GB' | '25GB' | '100GB';
 
 interface StorageStats {
   totalFiles: number;
@@ -10,16 +13,46 @@ interface StorageStats {
   cloudSizeBytes: number;
   localSizeBytes: number;
   percentageUsed: number;
+  warningLevel: 'safe' | 'warning' | 'danger' | 'critical';
 }
 
-const STORAGE_LIMIT_GB = 5; // 5 GB default storage limit
-const STORAGE_LIMIT_BYTES = STORAGE_LIMIT_GB * 1024 * 1024 * 1024;
+const STORAGE_TIERS: Record<StorageTier, number> = {
+  '5GB': 5 * 1024 * 1024 * 1024,
+  '25GB': 25 * 1024 * 1024 * 1024,
+  '100GB': 100 * 1024 * 1024 * 1024,
+};
 
 export const useStorageStats = () => {
   const { user } = useAuth();
+  const [storageTier, setStorageTier] = useState<StorageTier>(() => {
+    try {
+      const saved = localStorage.getItem('storageTier');
+      return (saved as StorageTier) || '5GB';
+    } catch {
+      return '5GB';
+    }
+  });
+
+  const updateStorageTier = (tier: StorageTier) => {
+    setStorageTier(tier);
+    try {
+      localStorage.setItem('storageTier', tier);
+    } catch (error) {
+      console.error('Failed to save storage tier:', error);
+    }
+  };
+
+  const storageLimitBytes = STORAGE_TIERS[storageTier];
+
+  const getWarningLevel = (percentage: number): 'safe' | 'warning' | 'danger' | 'critical' => {
+    if (percentage >= 95) return 'critical';
+    if (percentage >= 85) return 'danger';
+    if (percentage >= 70) return 'warning';
+    return 'safe';
+  };
 
   const { data: stats, isLoading, error, refetch } = useQuery({
-    queryKey: ['storage-stats', user?.id],
+    queryKey: ['storage-stats', user?.id, storageTier],
     queryFn: async (): Promise<StorageStats> => {
       if (!user) {
         return {
@@ -29,7 +62,8 @@ export const useStorageStats = () => {
           localFiles: 0,
           cloudSizeBytes: 0,
           localSizeBytes: 0,
-          percentageUsed: 0
+          percentageUsed: 0,
+          warningLevel: 'safe'
         };
       }
 
@@ -50,7 +84,8 @@ export const useStorageStats = () => {
       const localSizeBytes = localFiles.reduce((sum, r) => sum + (r.file_size || 0), 0);
       const totalSizeBytes = cloudSizeBytes + localSizeBytes;
 
-      const percentageUsed = Math.min(100, Math.round((totalSizeBytes / STORAGE_LIMIT_BYTES) * 100));
+      const percentageUsed = Math.min(100, Math.round((totalSizeBytes / storageLimitBytes) * 100));
+      const warningLevel = getWarningLevel(percentageUsed);
 
       return {
         totalFiles: recordings?.length || 0,
@@ -59,7 +94,8 @@ export const useStorageStats = () => {
         localFiles: localFiles.length,
         cloudSizeBytes,
         localSizeBytes,
-        percentageUsed
+        percentageUsed,
+        warningLevel
       };
     },
     enabled: !!user,
@@ -82,12 +118,16 @@ export const useStorageStats = () => {
       localFiles: 0,
       cloudSizeBytes: 0,
       localSizeBytes: 0,
-      percentageUsed: 0
+      percentageUsed: 0,
+      warningLevel: 'safe'
     },
     isLoading,
     error,
     refetch,
     formatFileSize,
-    storageLimit: STORAGE_LIMIT_GB
+    storageTier,
+    updateStorageTier,
+    storageLimitBytes,
+    storageLimitGB: parseInt(storageTier)
   };
 };

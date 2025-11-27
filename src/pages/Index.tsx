@@ -12,7 +12,7 @@ import { useStorageStats } from "@/hooks/useStorageStats";
 const Index = () => {
   const [isConnected, setIsConnected] = useState(false);
   const liveFeedRef = useRef<LiveFeedHandle>(null);
-  const { stats: storageStats } = useStorageStats();
+  const { stats: storageStats, storageLimitGB } = useStorageStats();
   
   const {
     // State
@@ -111,6 +111,8 @@ const Index = () => {
             dateOrganizedFolders={dateOrganizedFolders}
             onDateOrganizedToggle={toggleDateOrganizedFolders}
             storageUsedPercent={storageStats.percentageUsed}
+            storageWarningLevel={storageStats.warningLevel}
+            storageLimitGB={storageLimitGB}
           />
           
           {/* Recording History - Full width */}
