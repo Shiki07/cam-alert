@@ -12,6 +12,7 @@ interface CameraControlsProps {
   onShowSettings?: () => void;
   storageType?: 'cloud' | 'local';
   storageUsedPercent?: number;
+  storageWarningLevel?: 'safe' | 'warning' | 'danger' | 'critical';
 }
 
 export const CameraControls = ({ 
@@ -22,7 +23,8 @@ export const CameraControls = ({
   onSnapshot,
   onShowSettings,
   storageType = 'cloud',
-  storageUsedPercent = 0
+  storageUsedPercent = 0,
+  storageWarningLevel = 'safe'
 }: CameraControlsProps) => {
   const { toast } = useToast();
 
@@ -74,6 +76,19 @@ export const CameraControls = ({
     }
     
     return `${used}% used (${available}% free)`;
+  };
+
+  const getStorageColor = () => {
+    switch (storageWarningLevel) {
+      case 'critical':
+        return 'text-red-500';
+      case 'danger':
+        return 'text-orange-500';
+      case 'warning':
+        return 'text-yellow-500';
+      default:
+        return 'text-green-500';
+    }
   };
 
   return (
@@ -138,7 +153,7 @@ export const CameraControls = ({
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Storage:</span>
-            <span className="text-sm text-foreground" title={`Cloud storage limit: 5 GB`}>
+            <span className={`text-sm font-medium ${getStorageColor()}`} title="Click Settings to manage storage tier">
               {storageType === 'cloud' ? '☁️ ' : '💾 '}{getStorageDisplay()}
             </span>
           </div>
