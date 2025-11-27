@@ -5,6 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useDirectoryPicker } from './useDirectoryPicker';
 import { getRecordingPath } from '@/utils/folderStructure';
+import { CloudStorageFactory } from '@/services/cloudStorage/CloudStorageFactory';
+import type { CloudStorageConfig } from '@/services/cloudStorage/types';
 
 export interface RecordingOptions {
   storageType: 'cloud' | 'local';
@@ -179,32 +181,43 @@ export const useRecording = () => {
 
   const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean, dateOrganizedFolders?: boolean) => {
     try {
+      // Load cloud storage configuration
+      const configStr = localStorage.getItem('cloudStorageConfig');
+      if (!configStr) {
+        throw new Error('No cloud storage configured. Please configure a cloud provider in Settings > Cloud.');
+      }
+
+      const config: CloudStorageConfig = JSON.parse(configStr);
+      const provider = CloudStorageFactory.getProvider(config.provider);
+
+      if (!provider) {
+        throw new Error('Selected cloud provider is not available');
+      }
+
+      if (!provider.isConfigured()) {
+        throw new Error('Cloud provider is not properly configured');
+      }
+
       // Get organized path
-      const dateOrganized = dateOrganizedFolders ?? true; // Default to true
+      const dateOrganized = dateOrganizedFolders ?? true;
       const folderPath = getRecordingPath({
         basePath: user!.id,
         dateOrganized,
         motionDetected
       });
-      
-      const filePath = `${folderPath}/${filename}`;
-      
-      console.log('Uploading to cloud:', { filePath, size: blob.size, type: blob.type });
-      
-      const { error: uploadError } = await supabase.storage
-        .from('recordings')
-        .upload(filePath, blob, {
-          contentType: fileType === 'video' ? 'video/webm' : 'image/jpeg',
-          upsert: false
-        });
-      
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
+
+      console.log('Uploading to cloud:', { provider: provider.name, path: folderPath, size: blob.size });
+
+      // Upload using the configured provider
+      const uploadResult = await provider.upload(blob, filename, folderPath);
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
       }
-      
+
       console.log('Upload successful, saving metadata to database');
-      
+
+      // Save metadata to database
       const { data: recording, error: dbError } = await supabase
         .from('recordings')
         .insert({
@@ -212,53 +225,21 @@ export const useRecording = () => {
           filename,
           file_type: fileType,
           storage_type: 'cloud',
-          file_path: filePath,
+          file_path: uploadResult.fileId || uploadResult.filePath || filename,
           file_size: blob.size,
-          motion_detected: motionDetected || false,
-          pi_sync_status: 'pending'
+          motion_detected: motionDetected || false
         })
         .select()
         .single();
-      
+
       if (dbError) {
         console.error('Database error:', dbError);
         throw dbError;
       }
-      
-      // Trigger Pi sync if enabled
-      try {
-        const piEndpoint = localStorage.getItem('piEndpoint');
-        if (piEndpoint && recording) {
-          console.log('Triggering Pi sync for recording:', recording.id);
-          
-          // Call Pi sync function in background
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            supabase.functions.invoke('pi-sync', {
-              body: {
-                recording_id: recording.id,
-                pi_endpoint: piEndpoint
-              },
-              headers: {
-                Authorization: `Bearer ${session.access_token}`
-              }
-            }).then(({ data, error }) => {
-              if (error) {
-                console.error('Pi sync failed:', error);
-              } else {
-                console.log('Pi sync initiated successfully');
-              }
-            });
-          }
-        }
-      } catch (piError) {
-        // Don't fail the main save if Pi sync fails
-        console.warn('Pi sync error (non-critical):', piError);
-      }
-      
+
       toast({
         title: "Saved to cloud",
-        description: `${fileType} saved successfully to Supabase Storage${localStorage.getItem('piEndpoint') ? ' and queued for Pi sync' : ''}`
+        description: `${fileType} saved successfully to ${provider.name}`
       });
     } catch (error) {
       console.error('Error saving to cloud:', error);

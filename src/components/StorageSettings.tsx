@@ -152,7 +152,7 @@ export const StorageSettings = ({
             <span className="text-gray-300">Current:</span>
             <span className="text-gray-400 flex items-center gap-1">
               {storageType === 'cloud' ? <Cloud className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
-              {storageType === 'cloud' ? 'Supabase Cloud' : 'Raspberry Pi SD'}
+              {storageType === 'cloud' ? 'Your Cloud Storage' : 'Raspberry Pi SD / Local'}
             </span>
           </div>
           <div className="flex justify-between items-center">

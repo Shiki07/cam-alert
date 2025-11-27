@@ -33,27 +33,40 @@ export const RecordingHistory = () => {
     try {
       console.log('Downloading from cloud:', recording.file_path);
       
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .download(recording.file_path);
-      
-      if (error) {
-        console.error('Download error:', error);
-        throw error;
+      // Try to use cloud provider if configured
+      const configStr = localStorage.getItem('cloudStorageConfig');
+      if (configStr) {
+        const { CloudStorageFactory } = await import('@/services/cloudStorage/CloudStorageFactory');
+        
+        const config = JSON.parse(configStr);
+        const provider = CloudStorageFactory.getProvider(config.provider);
+        
+        if (provider && provider.isConfigured()) {
+          const result = await provider.download(recording.file_path);
+          
+          if (result.success && result.blob) {
+            const url = URL.createObjectURL(result.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = recording.filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            toast({
+              title: "Download complete",
+              description: `${recording.filename} downloaded successfully`
+            });
+            return;
+          }
+        }
       }
       
-      const url = URL.createObjectURL(data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = recording.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      
       toast({
-        title: "Download complete",
-        description: `${recording.filename} downloaded successfully`
+        title: "Download not available",
+        description: "Cloud storage provider not configured",
+        variant: "destructive"
       });
     } catch (error) {
       console.error('Download error:', error);
@@ -76,24 +89,21 @@ export const RecordingHistory = () => {
         return;
       }
 
-      const { data } = supabase.storage
-        .from('recordings')
-        .getPublicUrl(recording.file_path);
-
-      if (data?.publicUrl) {
-        window.open(data.publicUrl, '_blank');
-      } else {
-        // If bucket is private, get a signed URL
-        const { data: signedData, error } = await supabase.storage
-          .from('recordings')
-          .createSignedUrl(recording.file_path, 3600); // 1 hour expiry
+      // Try to get public URL from cloud provider if available
+      const configStr = localStorage.getItem('cloudStorageConfig');
+      if (configStr) {
+        const config = JSON.parse(configStr);
         
-        if (error) throw error;
-        
-        if (signedData?.signedUrl) {
-          window.open(signedData.signedUrl, '_blank');
-        }
+        // For now, we'll download and open in new tab
+        const downloadResult = await downloadFromCloud(recording);
+        return;
       }
+
+      toast({
+        title: "View not available",
+        description: "Cloud storage provider not configured",
+        variant: "destructive"
+      });
     } catch (error) {
       console.error('View error:', error);
       toast({
@@ -109,13 +119,19 @@ export const RecordingHistory = () => {
       if (recording.storage_type === 'cloud') {
         console.log('Deleting from cloud storage:', recording.file_path);
         
-        const { error: storageError } = await supabase.storage
-          .from('recordings')
-          .remove([recording.file_path]);
-        
-        if (storageError) {
-          console.error('Storage deletion error:', storageError);
-          throw storageError;
+        // Try to delete using cloud provider
+        const configStr = localStorage.getItem('cloudStorageConfig');
+        if (configStr) {
+          const { CloudStorageFactory } = await import('@/services/cloudStorage/CloudStorageFactory');
+          const config = JSON.parse(configStr);
+          const provider = CloudStorageFactory.getProvider(config.provider);
+          
+          if (provider && provider.isConfigured()) {
+            const result = await provider.delete(recording.file_path);
+            if (!result.success) {
+              console.warn('Cloud deletion warning:', result.error);
+            }
+          }
         }
       }
       
@@ -247,7 +263,7 @@ export const RecordingHistory = () => {
                   </div>
                   
                   <div className="text-xs text-gray-500 mt-1">
-                    {recording.storage_type === 'cloud' ? 'Supabase Cloud Storage' : 'Local Download'}
+                    {recording.storage_type === 'cloud' ? 'Cloud Storage' : 'Local Download'}
                   </div>
                 </div>
               </div>
