@@ -119,7 +119,7 @@ export const StorageSettings = ({
               }`}
             >
               <HardDrive className="w-4 h-4" />
-              SD Card
+              Local
             </Button>
           </div>
         </div>
@@ -152,7 +152,7 @@ export const StorageSettings = ({
             <span className="text-gray-300">Current:</span>
             <span className="text-gray-400 flex items-center gap-1">
               {storageType === 'cloud' ? <Cloud className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
-              {storageType === 'cloud' ? 'Your Cloud Storage' : 'Raspberry Pi SD / Local'}
+              {storageType === 'cloud' ? 'Your Cloud Storage' : 'Local Storage'}
             </span>
           </div>
           <div className="flex justify-between items-center">
@@ -187,8 +187,8 @@ export const StorageSettings = ({
           </div>
           <p className="text-xs text-gray-400">
             {piEndpoint 
-              ? "✅ Pi sync enabled - recordings will be saved to your Pi's SD card" 
-              : "Enter your Pi's IP address to enable automatic sync to SD card"
+              ? "✅ Pi sync enabled - recordings will be saved to your Pi's local storage" 
+              : "Enter your Pi's IP address to enable automatic sync to local storage"
             }
           </p>
         </div>
