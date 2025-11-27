@@ -21,6 +21,10 @@ interface CameraSettingsDialogProps {
   quality: 'high' | 'medium' | 'low';
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
   
+  // Folder Settings
+  dateOrganizedFolders: boolean;
+  onDateOrganizedToggle: (enabled: boolean) => void;
+  
   // Motion Detection
   motionDetected: boolean;
   motionEnabled: boolean;
@@ -58,6 +62,8 @@ export const CameraSettingsDialog = ({
   onStorageTypeChange,
   quality,
   onQualityChange,
+  dateOrganizedFolders,
+  onDateOrganizedToggle,
   motionDetected,
   motionEnabled,
   onToggleMotionDetection,
@@ -112,7 +118,11 @@ export const CameraSettingsDialog = ({
           </TabsContent>
 
           <TabsContent value="folder" className="space-y-4 mt-4">
-            <FolderSettings storageType={storageType} />
+            <FolderSettings 
+              storageType={storageType}
+              dateOrganizedFolders={dateOrganizedFolders}
+              onDateOrganizedToggle={onDateOrganizedToggle}
+            />
           </TabsContent>
 
           <TabsContent value="motion" className="space-y-4 mt-4">

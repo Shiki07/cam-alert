@@ -1,20 +1,26 @@
-import { Folder, FolderOpen, X } from "lucide-react";
+import { Folder, FolderOpen, X, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import { useDirectoryPicker } from "@/hooks/useDirectoryPicker";
 import { Capacitor } from "@capacitor/core";
+import { getFolderDescription } from "@/utils/folderStructure";
 
 interface FolderSettingsProps {
   storageType: 'cloud' | 'local';
   onMobileFolderChange?: (folder: string) => void;
   currentMobileFolder?: string;
+  dateOrganizedFolders: boolean;
+  onDateOrganizedToggle: (enabled: boolean) => void;
 }
 
 export const FolderSettings = ({ 
   storageType,
   onMobileFolderChange,
-  currentMobileFolder
+  currentMobileFolder,
+  dateOrganizedFolders,
+  onDateOrganizedToggle
 }: FolderSettingsProps) => {
   const { 
     directoryPath, 
@@ -32,45 +38,78 @@ export const FolderSettings = ({
     return null;
   }
 
+  const folderExample = getFolderDescription({ 
+    dateOrganized: dateOrganizedFolders, 
+    motionDetected: false 
+  });
+
   // Mobile folder selection
   if (isNative || isMobile) {
     return (
       <div className="space-y-4">
         <div>
-          <Label className="text-foreground">Recording Folder (Mobile)</Label>
+          <Label className="text-foreground">Recording Organization (Mobile)</Label>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose where to save recordings on your device
+            Choose how to organize recordings on your device
           </p>
         </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => onMobileFolderChange?.('Videos/Manual')}
-              className={`flex-1 ${currentMobileFolder === 'Videos/Manual' ? 'border-primary' : ''}`}
-            >
-              <Folder className="w-4 h-4 mr-2" />
-              Manual Recordings
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => onMobileFolderChange?.('Videos/Motion')}
-              className={`flex-1 ${currentMobileFolder === 'Videos/Motion' ? 'border-primary' : ''}`}
-            >
-              <Folder className="w-4 h-4 mr-2" />
-              Motion Recordings
-            </Button>
+        {/* Date Organization Toggle */}
+        <div className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-primary" />
+            <div>
+              <Label className="text-foreground">Organize by Date</Label>
+              <p className="text-xs text-muted-foreground">
+                {dateOrganizedFolders ? folderExample : 'Videos/Motion/ or Videos/Manual/'}
+              </p>
+            </div>
           </div>
-
-          {currentMobileFolder && (
-            <Alert>
-              <AlertDescription>
-                Current folder: <strong>{currentMobileFolder}</strong>
-              </AlertDescription>
-            </Alert>
-          )}
+          <Switch
+            checked={dateOrganizedFolders}
+            onCheckedChange={onDateOrganizedToggle}
+          />
         </div>
+
+        {!dateOrganizedFolders && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => onMobileFolderChange?.('Videos/Manual')}
+                className={`flex-1 ${currentMobileFolder === 'Videos/Manual' ? 'border-primary' : ''}`}
+              >
+                <Folder className="w-4 h-4 mr-2" />
+                Manual Recordings
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => onMobileFolderChange?.('Videos/Motion')}
+                className={`flex-1 ${currentMobileFolder === 'Videos/Motion' ? 'border-primary' : ''}`}
+              >
+                <Folder className="w-4 h-4 mr-2" />
+                Motion Recordings
+              </Button>
+            </div>
+
+            {currentMobileFolder && (
+              <Alert>
+                <AlertDescription>
+                  Current folder: <strong>{currentMobileFolder}</strong>
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+
+        {dateOrganizedFolders && (
+          <Alert className="bg-primary/10 border-primary/20">
+            <Calendar className="w-4 h-4" />
+            <AlertDescription>
+              Recordings will be organized by date. Today's recordings: <strong>{folderExample}</strong>
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
     );
   }
@@ -79,13 +118,30 @@ export const FolderSettings = ({
   return (
     <div className="space-y-4">
       <div>
-        <Label className="text-foreground">Download Folder (Browser)</Label>
+        <Label className="text-foreground">Recording Organization (Browser)</Label>
         <p className="text-sm text-muted-foreground mt-1">
           {isSupported 
-            ? "Select a folder to save recordings directly (Chrome/Edge recommended)"
+            ? "Select a folder and organize recordings by date"
             : "Your browser will save files to the default Downloads folder"
           }
         </p>
+      </div>
+
+      {/* Date Organization Toggle */}
+      <div className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg">
+        <div className="flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-primary" />
+          <div>
+            <Label className="text-foreground">Organize by Date</Label>
+            <p className="text-xs text-muted-foreground">
+              {dateOrganizedFolders ? folderExample : 'Flat folder structure'}
+            </p>
+          </div>
+        </div>
+        <Switch
+          checked={dateOrganizedFolders}
+          onCheckedChange={onDateOrganizedToggle}
+        />
       </div>
 
       {!isSupported && (

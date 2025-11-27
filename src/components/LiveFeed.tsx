@@ -30,6 +30,7 @@ interface LiveFeedProps {
   cooldownPeriod: number;
   minMotionDuration: number;
   noiseReduction: boolean;
+  dateOrganizedFolders?: boolean;
   onConnectionChange?: (connected: boolean) => void;
 }
 
@@ -55,6 +56,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   cooldownPeriod,
   minMotionDuration,
   noiseReduction,
+  dateOrganizedFolders = true,
   onConnectionChange
 }, ref) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -127,7 +129,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           storageType,
           fileType: 'video',
           quality,
-          motionDetected: true
+          motionDetected: true,
+          dateOrganizedFolders
         });
         onRecordingChange(true);
       } else if (!recording.isRecording && currentStream && currentVideoRef) {
@@ -368,7 +371,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         storageType,
         fileType: 'video',
         quality,
-        motionDetected: false
+        motionDetected: false,
+        dateOrganizedFolders
       });
       onRecordingChange(true);
     }
@@ -382,7 +386,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
       storageType,
       fileType: 'image',
       quality,
-      motionDetected: motionDetection.motionDetected
+      motionDetected: motionDetection.motionDetected,
+      dateOrganizedFolders
     });
   };
 

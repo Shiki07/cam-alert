@@ -32,6 +32,10 @@ interface CameraGridProps {
   onSnapshot?: () => void;
   liveFeedRef?: React.RefObject<any>;
 
+  // Folder Settings
+  dateOrganizedFolders: boolean;
+  onDateOrganizedToggle: (enabled: boolean) => void;
+
   // Settings Props
   onStorageTypeChange: (type: 'cloud' | 'local') => void;
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
@@ -74,6 +78,8 @@ export const CameraGrid = ({
   onConnectionChange,
   onSnapshot,
   liveFeedRef,
+  dateOrganizedFolders,
+  onDateOrganizedToggle,
   onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
@@ -119,6 +125,7 @@ export const CameraGrid = ({
           cooldownPeriod={cooldownPeriod}
           minMotionDuration={minMotionDuration}
           noiseReduction={noiseReduction}
+          dateOrganizedFolders={dateOrganizedFolders}
           onConnectionChange={onConnectionChange}
         />
       </div>
@@ -188,6 +195,8 @@ export const CameraGrid = ({
         onStorageTypeChange={onStorageTypeChange}
         quality={quality}
         onQualityChange={onQualityChange}
+        dateOrganizedFolders={dateOrganizedFolders}
+        onDateOrganizedToggle={onDateOrganizedToggle}
         motionDetected={motionDetected}
         motionEnabled={motionDetectionEnabled}
         onToggleMotionDetection={onToggleMotionDetection}

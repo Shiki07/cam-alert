@@ -32,6 +32,7 @@ const Index = () => {
     cooldownPeriod,
     minMotionDuration,
     noiseReduction,
+    dateOrganizedFolders,
     
     // Setters
     setIsRecording,
@@ -51,7 +52,8 @@ const Index = () => {
     toggleDetectionZones,
     handleCooldownChange,
     handleMinDurationChange,
-    toggleNoiseReduction
+    toggleNoiseReduction,
+    toggleDateOrganizedFolders
   } = useCameraSettings();
 
   // Initialize email settings
@@ -104,6 +106,8 @@ const Index = () => {
             onConnectionChange={setIsConnected}
             onSnapshot={handleSnapshot}
             liveFeedRef={liveFeedRef}
+            dateOrganizedFolders={dateOrganizedFolders}
+            onDateOrganizedToggle={toggleDateOrganizedFolders}
           />
           
           {/* Recording History - Full width */}
