@@ -121,7 +121,6 @@ export const StorageTierSettings = () => {
             <Label htmlFor="tier-5gb" className="cursor-pointer">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">5 GB</span>
-                <Badge variant="secondary">Free</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
                 Great for casual use, ~50-100 recordings
@@ -138,7 +137,6 @@ export const StorageTierSettings = () => {
             <Label htmlFor="tier-25gb" className="cursor-pointer">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">25 GB</span>
-                <Badge variant="default">Pro</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
                 Perfect for regular monitoring, ~250-500 recordings
@@ -155,7 +153,6 @@ export const StorageTierSettings = () => {
             <Label htmlFor="tier-100gb" className="cursor-pointer">
               <div className="flex items-center gap-2">
                 <span className="font-medium text-foreground">100 GB</span>
-                <Badge variant="default" className="bg-gradient-to-r from-purple-500 to-pink-500">Enterprise</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
                 For professional use, ~1000+ recordings
