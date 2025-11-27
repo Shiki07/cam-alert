@@ -7,10 +7,12 @@ import Header from "@/components/Header";
 import { useCameraSettings } from "@/hooks/useCameraSettings";
 import { useEmailSettings } from "@/hooks/useEmailSettings";
 import { LiveFeedHandle } from "@/components/LiveFeed";
+import { useStorageStats } from "@/hooks/useStorageStats";
 
 const Index = () => {
   const [isConnected, setIsConnected] = useState(false);
   const liveFeedRef = useRef<LiveFeedHandle>(null);
+  const { stats: storageStats } = useStorageStats();
   
   const {
     // State
@@ -108,6 +110,7 @@ const Index = () => {
             liveFeedRef={liveFeedRef}
             dateOrganizedFolders={dateOrganizedFolders}
             onDateOrganizedToggle={toggleDateOrganizedFolders}
+            storageUsedPercent={storageStats.percentageUsed}
           />
           
           {/* Recording History - Full width */}

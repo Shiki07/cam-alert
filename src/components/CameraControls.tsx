@@ -11,7 +11,7 @@ interface CameraControlsProps {
   onSnapshot?: () => void;
   onShowSettings?: () => void;
   storageType?: 'cloud' | 'local';
-  storageUsed?: number;
+  storageUsedPercent?: number;
 }
 
 export const CameraControls = ({ 
@@ -22,7 +22,7 @@ export const CameraControls = ({
   onSnapshot,
   onShowSettings,
   storageType = 'cloud',
-  storageUsed = 75
+  storageUsedPercent = 0
 }: CameraControlsProps) => {
   const { toast } = useToast();
 
@@ -66,9 +66,14 @@ export const CameraControls = ({
   };
 
   const getStorageDisplay = () => {
-    const used = Math.round(storageUsed);
+    const used = Math.round(storageUsedPercent);
     const available = 100 - used;
-    return `${available}% available`;
+    
+    if (used === 0) {
+      return 'Empty';
+    }
+    
+    return `${used}% used (${available}% free)`;
   };
 
   return (
@@ -133,7 +138,7 @@ export const CameraControls = ({
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Storage:</span>
-            <span className="text-sm text-foreground">
+            <span className="text-sm text-foreground" title={`Cloud storage limit: 5 GB`}>
               {storageType === 'cloud' ? '☁️ ' : '💾 '}{getStorageDisplay()}
             </span>
           </div>

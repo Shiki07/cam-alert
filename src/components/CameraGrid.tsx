@@ -35,6 +35,7 @@ interface CameraGridProps {
   // Folder Settings
   dateOrganizedFolders: boolean;
   onDateOrganizedToggle: (enabled: boolean) => void;
+  storageUsedPercent?: number;
 
   // Settings Props
   onStorageTypeChange: (type: 'cloud' | 'local') => void;
@@ -80,6 +81,7 @@ export const CameraGrid = ({
   liveFeedRef,
   dateOrganizedFolders,
   onDateOrganizedToggle,
+  storageUsedPercent = 0,
   onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
@@ -153,6 +155,7 @@ export const CameraGrid = ({
           storageType={storageType}
           onSnapshot={onSnapshot}
           onShowSettings={() => setSettingsOpen(true)}
+          storageUsedPercent={storageUsedPercent}
         />
         
         <UnifiedMotionDetection 
