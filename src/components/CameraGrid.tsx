@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { LiveFeed } from "@/components/LiveFeed";
 import { CameraControls } from "@/components/CameraControls";
 import { UnifiedMotionDetection } from "@/components/UnifiedMotionDetection";
@@ -5,6 +6,7 @@ import { NotificationSettings } from "@/components/NotificationSettings";
 import { StorageSettings } from "@/components/StorageSettings";
 import { SystemStatus } from "@/components/SystemStatus";
 import { DuckDNSSettings } from "@/components/DuckDNSSettings";
+import { CameraSettingsDialog } from "@/components/CameraSettingsDialog";
 
 interface CameraGridProps {
   // Live Feed Props
@@ -92,6 +94,8 @@ export const CameraGrid = ({
   noiseReduction,
   onNoiseReductionToggle
 }: CameraGridProps) => {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  
   return (
     <div className="space-y-6">
       {/* Live Feed - Full width */}
@@ -141,6 +145,7 @@ export const CameraGrid = ({
           isConnected={isConnected}
           storageType={storageType}
           onSnapshot={onSnapshot}
+          onShowSettings={() => setSettingsOpen(true)}
         />
         
         <UnifiedMotionDetection 
@@ -174,6 +179,41 @@ export const CameraGrid = ({
           currentEmail={notificationEmail}
         />
       </div>
+
+      {/* Settings Dialog */}
+      <CameraSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        storageType={storageType}
+        onStorageTypeChange={onStorageTypeChange}
+        quality={quality}
+        onQualityChange={onQualityChange}
+        motionDetected={motionDetected}
+        motionEnabled={motionDetectionEnabled}
+        onToggleMotionDetection={onToggleMotionDetection}
+        lastMotionTime={null}
+        sensitivity={motionSensitivity}
+        onSensitivityChange={onSensitivityChange}
+        threshold={motionThreshold}
+        onThresholdChange={onThresholdChange}
+        scheduleEnabled={scheduleEnabled}
+        onScheduleToggle={onScheduleToggle}
+        startHour={startHour}
+        endHour={endHour}
+        onScheduleChange={onScheduleChange}
+        detectionZonesEnabled={detectionZonesEnabled}
+        onDetectionZonesToggle={onDetectionZonesToggle}
+        cooldownPeriod={cooldownPeriod}
+        onCooldownChange={onCooldownChange}
+        minMotionDuration={minMotionDuration}
+        onMinDurationChange={onMinDurationChange}
+        noiseReduction={noiseReduction}
+        onNoiseReductionToggle={onNoiseReductionToggle}
+        emailEnabled={emailNotificationsEnabled}
+        onToggleEmail={onToggleEmail}
+        onEmailChange={onEmailChange}
+        currentEmail={notificationEmail}
+      />
     </div>
   );
 };
