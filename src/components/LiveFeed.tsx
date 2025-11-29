@@ -594,8 +594,11 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     }
   }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast, onConnectionChange]);
 
-  // Test Pi service connectivity when network camera is connected
+  // Test Pi service connectivity when network camera is connected with auto-reconnect
   useEffect(() => {
+    let reconnectInterval: NodeJS.Timeout | null = null;
+    let wasDisconnected = false;
+
     if (cameraSource === 'network' && networkCamera.currentConfig && isConnected) {
       const testPiService = async () => {
         const cameraUrl = new URL(networkCamera.currentConfig!.url);
@@ -638,6 +641,10 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         const piUrl = localIp ? `http://${localIp}:3002` : `http://${cameraUrl.hostname}:3002`;
         const result = await piRecording.testConnection(piUrl, undefined);
         console.log('Pi service connectivity test:', result);
+        
+        // Check if this is a reconnection after being disconnected
+        const isReconnecting = wasDisconnected && result.connected;
+        
         setPiServiceConnected(result.connected);
         
         // Store the local IP if connection succeeded
@@ -646,12 +653,44 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           console.log('Pi service accessible at local IP:', localIp);
         } else if (!result.connected) {
           console.warn('Pi recording service not accessible on port 3002 - recording will be limited to snapshots');
+          wasDisconnected = true;
+        }
+
+        // Show notification on successful reconnection
+        if (isReconnecting) {
+          toast({
+            title: "Recording service reconnected",
+            description: "Pi recording functionality is now available",
+          });
+          console.log('✓ Pi recording service auto-reconnected successfully');
+          wasDisconnected = false;
+        }
+
+        // Set up auto-reconnect if disconnected
+        if (!result.connected && !reconnectInterval) {
+          console.log('Pi recording service disconnected - starting auto-reconnect monitor (every 15 seconds)');
+          reconnectInterval = setInterval(() => {
+            console.log('Auto-reconnect: checking Pi recording service...');
+            testPiService();
+          }, 15000); // Check every 15 seconds
+        } else if (result.connected && reconnectInterval) {
+          // Connected - stop monitoring
+          clearInterval(reconnectInterval);
+          reconnectInterval = null;
         }
       };
+
       testPiService();
     } else if (cameraSource === 'webcam') {
       setPiServiceConnected(null); // Not applicable for webcam
     }
+
+    // Cleanup on unmount or dependency change
+    return () => {
+      if (reconnectInterval) {
+        clearInterval(reconnectInterval);
+      }
+    };
   }, [cameraSource, networkCamera.currentConfig, isConnected, piRecording, toast]);
 
   // Expose snapshot method to parent via ref
