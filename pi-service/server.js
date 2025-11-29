@@ -74,7 +74,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     };
 
     // Save upload log
-    const logPath = '/home/ale/Videos/upload_log.json';
+    const logPath = '/home/pi/Videos/upload_log.json';
     let logs = [];
     
     try {
@@ -110,7 +110,7 @@ app.post('/upload', upload.single('file'), async (req, res) => {
 // Get recordings list
 app.get('/recordings', async (req, res) => {
   try {
-    const videosDir = '/home/ale/Videos';
+    const videosDir = '/home/pi/Videos';
     const files = await fs.readdir(videosDir);
     
     const recordings = files
@@ -142,8 +142,8 @@ app.post('/recording/start', async (req, res) => {
       return res.status(400).json({ error: 'Recording already in progress' });
     }
 
-    // Use provided video_path or default to /home/ale/Videos
-    const videosDir = video_path || '/home/ale/Videos';
+    // Use provided video_path or default to /home/pi/Videos
+    const videosDir = video_path || '/home/pi/Videos';
     await fs.ensureDir(videosDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
