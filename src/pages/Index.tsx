@@ -55,7 +55,11 @@ const Index = () => {
     handleCooldownChange,
     handleMinDurationChange,
     toggleNoiseReduction,
-    toggleDateOrganizedFolders
+    toggleDateOrganizedFolders,
+    piVideoPath,
+    handlePiVideoPathChange,
+    dateOrganizedFoldersPi,
+    toggleDateOrganizedFoldersPi
   } = useCameraSettings();
 
   // Initialize email settings
@@ -110,6 +114,10 @@ const Index = () => {
             liveFeedRef={liveFeedRef}
             dateOrganizedFolders={dateOrganizedFolders}
             onDateOrganizedToggle={toggleDateOrganizedFolders}
+            piVideoPath={piVideoPath}
+            onPiVideoPathChange={handlePiVideoPathChange}
+            dateOrganizedFoldersPi={dateOrganizedFoldersPi}
+            onDateOrganizedTogglePi={toggleDateOrganizedFoldersPi}
             storageUsedPercent={storageStats.percentageUsed}
             storageWarningLevel={storageStats.warningLevel}
             storageLimitGB={storageLimitGB}

@@ -32,6 +32,8 @@ interface LiveFeedProps {
   minMotionDuration: number;
   noiseReduction: boolean;
   dateOrganizedFolders?: boolean;
+  piVideoPath?: string;
+  dateOrganizedFoldersPi?: boolean;
   onConnectionChange?: (connected: boolean) => void;
 }
 
@@ -58,6 +60,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   minMotionDuration,
   noiseReduction,
   dateOrganizedFolders = true,
+  piVideoPath = '/home/pi/Videos',
+  dateOrganizedFoldersPi = true,
   onConnectionChange
 }, ref) => {
   const [isConnected, setIsConnected] = useState(false);
@@ -399,7 +403,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           piUrl,
           streamUrl: networkCamera.currentConfig.url,
           quality,
-          motionTriggered: false
+          motionTriggered: false,
+          videoPath: piVideoPath
         });
         
         if (recordingId) {

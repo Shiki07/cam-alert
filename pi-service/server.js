@@ -131,7 +131,7 @@ app.get('/recordings', async (req, res) => {
 // Start recording endpoint
 app.post('/recording/start', async (req, res) => {
   try {
-    const { recording_id, stream_url, quality = 'medium', motion_triggered = false } = req.body;
+    const { recording_id, stream_url, quality = 'medium', motion_triggered = false, video_path } = req.body;
 
     if (!recording_id || !stream_url) {
       return res.status(400).json({ error: 'recording_id and stream_url are required' });
@@ -142,7 +142,8 @@ app.post('/recording/start', async (req, res) => {
       return res.status(400).json({ error: 'Recording already in progress' });
     }
 
-    const videosDir = '/home/ale/Videos';
+    // Use provided video_path or default to /home/ale/Videos
+    const videosDir = video_path || '/home/ale/Videos';
     await fs.ensureDir(videosDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -153,6 +154,7 @@ app.post('/recording/start', async (req, res) => {
     console.log(`Starting recording: ${recording_id}`);
     console.log(`Stream URL: ${stream_url}`);
     console.log(`Output file: ${filepath}`);
+    console.log(`Video path: ${videosDir}`);
     console.log(`Quality: ${quality}`);
 
     // FFmpeg parameters based on quality

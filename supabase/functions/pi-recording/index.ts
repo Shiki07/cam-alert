@@ -33,7 +33,7 @@ serve(async (req) => {
 
     console.log(`Pi recording: Processing request for user ${user.id}`);
 
-    const { action, pi_url, recording_id, stream_url, quality, motion_triggered } = await req.json();
+    const { action, pi_url, recording_id, stream_url, quality, motion_triggered, video_path } = await req.json();
 
     if (!action || !pi_url) {
       throw new Error('Missing required parameters: action and pi_url');
@@ -44,7 +44,7 @@ serve(async (req) => {
     // Route to appropriate action
     switch (action) {
       case 'start':
-        return await startRecording(pi_url, recording_id, stream_url, quality, motion_triggered, user.id);
+        return await startRecording(pi_url, recording_id, stream_url, quality, motion_triggered, video_path, user.id);
       
       case 'stop':
         return await stopRecording(pi_url, recording_id, user.id);
@@ -80,9 +80,11 @@ async function startRecording(
   streamUrl: string, 
   quality: string, 
   motionTriggered: boolean,
+  videoPath: string | undefined,
   userId: string
 ): Promise<Response> {
   console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
+  console.log(`Video path: ${videoPath || 'default'}`);
   
   // Add timeout controller - 30 seconds should be enough for Pi to respond
   const controller = new AbortController();
@@ -96,7 +98,8 @@ async function startRecording(
         recording_id: recordingId,
         stream_url: streamUrl,
         quality,
-        motion_triggered: motionTriggered
+        motion_triggered: motionTriggered,
+        video_path: videoPath
       }),
       signal: controller.signal
     });

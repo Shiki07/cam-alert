@@ -8,6 +8,22 @@ export const useCameraSettings = () => {
   const [lastMotionTime, setLastMotionTime] = useState<Date | null>(null);
   const [emailEnabled, setEmailEnabled] = useState(false);
   const [notificationEmail, setNotificationEmail] = useState('');
+  const [piVideoPath, setPiVideoPath] = useState(() => {
+    try {
+      const saved = localStorage.getItem('piVideoPath');
+      return saved || '/home/pi/Videos';
+    } catch {
+      return '/home/pi/Videos';
+    }
+  });
+  const [dateOrganizedFoldersPi, setDateOrganizedFoldersPi] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dateOrganizedFoldersPi');
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
   
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -120,6 +136,24 @@ export const useCameraSettings = () => {
     }
   };
 
+  const handlePiVideoPathChange = (path: string) => {
+    setPiVideoPath(path);
+    try {
+      localStorage.setItem('piVideoPath', path);
+    } catch (error) {
+      console.error('Failed to save Pi video path:', error);
+    }
+  };
+
+  const toggleDateOrganizedFoldersPi = (enabled: boolean) => {
+    setDateOrganizedFoldersPi(enabled);
+    try {
+      localStorage.setItem('dateOrganizedFoldersPi', JSON.stringify(enabled));
+    } catch (error) {
+      console.error('Failed to save Pi date organized folders setting:', error);
+    }
+  };
+
   return {
     // State
     isRecording,
@@ -141,6 +175,8 @@ export const useCameraSettings = () => {
     minMotionDuration,
     noiseReduction,
     dateOrganizedFolders,
+    piVideoPath,
+    dateOrganizedFoldersPi,
     
     // Setters
     setIsRecording,
@@ -161,6 +197,8 @@ export const useCameraSettings = () => {
     handleCooldownChange,
     handleMinDurationChange,
     toggleNoiseReduction,
-    toggleDateOrganizedFolders
+    toggleDateOrganizedFolders,
+    handlePiVideoPathChange,
+    toggleDateOrganizedFoldersPi
   };
 };
