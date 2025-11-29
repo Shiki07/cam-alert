@@ -238,7 +238,7 @@ export const useDuckDNS = () => {
               const domain = config.domain.includes('.duckdns.org') 
                 ? config.domain 
                 : `${config.domain}.duckdns.org`;
-              const ports = [8000, 8081];
+              const ports = [8000];
               for (const port of ports) {
                 const cameraUrl = `http://${domain}:${port}`;
                 try {
