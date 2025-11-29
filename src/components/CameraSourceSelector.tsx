@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope } from 'lucide-react';
+import { Camera, Wifi, Plus, Trash2, TestTube, Globe, Stethoscope, RefreshCw } from 'lucide-react';
 import { NetworkCameraConfig } from '@/hooks/useNetworkCamera';
 import { supabase } from '@/integrations/supabase/client';
 import { useDuckDNS } from '@/hooks/useDuckDNS';
@@ -93,13 +93,33 @@ export const CameraSourceSelector = ({
 
   const handleTestConnection = async (config: NetworkCameraConfig, index: number) => {
     setTestingConnections(prev => new Set(prev).add(index));
+    
+    // Show starting toast
+    toast({
+      title: 'Testing connection...',
+      description: `Checking if ${config.name} is reachable`,
+    });
+    
     try {
+      console.log('Starting connection test for:', config.name, config.url);
       const success = await onTestConnection(config);
       console.log(`Connection test ${success ? 'passed' : 'failed'} for ${config.name}`);
+      
       toast({
-        title: success ? 'Connection successful' : 'Connection failed',
-        description: success ? `Camera ${config.name} is reachable` : `Could not reach ${config.name}`,
+        title: success ? '✅ Connection successful!' : '❌ Connection failed',
+        description: success 
+          ? `Camera ${config.name} is reachable and responding` 
+          : `Could not reach ${config.name}. Check the URL, port forwarding, and firewall settings.`,
         variant: success ? undefined : 'destructive',
+        duration: 5000,
+      });
+    } catch (error) {
+      console.error('Test connection error:', error);
+      toast({
+        title: '❌ Test failed',
+        description: `Error testing ${config.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        variant: 'destructive',
+        duration: 5000,
       });
     } finally {
       setTestingConnections(prev => {
@@ -330,7 +350,11 @@ export const CameraSourceSelector = ({
                         className="border-gray-600 text-gray-300 hover:bg-gray-600"
                         title="Test camera connection"
                       >
-                        <TestTube className="w-4 h-4" />
+                        {testingConnections.has(index) ? (
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <TestTube className="w-4 h-4" />
+                        )}
                       </Button>
                       
                       <Button
