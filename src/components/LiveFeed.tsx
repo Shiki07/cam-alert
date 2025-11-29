@@ -358,8 +358,18 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   };
 
   const handleRecordingToggle = () => {
-    const currentStream = cameraSource === 'webcam' ? streamRef.current : networkCamera.streamRef.current;
-    const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
+    // Network cameras (MJPEG streams) cannot be recorded using MediaRecorder
+    if (cameraSource === 'network') {
+      toast({
+        title: "Recording not available",
+        description: "Video recording is not supported for network cameras. Use snapshots instead.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const currentStream = streamRef.current;
+    const currentVideoRef = videoRef.current;
     
     if (!currentStream || !currentVideoRef) return;
     
@@ -380,13 +390,16 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
 
   const handleSnapshot = () => {
     const currentVideoRef = cameraSource === 'webcam' ? videoRef.current : networkCamera.videoRef.current;
-    if (!currentVideoRef || !(currentVideoRef instanceof HTMLVideoElement)) return;
+    
+    // Support both video and image elements
+    if (!currentVideoRef) return;
+    if (!(currentVideoRef instanceof HTMLVideoElement) && !(currentVideoRef instanceof HTMLImageElement)) return;
     
     recording.takeSnapshot(currentVideoRef, {
       storageType,
       fileType: 'image',
       quality,
-      motionDetected: motionDetection.motionDetected,
+      motionDetected: cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected,
       dateOrganizedFolders
     });
   };
