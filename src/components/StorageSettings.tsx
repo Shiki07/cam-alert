@@ -171,7 +171,7 @@ export const StorageSettings = ({
           </Label>
           <div className="space-y-2">
             <Input
-              placeholder="http://192.168.178.108:3002"
+              placeholder="http://yourname.duckdns.org:3002"
               value={piEndpoint}
               onChange={(e) => setPiEndpoint(e.target.value)}
               className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
@@ -188,7 +188,7 @@ export const StorageSettings = ({
           <p className="text-xs text-gray-400">
             {piEndpoint 
               ? "✅ Pi sync enabled - recordings will be saved to your Pi's local storage" 
-              : "Enter your Pi's IP address to enable automatic sync to local storage"
+              : "Enter your DuckDNS URL with port 3002 (e.g., http://yourname.duckdns.org:3002). Requires port forwarding on your router."
             }
           </p>
         </div>
