@@ -73,6 +73,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     }
   });
   const [piServiceConnected, setPiServiceConnected] = useState<boolean | null>(null);
+  const [detectedPiIp, setDetectedPiIp] = useState<string | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -382,9 +383,13 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         return;
       }
 
-      // Get Pi URL from camera config (assumes Pi service runs on same host as camera)
+      // Get Pi URL - use detected local IP if available, otherwise use camera hostname
       const cameraUrl = new URL(networkCamera.currentConfig.url);
-      const piUrl = `http://${cameraUrl.hostname}:3002`;
+      const piUrl = detectedPiIp 
+        ? `http://${detectedPiIp}:3002`
+        : `http://${cameraUrl.hostname}:3002`;
+
+      console.log('Using Pi service URL:', piUrl);
 
       if (piRecording.isRecording) {
         await piRecording.stopRecording(piUrl);
@@ -594,10 +599,51 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     if (cameraSource === 'network' && networkCamera.currentConfig && isConnected) {
       const testPiService = async () => {
         const cameraUrl = new URL(networkCamera.currentConfig!.url);
+        
+        // For external hostnames (like DuckDNS), try to detect local IP
+        let localIp: string | undefined;
+        
+        if (cameraUrl.hostname.match(/^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./)) {
+          // Camera URL already uses local IP
+          localIp = cameraUrl.hostname;
+        } else if (cameraUrl.hostname.match(/\.duckdns\.org$|\.ddns\./)) {
+          // External hostname - try to detect local IP by checking stored value or common IPs
+          const savedPiIp = localStorage.getItem('pi_local_ip');
+          if (savedPiIp) {
+            localIp = savedPiIp;
+          } else {
+            // Try common router IP ranges
+            const commonIps = [
+              '192.168.178.109', // User's known IP
+              '192.168.1.100',
+              '192.168.0.100',
+              '10.0.0.100'
+            ];
+            
+            // Quick test of common IPs (this will be fast since testConnection has timeout)
+            for (const ip of commonIps) {
+              const testResult = await piRecording.testConnection(`http://${cameraUrl.hostname}:3002`, ip);
+              if (testResult.connected) {
+                localIp = ip;
+                localStorage.setItem('pi_local_ip', ip);
+                console.log('Detected Pi local IP:', ip);
+                break;
+              }
+            }
+          }
+        }
+        
         const piUrl = `http://${cameraUrl.hostname}:3002`;
-        const result = await piRecording.testConnection(piUrl);
+        const result = await piRecording.testConnection(piUrl, localIp);
         console.log('Pi service connectivity test:', result);
         setPiServiceConnected(result.connected);
+        
+        // Store the local IP if connection succeeded
+        if (result.connected && localIp) {
+          setDetectedPiIp(localIp);
+          localStorage.setItem('pi_local_ip', localIp);
+          console.log('Pi service accessible at local IP:', localIp);
+        }
         
         if (!result.connected) {
           toast({

@@ -46,25 +46,71 @@ export const usePiRecording = () => {
       
       console.log('Starting Pi recording:', { recordingId, ...options });
 
-      // Call edge function to start recording on Pi
-      const { data, error } = await supabase.functions.invoke('pi-recording', {
-        body: {
-          action: 'start',
-          pi_url: options.piUrl,
-          recording_id: recordingId,
-          stream_url: options.streamUrl,
-          quality: options.quality,
-          motion_triggered: options.motionTriggered || false
+      // Check if Pi URL is local (same network)
+      const isLocalNetwork = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(options.piUrl);
+
+      let result;
+      
+      if (isLocalNetwork) {
+        // Direct call to Pi service (local network, no port forwarding needed)
+        console.log('Using direct Pi service call (local network)');
+        const response = await fetch(`${options.piUrl}/recording/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recording_id: recordingId,
+            stream_url: options.streamUrl,
+            quality: options.quality,
+            motion_triggered: options.motionTriggered || false
+          })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Pi service error: ${errorText}`);
         }
-      });
 
-      if (error) throw error;
+        result = await response.json();
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to start recording');
+        // Save to Supabase manually when using direct call
+        const { error: dbError } = await supabase
+          .from('recordings')
+          .insert({
+            id: recordingId,
+            user_id: user.id,
+            filename: result.filename,
+            file_type: 'video',
+            storage_type: 'local',
+            file_path: `/pi/${result.filename}`,
+            motion_detected: options.motionTriggered || false,
+            pi_sync_status: 'recording'
+          });
+
+        if (dbError) {
+          console.warn('Failed to save recording metadata:', dbError);
+        }
+      } else {
+        // Use edge function (external access, requires port forwarding)
+        console.log('Using edge function (external access, requires port 3002 forwarding)');
+        const { data, error } = await supabase.functions.invoke('pi-recording', {
+          body: {
+            action: 'start',
+            pi_url: options.piUrl,
+            recording_id: recordingId,
+            stream_url: options.streamUrl,
+            quality: options.quality,
+            motion_triggered: options.motionTriggered || false
+          }
+        });
+
+        if (error) throw error;
+        if (!data?.success) {
+          throw new Error(data?.error || 'Failed to start recording');
+        }
+        result = data;
       }
 
-      console.log('Pi recording started:', data);
+      console.log('Pi recording started:', result);
 
       setIsRecording(true);
       setCurrentRecordingId(recordingId);
@@ -78,7 +124,7 @@ export const usePiRecording = () => {
 
       toast({
         title: "Recording started",
-        description: `Recording on Raspberry Pi to ${data.filename}`
+        description: `Recording on Raspberry Pi to ${result.filename}`
       });
 
       return recordingId;
@@ -96,7 +142,7 @@ export const usePiRecording = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [user, isRecording, toast]);
+  }, [user, isRecording, toast, supabase]);
 
   const stopRecording = useCallback(async (piUrl: string) => {
     if (!currentRecordingId) {
@@ -119,33 +165,74 @@ export const usePiRecording = () => {
     try {
       console.log('Stopping Pi recording:', currentRecordingId);
 
-      // Call edge function to stop recording on Pi
-      const { data, error } = await supabase.functions.invoke('pi-recording', {
-        body: {
-          action: 'stop',
-          pi_url: piUrl,
-          recording_id: currentRecordingId
+      // Check if Pi URL is local (same network)
+      const isLocalNetwork = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(piUrl);
+
+      let result;
+
+      if (isLocalNetwork) {
+        // Direct call to Pi service (local network)
+        console.log('Using direct Pi service call (local network)');
+        const response = await fetch(`${piUrl}/recording/stop`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recording_id: currentRecordingId })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Pi service error: ${errorText}`);
         }
-      });
 
-      if (error) throw error;
+        result = await response.json();
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Failed to stop recording');
+        // Update Supabase manually when using direct call
+        if (user) {
+          const { error: dbError } = await supabase
+            .from('recordings')
+            .update({
+              file_size: result.file_size,
+              duration_seconds: result.duration_seconds,
+              pi_sync_status: 'completed',
+              pi_synced_at: new Date().toISOString()
+            })
+            .eq('id', currentRecordingId)
+            .eq('user_id', user.id);
+
+          if (dbError) {
+            console.warn('Failed to update recording metadata:', dbError);
+          }
+        }
+      } else {
+        // Use edge function (external access)
+        console.log('Using edge function (external access)');
+        const { data, error } = await supabase.functions.invoke('pi-recording', {
+          body: {
+            action: 'stop',
+            pi_url: piUrl,
+            recording_id: currentRecordingId
+          }
+        });
+
+        if (error) throw error;
+        if (!data?.success) {
+          throw new Error(data?.error || 'Failed to stop recording');
+        }
+        result = data;
       }
 
-      console.log('Pi recording stopped:', data);
+      console.log('Pi recording stopped:', result);
 
       toast({
         title: "Recording saved",
-        description: `Saved ${data.filename} (${Math.round(data.file_size / 1024 / 1024)}MB, ${data.duration_seconds}s)`
+        description: `Saved ${result.filename} (${Math.round(result.file_size / 1024 / 1024)}MB, ${result.duration_seconds}s)`
       });
 
       setIsRecording(false);
       setCurrentRecordingId(null);
       setRecordingDuration(0);
 
-      return data;
+      return result;
 
     } catch (error) {
       console.error('Error stopping Pi recording:', error);
@@ -162,7 +249,7 @@ export const usePiRecording = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [currentRecordingId, toast]);
+  }, [currentRecordingId, user, toast, supabase]);
 
   const getStatus = useCallback(async (piUrl: string, recordingId?: string) => {
     const id = recordingId || currentRecordingId;
@@ -186,39 +273,59 @@ export const usePiRecording = () => {
     }
   }, [currentRecordingId]);
 
-  const testConnection = useCallback(async (piUrl: string) => {
-    try {
-      // Extract base URL without path
-      const url = new URL(piUrl);
-      const baseUrl = `${url.protocol}//${url.hostname}`;
-      const port = url.port || '3002';
-      const healthUrl = `${baseUrl}:${port}/health`;
+  const testConnection = useCallback(async (piUrl: string, localIp?: string) => {
+    const tryConnection = async (url: string): Promise<{ connected: boolean; service?: any; error?: string }> => {
+      try {
+        console.log('Testing Pi recording service connection:', url);
 
-      console.log('Testing Pi recording service connection:', healthUrl);
+        const response = await fetch(url, {
+          method: 'GET',
+          signal: AbortSignal.timeout(3000)
+        });
 
-      const response = await fetch(healthUrl, {
-        method: 'GET',
-        signal: AbortSignal.timeout(5000) // 5 second timeout
-      });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
 
-      if (!response.ok) {
-        throw new Error(`Service returned ${response.status}`);
+        const data = await response.json();
+        console.log('Pi recording service health check:', data);
+
+        return { connected: true, service: data };
+      } catch (error) {
+        return {
+          connected: false,
+          error: error instanceof Error ? error.message : 'Connection failed'
+        };
       }
+    };
 
-      const data = await response.json();
-      console.log('Pi recording service health check:', data);
-
-      return {
-        connected: true,
-        service: data
-      };
-    } catch (error) {
-      console.error('Pi recording service connection test failed:', error);
-      return {
-        connected: false,
-        error: error instanceof Error ? error.message : 'Connection failed'
-      };
+    // Try local IP first if provided (faster for same-network access)
+    if (localIp) {
+      const localUrl = `http://${localIp}:3002/health`;
+      const localResult = await tryConnection(localUrl);
+      if (localResult.connected) {
+        console.log('✓ Pi service accessible via local network:', localIp);
+        return localResult;
+      }
+      console.log('✗ Local IP failed, trying external URL...');
     }
+
+    // Try external URL (requires port forwarding)
+    const url = new URL(piUrl);
+    const baseUrl = `${url.protocol}//${url.hostname}`;
+    const port = url.port || '3002';
+    const healthUrl = `${baseUrl}:${port}/health`;
+    
+    const externalResult = await tryConnection(healthUrl);
+    
+    if (!externalResult.connected) {
+      console.error('Pi recording service unreachable. Ensure:', {
+        localAccess: localIp ? 'Pi service must be running on port 3002' : 'Unknown local IP',
+        remoteAccess: 'Port 3002 must be forwarded in your router'
+      });
+    }
+
+    return externalResult;
   }, []);
 
   return {
