@@ -155,9 +155,6 @@ async function startRecording(
     throw error;
   }
 }
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-}
 
 async function stopRecording(piUrl: string, recordingId: string, userId: string): Promise<Response> {
   console.log(`Stopping recording ${recordingId} on Pi at ${piUrl}`);
