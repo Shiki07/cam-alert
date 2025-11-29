@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import { useRecording } from "@/hooks/useRecording";
+import { usePiRecording } from "@/hooks/usePiRecording";
 import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
 import { useImageMotionDetection } from "@/hooks/useImageMotionDetection";
 import { useMotionNotification } from "@/hooks/useMotionNotification";
@@ -80,6 +81,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   const { toast } = useToast();
   
   const recording = useRecording();
+  const piRecording = usePiRecording();
   const networkCamera = useNetworkCamera();
   
   const connectionMonitor = useConnectionMonitor(
@@ -357,17 +359,41 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     onConnectionChange?.(false);
   };
 
-  const handleRecordingToggle = () => {
-    // Network cameras (MJPEG streams) cannot be recorded using MediaRecorder
+  const handleRecordingToggle = async () => {
+    // For network cameras, use Pi-based recording
     if (cameraSource === 'network') {
-      toast({
-        title: "Recording not available",
-        description: "Video recording is not supported for network cameras. Use snapshots instead.",
-        variant: "destructive",
-      });
+      if (!networkCamera.currentConfig) {
+        toast({
+          title: "No camera configured",
+          description: "Please configure a network camera first",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Get Pi URL from camera config (assumes Pi service runs on same host as camera)
+      const cameraUrl = new URL(networkCamera.currentConfig.url);
+      const piUrl = `http://${cameraUrl.hostname}:3002`;
+
+      if (piRecording.isRecording) {
+        await piRecording.stopRecording(piUrl);
+        onRecordingChange(false);
+      } else {
+        const recordingId = await piRecording.startRecording({
+          piUrl,
+          streamUrl: networkCamera.currentConfig.url,
+          quality,
+          motionTriggered: false
+        });
+        
+        if (recordingId) {
+          onRecordingChange(true);
+        }
+      }
       return;
     }
     
+    // For webcam, use browser-based recording
     const currentStream = streamRef.current;
     const currentVideoRef = videoRef.current;
     
@@ -609,17 +635,17 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           onRecordingToggle={handleRecordingToggle}
           onSnapshot={handleSnapshot}
           onForceReconnect={networkCamera.forceReconnect}
-          isRecording={recording.isRecording || isRecording}
-          isProcessing={recording.isProcessing}
+          isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
+          isProcessing={cameraSource === 'network' ? piRecording.isProcessing : recording.isProcessing}
           reconnectAttempts={networkCamera.reconnectAttempts}
         >
           <CameraOverlays
-            isRecording={recording.isRecording || isRecording}
+            isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
             storageType={storageType}
             motionDetected={cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected}
             scheduleEnabled={scheduleEnabled}
             isWithinSchedule={cameraSource === 'webcam' ? motionDetection.isWithinSchedule : imageMotionDetection.isWithinSchedule}
-            isProcessing={recording.isProcessing}
+            isProcessing={cameraSource === 'network' ? piRecording.isProcessing : recording.isProcessing}
           />
         </VideoDisplay>
 
