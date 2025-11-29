@@ -334,7 +334,7 @@ app.get('/recording/active', (req, res) => {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎥 CamAlert Pi Service running on port ${PORT}`);
-  console.log(`📁 Videos will be saved to: /home/ale/Videos`);
+  console.log(`📁 Videos will be saved to: /home/pi/Videos`);
   console.log(`🌐 Access at: http://YOUR_PI_IP:${PORT}`);
   console.log('\n📋 Available endpoints:');
   console.log(`   GET  /health - Health check`);
