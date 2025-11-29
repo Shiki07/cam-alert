@@ -185,6 +185,7 @@ export const CameraSourceSelector = ({
                 size="sm"
                 onClick={() => setShowAddForm(!showAddForm)}
                 className="bg-blue-600 hover:bg-blue-700"
+                title="Add new network camera"
               >
                 <Plus className="w-4 h-4 mr-1" />
                 Add
@@ -346,6 +347,7 @@ export const CameraSourceSelector = ({
                         variant="outline"
                         onClick={() => onRemoveNetworkCamera(index)}
                         className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                        title="Remove camera"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>

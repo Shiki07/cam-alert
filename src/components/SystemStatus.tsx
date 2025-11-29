@@ -71,6 +71,7 @@ export const SystemStatus = ({ cameraConnected }: SystemStatusProps) => {
             size="sm"
             onClick={refreshStatus}
             className="ml-auto text-gray-400 hover:text-white"
+            title="Refresh system status"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>

@@ -109,6 +109,7 @@ export const MotionEventHistory = () => {
               size="sm"
               onClick={loadMotionEvents}
               disabled={isLoading}
+              title="Refresh motion events"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </Button>
