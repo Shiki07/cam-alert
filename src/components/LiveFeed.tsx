@@ -651,12 +651,9 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           wasDisconnected = true;
         }
 
-        // Show notification on successful reconnection
+        // Reset disconnected flag on successful reconnection
+        // Note: Not showing toast notification because health check doesn't verify recording endpoints exist
         if (isReconnecting) {
-          toast({
-            title: "Recording service reconnected",
-            description: "Pi recording functionality is now available",
-          });
           console.log('✓ Pi recording service auto-reconnected successfully');
           wasDisconnected = false;
         }
