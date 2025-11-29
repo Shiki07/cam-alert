@@ -159,6 +159,12 @@ export const usePiRecording = () => {
 
     setIsProcessing(true);
 
+    // Show immediate feedback
+    toast({
+      title: "Stopping recording...",
+      description: "Please wait while we stop the recording"
+    });
+
     // Clear duration interval
     if (durationIntervalRef.current) {
       clearInterval(durationIntervalRef.current);
@@ -174,20 +180,35 @@ export const usePiRecording = () => {
       let result;
 
       if (isLocalNetwork) {
-        // Direct call to Pi service (local network)
+        // Direct call to Pi service (local network) with timeout
         console.log('Using direct Pi service call (local network)');
-        const response = await fetch(`${piUrl}/recording/stop`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recording_id: currentRecordingId })
-        });
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
+        try {
+          const response = await fetch(`${piUrl}/recording/stop`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recording_id: currentRecordingId }),
+            signal: controller.signal
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Pi service error: ${errorText}`);
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Pi service error: ${errorText}`);
+          }
+
+          result = await response.json();
+        } catch (fetchError: any) {
+          clearTimeout(timeoutId);
+          if (fetchError.name === 'AbortError') {
+            throw new Error('Stop operation timed out - recording may still be active on Pi');
+          }
+          throw fetchError;
         }
-
-        result = await response.json();
 
         // Update Supabase manually when using direct call
         if (user) {
@@ -239,12 +260,19 @@ export const usePiRecording = () => {
 
     } catch (error) {
       console.error('Error stopping Pi recording:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : "Could not stop recording on Pi";
+      const isTimeout = errorMessage.includes('timeout') || errorMessage.includes('timed out');
+      
       toast({
-        title: "Stop recording failed",
-        description: error instanceof Error ? error.message : "Could not stop recording on Pi",
+        title: isTimeout ? "Stop operation timed out" : "Stop recording failed",
+        description: isTimeout 
+          ? "The Pi is taking longer than expected. Check your Pi to verify recording status."
+          : errorMessage,
         variant: "destructive"
       });
-      // Still reset state even if stop fails
+      
+      // Reset state even if stop fails to allow user to try again
       setIsRecording(false);
       setCurrentRecordingId(null);
       setRecordingDuration(0);
@@ -252,7 +280,7 @@ export const usePiRecording = () => {
     } finally {
       setIsProcessing(false);
     }
-  }, [currentRecordingId, user, toast, supabase]);
+  }, [currentRecordingId, user, toast]);
 
   const getStatus = useCallback(async (piUrl: string, recordingId?: string) => {
     const id = recordingId || currentRecordingId;

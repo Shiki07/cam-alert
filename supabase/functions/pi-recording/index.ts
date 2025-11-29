@@ -159,19 +159,27 @@ async function startRecording(
 async function stopRecording(piUrl: string, recordingId: string, userId: string): Promise<Response> {
   console.log(`Stopping recording ${recordingId} on Pi at ${piUrl}`);
   
-  const response = await fetch(`${piUrl}/recording/stop`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ recording_id: recordingId })
-  });
+  // Add timeout controller - 15 seconds for stop operation
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  
+  try {
+    const response = await fetch(`${piUrl}/recording/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recording_id: recordingId }),
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Pi recording stop failed: ${error}`);
-  }
+    clearTimeout(timeoutId);
 
-  const result = await response.json();
-  console.log('Recording stopped:', result);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Pi recording stop failed (${response.status}): ${error}`);
+    }
+
+    const result = await response.json();
+    console.log('Recording stopped:', result);
 
   // Update metadata in Supabase
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -197,6 +205,16 @@ async function stopRecording(piUrl: string, recordingId: string, userId: string)
     JSON.stringify({ success: true, ...result }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      console.error('Pi recording stop timed out after 15 seconds');
+      throw new Error('Pi stop timeout - recording may still be active on Pi');
+    }
+    
+    throw error;
+  }
 }
 
 async function getStatus(piUrl: string, recordingId: string): Promise<Response> {
