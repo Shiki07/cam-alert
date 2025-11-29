@@ -280,7 +280,7 @@ export const usePiRecording = () => {
       console.log('Testing Pi recording service via edge function:', testUrl);
 
       const { data, error } = await supabase.functions.invoke('test-pi-connection', {
-        body: { piUrl: testUrl }
+        body: { pi_endpoint: testUrl }
       });
 
       if (error) {
