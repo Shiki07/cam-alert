@@ -2,6 +2,8 @@
 
 A powerful web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
 
+Using a Webcam is way easier than using a Raspberry Pi + Camera, but if you wanna tinker with a RPi no one is stopping you.
+
 > ⚠️ **VPN Compatibility Notice for Raspberry Pi**: This system currently does not work when the Raspberry Pi is connected through a VPN. If you're using a VPN on your Raspberry Pi or router, you may experience connection issues. VPN support is planned for a future update.
 
 ## 🎯 Features
