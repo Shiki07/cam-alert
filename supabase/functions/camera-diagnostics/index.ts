@@ -55,7 +55,7 @@ const validateTargetUrl = async (raw: string): Promise<{ ok: boolean; reason?: s
     if (!['http:', 'https:'].includes(u.protocol)) return { ok: false, reason: 'protocol' };
     if (['localhost', '127.0.0.1', '::1'].includes(u.hostname.toLowerCase())) return { ok: false, reason: 'localhost' };
     const port = u.port || (u.protocol === 'https:' ? '443' : '80');
-    const allowedPorts = ['80', '443', '8080', '8081'];
+    const allowedPorts = ['80', '443', '8000'];
     if (!allowedPorts.includes(port)) return { ok: false, reason: 'port' };
     if (!(await resolveAndValidateHost(u.hostname))) return { ok: false, reason: 'dns' };
     return { ok: true };
@@ -88,7 +88,7 @@ serve(async (req) => {
     }
 
     if (!targetUrl) {
-      targetUrl = 'http://alepava.duckdns.org:8081';
+      targetUrl = 'http://alepava.duckdns.org:8000';
     }
     
     // Authenticate user

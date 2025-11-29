@@ -451,7 +451,7 @@ http://yourname.duckdns.org:8000/stream.mjpg
 
 **Generic IP Cameras:**
 ```
-http://camera-ip:8080/stream.mjpg
+http://camera-ip:8000/stream.mjpg
 http://camera-ip/mjpeg
 http://camera-ip/video.cgi
 ```

@@ -82,7 +82,7 @@ const validateCameraURL = async (url: string): Promise<boolean> => {
 
     // Allow any port for cameras (including common local camera ports)
     const port = urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80');
-    const allowedPorts = ['80', '443', '8000', '8080', '8081', '8082', '8083', '8084', '8554', '554'];
+    const allowedPorts = ['80', '443', '8000'];
     if (!allowedPorts.includes(port)) {
       console.log(`Camera proxy: Blocked invalid port: ${port}`);
       return false;
@@ -267,7 +267,7 @@ serve(async (req) => {
     // Enhanced connectivity test with more detailed diagnostics
     try {
       const urlObj = new URL(targetUrl);
-      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}:${urlObj.port || '8081'}`);
+      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}:${urlObj.port || '8000'}`);
       
       // First try a basic DNS lookup using a different method
       try {
@@ -287,7 +287,7 @@ serve(async (req) => {
       const testTimeout = setTimeout(() => testController.abort(), 3000); // 3 second timeout
       
       try {
-        const testResponse = await fetch(`http://${urlObj.hostname}:${urlObj.port || '8081'}`, {
+        const testResponse = await fetch(`http://${urlObj.hostname}:${urlObj.port || '8000'}`, {
           method: 'HEAD',
           signal: testController.signal,
           headers: {
@@ -298,7 +298,7 @@ serve(async (req) => {
         console.log(`Camera proxy: Connectivity test successful - Status: ${testResponse.status}`);
       } catch (testError) {
         clearTimeout(testTimeout);
-        console.log(`Camera proxy: Connectivity test failed for ${urlObj.hostname}:${urlObj.port || '8081'}:`, testError.message);
+        console.log(`Camera proxy: Connectivity test failed for ${urlObj.hostname}:${urlObj.port || '8000'}:`, testError.message);
         
         // If connectivity test fails, provide detailed error message
         if (testError.name === 'AbortError') {

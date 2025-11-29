@@ -128,7 +128,7 @@ export const CameraSourceSelector = ({
     }
   };
 
-  const generateDuckDNSUrl = (port: string = '8081') => {
+  const generateDuckDNSUrl = (port: string = '8000') => {
     const duckUrl = getDuckDNSUrl(parseInt(port));
     if (duckUrl) {
       return `${duckUrl}/stream.mjpg`;
@@ -241,7 +241,7 @@ export const CameraSourceSelector = ({
                   <Input
                     value={newCamera.url || ''}
                     onChange={(e) => setNewCamera(prev => ({ ...prev, url: e.target.value }))}
-                    placeholder="http://192.168.178.108:8081/stream.mjpg"
+                    placeholder="http://192.168.178.108:8000/stream.mjpg"
                     className="bg-gray-600 border-gray-500 text-white"
                   />
                   {config.enabled && config.domain && (

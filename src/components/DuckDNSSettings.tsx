@@ -145,11 +145,11 @@ export const DuckDNSSettings = () => {
                 <Label className="text-gray-300">Camera URLs</Label>
                 <div className="bg-gray-700 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Port 8081 (MJPEG):</span>
+                    <span className="text-sm text-gray-300">Port 8000 (Stream):</span>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => copyCameraUrl(8081)}
+                      onClick={() => copyCameraUrl(8000)}
                       className="bg-gray-600 border-gray-500 hover:bg-gray-500"
                     >
                       <Copy className="w-3 h-3 mr-1" />
@@ -157,23 +157,7 @@ export const DuckDNSSettings = () => {
                     </Button>
                   </div>
                   <code className="text-xs text-blue-300 break-all block">
-                    {getCameraUrlWithDuckDNS(8081)}
-                  </code>
-                  
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-300">Port 8080 (Web UI):</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => copyCameraUrl(8080)}
-                      className="bg-gray-600 border-gray-500 hover:bg-gray-500"
-                    >
-                      <Copy className="w-3 h-3 mr-1" />
-                      Copy
-                    </Button>
-                  </div>
-                  <code className="text-xs text-blue-300 break-all block">
-                    {getCameraUrlWithDuckDNS(8080)}
+                    {getCameraUrlWithDuckDNS(8000)}
                   </code>
                 </div>
                 <p className="text-xs text-yellow-400">
