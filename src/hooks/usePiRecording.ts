@@ -274,58 +274,37 @@ export const usePiRecording = () => {
   }, [currentRecordingId]);
 
   const testConnection = useCallback(async (piUrl: string, localIp?: string) => {
-    const tryConnection = async (url: string): Promise<{ connected: boolean; service?: any; error?: string }> => {
-      try {
-        console.log('Testing Pi recording service connection:', url);
+    try {
+      // Use edge function to test connection (bypasses HTTPS mixed content blocking)
+      const testUrl = localIp ? `http://${localIp}:3002` : piUrl;
+      console.log('Testing Pi recording service via edge function:', testUrl);
 
-        const response = await fetch(url, {
-          method: 'GET',
-          signal: AbortSignal.timeout(3000)
-        });
+      const { data, error } = await supabase.functions.invoke('test-pi-connection', {
+        body: { piUrl: testUrl }
+      });
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
+      if (error) {
+        console.error('Edge function error:', error);
+        return { connected: false, error: error.message };
+      }
 
-        const data = await response.json();
-        console.log('Pi recording service health check:', data);
-
-        return { connected: true, service: data };
-      } catch (error) {
-        return {
-          connected: false,
-          error: error instanceof Error ? error.message : 'Connection failed'
+      if (!data?.connected) {
+        return { 
+          connected: false, 
+          error: data?.error || 'Pi service not reachable'
         };
       }
-    };
 
-    // Try local IP first if provided (faster for same-network access)
-    if (localIp) {
-      const localUrl = `http://${localIp}:3002/health`;
-      const localResult = await tryConnection(localUrl);
-      if (localResult.connected) {
-        console.log('✓ Pi service accessible via local network:', localIp);
-        return localResult;
-      }
-      console.log('✗ Local IP failed, trying external URL...');
+      console.log('✓ Pi recording service accessible:', testUrl);
+      return { connected: true, service: data.service };
+
+    } catch (error) {
+      console.error('Pi recording service connection test failed:', error);
+      return { 
+        connected: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
     }
-
-    // Try external URL (requires port forwarding)
-    const url = new URL(piUrl);
-    const baseUrl = `${url.protocol}//${url.hostname}`;
-    const port = url.port || '3002';
-    const healthUrl = `${baseUrl}:${port}/health`;
-    
-    const externalResult = await tryConnection(healthUrl);
-    
-    if (!externalResult.connected) {
-      console.error('Pi recording service unreachable. Ensure:', {
-        localAccess: localIp ? 'Pi service must be running on port 3002' : 'Unknown local IP',
-        remoteAccess: 'Port 3002 must be forwarded in your router'
-      });
-    }
-
-    return externalResult;
   }, []);
 
   return {
