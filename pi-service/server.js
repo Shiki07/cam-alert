@@ -252,12 +252,33 @@ app.post('/recording/stop', async (req, res) => {
 
     console.log(`Stopping recording: ${recording_id}`);
 
-    // Gracefully stop FFmpeg by sending 'q' command
-    recording.process.stdin.write('q');
-    recording.process.stdin.end();
+    // Step 1: Send SIGINT for graceful FFmpeg shutdown
+    console.log('Sending SIGINT to FFmpeg process...');
+    recording.process.kill('SIGINT');
+    
+    // Step 2: Wait for FFmpeg to exit gracefully (max 5 seconds)
+    const exitPromise = new Promise((resolve) => {
+      recording.process.on('exit', () => {
+        console.log('FFmpeg exited gracefully');
+        resolve(true);
+      });
+      setTimeout(() => {
+        console.log('FFmpeg graceful exit timeout');
+        resolve(false);
+      }, 5000);
+    });
+    
+    const exitedGracefully = await exitPromise;
+    
+    // Step 3: If still running, force kill with SIGKILL
+    if (!exitedGracefully && !recording.process.killed) {
+      console.log('FFmpeg did not stop gracefully, forcing SIGKILL');
+      recording.process.kill('SIGKILL');
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
 
-    // Wait a bit for FFmpeg to finish writing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Step 4: Wait an additional moment for file system to flush
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Check if file exists and get stats
     let fileSize = 0;
@@ -266,6 +287,7 @@ app.post('/recording/stop', async (req, res) => {
       const stats = await fs.stat(recording.filepath);
       fileSize = stats.size;
       duration = Math.round((Date.now() - recording.startTime) / 1000);
+      console.log(`Recording file stats: ${fileSize} bytes, ${duration} seconds`);
     } catch (error) {
       console.warn('Could not get file stats:', error);
     }
