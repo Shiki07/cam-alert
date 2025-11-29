@@ -277,6 +277,7 @@ export const RecordingHistory = () => {
                       onClick={() => viewInBrowser(recording)}
                       className="border-gray-600 text-gray-300 hover:bg-gray-600"
                       aria-label="View in browser"
+                      title="View in browser"
                     >
                       <Eye className="w-4 h-4" />
                     </Button>
@@ -286,6 +287,7 @@ export const RecordingHistory = () => {
                       onClick={() => downloadFromCloud(recording)}
                       className="border-gray-600 text-gray-300 hover:bg-gray-600"
                       aria-label="Download file"
+                      title="Download file"
                     >
                       <Download className="w-4 h-4" />
                     </Button>
@@ -298,6 +300,7 @@ export const RecordingHistory = () => {
                   onClick={() => deleteRecording(recording)}
                   className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
                   aria-label="Delete recording"
+                  title="Delete recording"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
