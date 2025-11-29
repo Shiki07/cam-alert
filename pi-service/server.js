@@ -44,7 +44,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'running',
     timestamp: new Date().toISOString(),
-    videosPath: '/home/ale/Videos'
+    videosPath: '/home/pi/Videos'
   });
 });
 
