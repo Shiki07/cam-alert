@@ -622,7 +622,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
             
             // Quick test of common IPs (this will be fast since testConnection has timeout)
             for (const ip of commonIps) {
-              const testResult = await piRecording.testConnection(`http://${cameraUrl.hostname}:3002`, ip);
+              const testResult = await piRecording.testConnection(`http://${ip}:3002`, undefined);
               if (testResult.connected) {
                 localIp = ip;
                 localStorage.setItem('pi_local_ip', ip);
@@ -633,24 +633,19 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           }
         }
         
-        const piUrl = `http://${cameraUrl.hostname}:3002`;
-        const result = await piRecording.testConnection(piUrl, localIp);
+        
+        // Use local IP if detected, otherwise use external hostname
+        const piUrl = localIp ? `http://${localIp}:3002` : `http://${cameraUrl.hostname}:3002`;
+        const result = await piRecording.testConnection(piUrl, undefined);
         console.log('Pi service connectivity test:', result);
         setPiServiceConnected(result.connected);
         
         // Store the local IP if connection succeeded
         if (result.connected && localIp) {
           setDetectedPiIp(localIp);
-          localStorage.setItem('pi_local_ip', localIp);
           console.log('Pi service accessible at local IP:', localIp);
-        }
-        
-        if (!result.connected) {
-          toast({
-            title: "Recording service not available",
-            description: "The Pi recording service on port 3002 is not accessible. Recording functionality will be limited to snapshots only.",
-            variant: "destructive"
-          });
+        } else if (!result.connected) {
+          console.warn('Pi recording service not accessible on port 3002 - recording will be limited to snapshots');
         }
       };
       testPiService();
