@@ -2,18 +2,19 @@
 
 A powerful web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
 
-> ⚠️ **VPN Compatibility Notice**: This system currently does not work when connected through a VPN. If you're using a VPN on your viewing device, Raspberry Pi, or router, you may experience connection issues. VPN support is planned for a future update.
+> ⚠️ **VPN Compatibility Notice for Raspberry Pi**: This system currently does not work when the Raspberry Pi is connected through a VPN. If you're using a VPN on your Raspberry Pi or router, you may experience connection issues. VPN support is planned for a future update.
 
 ## 🎯 Features
 
 - **Multi-Camera Support**: Monitor multiple IP cameras simultaneously
 - **Motion Detection**: AI-powered motion detection with customizable sensitivity
 - **Email Alerts**: Instant notifications with motion snapshots
-- **Raspberry Pi Storage**: Automatic recording sync to Pi's SD card
+- **Raspberry Pi Storage**: Automatic recording sync to Pi's SD card with reliable stop control
 - **Mobile App**: Native iOS/Android app with direct device storage
 - **Secure Authentication**: User accounts with secure access
 - **Real-time Monitoring**: Live camera feeds with overlay controls
-- **Recording Management**: Manual and automatic recording capabilities
+- **Recording Management**: Manual and automatic recording with improved reliability
+- **Robust Recording Control**: Signal-based FFmpeg control with automatic timeouts and graceful shutdown
 
 ---
 
@@ -388,6 +389,37 @@ sudo systemctl restart camalert-storage.service
    ```bash
    # Test upload to Pi from any device
    curl -X POST -F "file=@test.txt" http://yourname.duckdns.org:3002/upload
+   ```
+
+### Recording Stop Issues
+
+The system now uses improved signal-based stopping for reliable recording termination:
+
+1. **Normal Stop Behavior**:
+   - Recording stop sends `SIGINT` to FFmpeg for graceful shutdown
+   - If not stopped within 5 seconds, automatically sends `SIGKILL` for forced termination
+   - Includes 15-second timeout to prevent indefinite hanging
+   - Toast notifications keep you informed of stop progress
+
+2. **If Stop Appears Stuck**:
+   ```bash
+   # Check if FFmpeg process is still running
+   ps aux | grep ffmpeg
+   
+   # Check service logs for stop attempts
+   sudo journalctl -u camalert-storage.service -f
+   
+   # Manually kill stuck FFmpeg process (if needed)
+   sudo pkill -9 ffmpeg
+   ```
+
+3. **Verify FFmpeg Installation**:
+   ```bash
+   # FFmpeg must be installed for recording to work
+   ffmpeg -version
+   
+   # If not installed:
+   sudo apt install ffmpeg -y
    ```
 
 ---
