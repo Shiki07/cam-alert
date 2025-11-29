@@ -234,7 +234,7 @@ sudo journalctl -u camalert-pi.service -f
 
 ### Check saved recordings:
 ```bash
-ls -la /home/ale/Videos/
+ls -la /home/pi/Videos/
 ```
 
 ### FFmpeg not found:
