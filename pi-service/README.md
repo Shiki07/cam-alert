@@ -93,12 +93,36 @@ sudo systemctl enable camalert-pi.service
 sudo systemctl start camalert-pi.service
 ```
 
+## Network Configuration
+
+### Port Forwarding Requirements
+
+For the web app to communicate with the Pi, you need to forward **TWO ports** on your router:
+
+1. **Port 8000**: Camera MJPEG stream (libcamera_stream.py)
+2. **Port 3002**: Recording service API (this server)
+
+#### Router Port Forwarding Setup:
+- Forward external port **8000** → Pi's IP:8000 (for camera stream)
+- Forward external port **3002** → Pi's IP:3002 (for recording control)
+
+#### Verify Port Forwarding:
+```bash
+# From outside your network (or use your phone's mobile data):
+curl http://YOUR_DUCKDNS_DOMAIN:3002/health
+curl http://YOUR_DUCKDNS_DOMAIN:8000/stream.mjpg
+```
+
+**IMPORTANT**: Both ports must be accessible for recording to work. The web app uses:
+- Port 8000 to view the camera stream
+- Port 3002 to start/stop recordings on the Pi
+
 ## Configuration in CamAlert Web App
 
 1. Go to your CamAlert web app
-2. Configure your network camera with the Pi's IP address
-3. The web app will automatically use the Pi for server-side recording
-4. Recording will be saved directly to the Pi's SD card
+2. Configure your network camera with DuckDNS URL and port 8000
+3. The app will automatically detect and use port 3002 for recording control
+4. Recordings will be saved directly to the Pi's SD card
 
 ## API Endpoints
 
