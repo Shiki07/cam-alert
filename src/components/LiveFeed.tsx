@@ -609,37 +609,32 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         if (cameraUrl.hostname.match(/^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./)) {
           // Camera URL already uses local IP
           localIp = cameraUrl.hostname;
+        }
+        
+        // First, try the public URL (for DuckDNS or external hostnames)
+        // This works from the cloud edge function
+        const publicUrl = `http://${cameraUrl.hostname}:3002`;
+        console.log('Testing Pi recording service via public URL:', publicUrl);
+        const result = await piRecording.testConnection(publicUrl, undefined);
+        
+        // If public URL succeeded, we're done
+        if (result.connected) {
+          console.log('✓ Pi recording service accessible via public URL');
         } else if (cameraUrl.hostname.match(/\.duckdns\.org$|\.ddns\./)) {
-          // External hostname - try to detect local IP by checking stored value or common IPs
+          // Public URL failed for DuckDNS - try local IP as fallback (only works on same network)
+          console.log('Public URL failed, trying local network detection...');
           const savedPiIp = localStorage.getItem('pi_local_ip');
           if (savedPiIp) {
             localIp = savedPiIp;
-          } else {
-            // Try common router IP ranges
-            const commonIps = [
-              '192.168.178.109', // User's known IP
-              '192.168.1.100',
-              '192.168.0.100',
-              '10.0.0.100'
-            ];
-            
-            // Quick test of common IPs (this will be fast since testConnection has timeout)
-            for (const ip of commonIps) {
-              const testResult = await piRecording.testConnection(`http://${ip}:3002`, undefined);
-              if (testResult.connected) {
-                localIp = ip;
-                localStorage.setItem('pi_local_ip', ip);
-                console.log('Detected Pi local IP:', ip);
-                break;
-              }
+            console.log('Trying cached local IP:', localIp);
+            const localResult = await piRecording.testConnection(`http://${localIp}:3002`, undefined);
+            if (localResult.connected) {
+              console.log('✓ Pi recording service accessible via local IP');
+              // Update result to use local connection
+              Object.assign(result, localResult);
             }
           }
         }
-        
-        
-        // Use local IP if detected, otherwise use external hostname
-        const piUrl = localIp ? `http://${localIp}:3002` : `http://${cameraUrl.hostname}:3002`;
-        const result = await piRecording.testConnection(piUrl, undefined);
         console.log('Pi service connectivity test:', result);
         
         // Check if this is a reconnection after being disconnected
