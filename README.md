@@ -6,11 +6,9 @@ A powerful web-based camera monitoring system with motion detection, email alert
 
 ## 🎯 Features
 
-- **Multi-Camera Support**: Monitor multiple IP cameras simultaneously
 - **Motion Detection**: AI-powered motion detection with customizable sensitivity
 - **Email Alerts**: Instant notifications with motion snapshots
 - **Raspberry Pi Storage**: Automatic recording sync to Pi's SD card with reliable stop control
-- **Mobile App**: Native iOS/Android app with direct device storage
 - **Secure Authentication**: User accounts with secure access
 - **Real-time Monitoring**: Live camera feeds with overlay controls
 - **Recording Management**: Manual and automatic recording with improved reliability
@@ -25,7 +23,6 @@ A powerful web-based camera monitoring system with motion detection, email alert
 - **Node.js** 18+ and npm
 - **Router with Port Forwarding** capability
 - **DuckDNS Account** (free dynamic DNS service)
-- **Supabase Account** (free tier available)
 - **Resend Account** (for email notifications)
 
 ---
