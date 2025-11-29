@@ -97,7 +97,7 @@ export const useRecording = () => {
     }
   }, [isRecording]);
 
-  const takeSnapshot = useCallback(async (videoElement: HTMLVideoElement, options: RecordingOptions) => {
+  const takeSnapshot = useCallback(async (videoElement: HTMLVideoElement | HTMLImageElement, options: RecordingOptions) => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -111,8 +111,15 @@ export const useRecording = () => {
       setIsProcessing(true);
       
       const canvas = document.createElement('canvas');
-      canvas.width = videoElement.videoWidth;
-      canvas.height = videoElement.videoHeight;
+      
+      // Handle both video and image elements
+      if (videoElement instanceof HTMLVideoElement) {
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+      } else if (videoElement instanceof HTMLImageElement) {
+        canvas.width = videoElement.naturalWidth || videoElement.width;
+        canvas.height = videoElement.naturalHeight || videoElement.height;
+      }
       
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Could not get canvas context');
