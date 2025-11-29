@@ -26,6 +26,10 @@ interface CameraSettingsDialogProps {
   // Folder Settings
   dateOrganizedFolders: boolean;
   onDateOrganizedToggle: (enabled: boolean) => void;
+  piVideoPath: string;
+  onPiVideoPathChange: (path: string) => void;
+  dateOrganizedFoldersPi: boolean;
+  onDateOrganizedTogglePi: (enabled: boolean) => void;
   
   // Motion Detection
   motionDetected: boolean;
@@ -66,6 +70,10 @@ export const CameraSettingsDialog = ({
   onQualityChange,
   dateOrganizedFolders,
   onDateOrganizedToggle,
+  piVideoPath,
+  onPiVideoPathChange,
+  dateOrganizedFoldersPi,
+  onDateOrganizedTogglePi,
   motionDetected,
   motionEnabled,
   onToggleMotionDetection,
@@ -134,6 +142,10 @@ export const CameraSettingsDialog = ({
               storageType={storageType}
               dateOrganizedFolders={dateOrganizedFolders}
               onDateOrganizedToggle={onDateOrganizedToggle}
+              piVideoPath={piVideoPath}
+              onPiVideoPathChange={onPiVideoPathChange}
+              dateOrganizedFoldersPi={dateOrganizedFoldersPi}
+              onDateOrganizedTogglePi={onDateOrganizedTogglePi}
             />
           </TabsContent>
 

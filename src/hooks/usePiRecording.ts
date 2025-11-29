@@ -8,6 +8,7 @@ export interface PiRecordingOptions {
   streamUrl: string;
   quality: 'high' | 'medium' | 'low';
   motionTriggered?: boolean;
+  videoPath?: string;
 }
 
 export const usePiRecording = () => {
@@ -61,7 +62,8 @@ export const usePiRecording = () => {
             recording_id: recordingId,
             stream_url: options.streamUrl,
             quality: options.quality,
-            motion_triggered: options.motionTriggered || false
+            motion_triggered: options.motionTriggered || false,
+            video_path: options.videoPath
           })
         });
 
@@ -99,7 +101,8 @@ export const usePiRecording = () => {
             recording_id: recordingId,
             stream_url: options.streamUrl,
             quality: options.quality,
-            motion_triggered: options.motionTriggered || false
+            motion_triggered: options.motionTriggered || false,
+            video_path: options.videoPath
           }
         });
 

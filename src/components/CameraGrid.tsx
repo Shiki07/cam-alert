@@ -35,6 +35,10 @@ interface CameraGridProps {
   // Folder Settings
   dateOrganizedFolders: boolean;
   onDateOrganizedToggle: (enabled: boolean) => void;
+  piVideoPath: string;
+  onPiVideoPathChange: (path: string) => void;
+  dateOrganizedFoldersPi: boolean;
+  onDateOrganizedTogglePi: (enabled: boolean) => void;
   storageUsedPercent?: number;
   storageWarningLevel?: 'safe' | 'warning' | 'danger' | 'critical';
   storageLimitGB?: number;
@@ -83,6 +87,10 @@ export const CameraGrid = ({
   liveFeedRef,
   dateOrganizedFolders,
   onDateOrganizedToggle,
+  piVideoPath,
+  onPiVideoPathChange,
+  dateOrganizedFoldersPi,
+  onDateOrganizedTogglePi,
   storageUsedPercent = 0,
   storageWarningLevel = 'safe',
   storageLimitGB = 5,
@@ -132,6 +140,8 @@ export const CameraGrid = ({
           minMotionDuration={minMotionDuration}
           noiseReduction={noiseReduction}
           dateOrganizedFolders={dateOrganizedFolders}
+          piVideoPath={piVideoPath}
+          dateOrganizedFoldersPi={dateOrganizedFoldersPi}
           onConnectionChange={onConnectionChange}
         />
       </div>
@@ -205,6 +215,10 @@ export const CameraGrid = ({
         onQualityChange={onQualityChange}
         dateOrganizedFolders={dateOrganizedFolders}
         onDateOrganizedToggle={onDateOrganizedToggle}
+        piVideoPath={piVideoPath}
+        onPiVideoPathChange={onPiVideoPathChange}
+        dateOrganizedFoldersPi={dateOrganizedFoldersPi}
+        onDateOrganizedTogglePi={onDateOrganizedTogglePi}
         motionDetected={motionDetected}
         motionEnabled={motionDetectionEnabled}
         onToggleMotionDetection={onToggleMotionDetection}
