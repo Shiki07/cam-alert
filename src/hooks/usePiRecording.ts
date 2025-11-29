@@ -288,7 +288,8 @@ export const usePiRecording = () => {
         return { connected: false, error: error.message };
       }
 
-      if (!data?.connected) {
+      // Edge function returns success/reachable, not connected
+      if (!data?.success) {
         return { 
           connected: false, 
           error: data?.error || 'Pi service not reachable'
@@ -296,7 +297,7 @@ export const usePiRecording = () => {
       }
 
       console.log('✓ Pi recording service accessible:', testUrl);
-      return { connected: true, service: data.service };
+      return { connected: true, service: data.healthData };
 
     } catch (error) {
       console.error('Pi recording service connection test failed:', error);
