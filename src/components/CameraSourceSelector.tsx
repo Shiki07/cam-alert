@@ -327,6 +327,7 @@ export const CameraSourceSelector = ({
                         onClick={() => handleTestConnection(camera, index)}
                         disabled={testingConnections.has(index)}
                         className="border-gray-600 text-gray-300 hover:bg-gray-600"
+                        title="Test camera connection"
                       >
                         <TestTube className="w-4 h-4" />
                       </Button>
