@@ -84,24 +84,32 @@ async function startRecording(
 ): Promise<Response> {
   console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
   
-  const response = await fetch(`${piUrl}/recording/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      recording_id: recordingId,
-      stream_url: streamUrl,
-      quality,
-      motion_triggered: motionTriggered
-    })
-  });
+  // Add timeout controller - 30 seconds should be enough for Pi to respond
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  
+  try {
+    const response = await fetch(`${piUrl}/recording/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recording_id: recordingId,
+        stream_url: streamUrl,
+        quality,
+        motion_triggered: motionTriggered
+      }),
+      signal: controller.signal
+    });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Pi recording start failed: ${error}`);
-  }
+    clearTimeout(timeoutId);
 
-  const result = await response.json();
-  console.log('Recording started:', result);
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Pi recording start failed (${response.status}): ${error}`);
+    }
+
+    const result = await response.json();
+    console.log('Recording started on Pi:', result);
 
   // Save initial metadata to Supabase
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -128,6 +136,22 @@ async function startRecording(
 
   return new Response(
     JSON.stringify({ success: true, ...result }),
+    { 
+      status: 200, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    }
+  );
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      console.error('Pi recording start timed out after 30 seconds');
+      throw new Error('Pi service timeout - check if Pi recording service is responding');
+    }
+    
+    throw error;
+  }
+}
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
