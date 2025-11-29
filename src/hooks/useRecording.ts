@@ -97,7 +97,21 @@ export const useRecording = () => {
     }
   }, [isRecording]);
 
-  const takeSnapshot = useCallback(async (videoElement: HTMLVideoElement | HTMLImageElement, options: RecordingOptions) => {
+  const handleImageSave = useCallback(async (blob: Blob, options: RecordingOptions) => {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `snapshot_${timestamp}.jpg`;
+    
+    if (options.storageType === 'cloud') {
+      await saveToCloud(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
+    } else {
+      await saveToLocal(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
+    }
+  }, [user, toast]);
+
+  const takeSnapshot = useCallback(async (
+    videoElement: HTMLVideoElement | HTMLImageElement,
+    options: RecordingOptions
+  ) => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -107,42 +121,91 @@ export const useRecording = () => {
       return;
     }
 
+    setIsProcessing(true);
+
     try {
-      setIsProcessing(true);
-      
-      const canvas = document.createElement('canvas');
-      
-      // Handle both video and image elements
-      if (videoElement instanceof HTMLVideoElement) {
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
-      } else if (videoElement instanceof HTMLImageElement) {
-        canvas.width = videoElement.naturalWidth || videoElement.width;
-        canvas.height = videoElement.naturalHeight || videoElement.height;
-      }
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Could not get canvas context');
-      
-      ctx.drawImage(videoElement, 0, 0);
-      
-      canvas.toBlob(async (blob) => {
-        if (blob) {
-          await handleImageSave(blob, { ...options, fileType: 'image' });
+      // Wait for image to be loaded if it's an img element
+      if (videoElement instanceof HTMLImageElement) {
+        if (!videoElement.complete) {
+          console.log('Waiting for image to load...');
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Image load timeout')), 5000);
+            videoElement.onload = () => {
+              clearTimeout(timeout);
+              resolve(true);
+            };
+            videoElement.onerror = () => {
+              clearTimeout(timeout);
+              reject(new Error('Image failed to load'));
+            };
+          });
         }
-      }, 'image/jpeg', 0.9);
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
       
+      if (!ctx) {
+        throw new Error('Could not get canvas context');
+      }
+
+      // Get dimensions based on element type
+      let width = 0;
+      let height = 0;
+      
+      if (videoElement instanceof HTMLVideoElement) {
+        width = videoElement.videoWidth;
+        height = videoElement.videoHeight;
+      } else {
+        width = videoElement.naturalWidth;
+        height = videoElement.naturalHeight;
+      }
+
+      // Validate dimensions
+      if (width === 0 || height === 0) {
+        throw new Error(`Invalid image dimensions: ${width}x${height}. The camera stream may not be ready yet.`);
+      }
+
+      console.log(`Capturing snapshot at ${width}x${height}`);
+      
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(videoElement, 0, 0);
+
+      // Convert to blob with retry logic
+      const captureBlob = (): Promise<Blob | null> => {
+        return new Promise((resolve) => {
+          canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.95);
+        });
+      };
+
+      let blob = await captureBlob();
+      
+      // Retry once if first attempt fails
+      if (!blob) {
+        console.warn('First snapshot attempt returned null, retrying...');
+        await new Promise(resolve => setTimeout(resolve, 100));
+        blob = await captureBlob();
+      }
+
+      if (!blob) {
+        throw new Error('Failed to capture image data. Please try again.');
+      }
+
+      console.log(`Snapshot captured successfully, size: ${blob.size} bytes`);
+      await handleImageSave(blob, options);
+
     } catch (error) {
       console.error('Error taking snapshot:', error);
       toast({
         title: "Snapshot failed",
-        description: "Could not capture image",
+        description: error instanceof Error ? error.message : "Could not capture image",
         variant: "destructive"
       });
     } finally {
       setIsProcessing(false);
     }
-  }, [user, toast]);
+  }, [user, toast, handleImageSave]);
 
   const handleRecordingComplete = async (options: RecordingOptions) => {
     if (recordedChunksRef.current.length === 0) return;
@@ -172,17 +235,6 @@ export const useRecording = () => {
       await saveToCloud(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
     } else {
       await saveToLocal(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
-    }
-  };
-
-  const handleImageSave = async (blob: Blob, options: RecordingOptions) => {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `snapshot_${timestamp}.jpg`;
-    
-    if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
-    } else {
-      await saveToLocal(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
     }
   };
 

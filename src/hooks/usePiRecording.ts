@@ -186,6 +186,41 @@ export const usePiRecording = () => {
     }
   }, [currentRecordingId]);
 
+  const testConnection = useCallback(async (piUrl: string) => {
+    try {
+      // Extract base URL without path
+      const url = new URL(piUrl);
+      const baseUrl = `${url.protocol}//${url.hostname}`;
+      const port = url.port || '3002';
+      const healthUrl = `${baseUrl}:${port}/health`;
+
+      console.log('Testing Pi recording service connection:', healthUrl);
+
+      const response = await fetch(healthUrl, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000) // 5 second timeout
+      });
+
+      if (!response.ok) {
+        throw new Error(`Service returned ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Pi recording service health check:', data);
+
+      return {
+        connected: true,
+        service: data
+      };
+    } catch (error) {
+      console.error('Pi recording service connection test failed:', error);
+      return {
+        connected: false,
+        error: error instanceof Error ? error.message : 'Connection failed'
+      };
+    }
+  }, []);
+
   return {
     isRecording,
     isProcessing,
@@ -193,6 +228,7 @@ export const usePiRecording = () => {
     recordingDuration,
     startRecording,
     stopRecording,
-    getStatus
+    getStatus,
+    testConnection
   };
 };

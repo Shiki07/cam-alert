@@ -19,6 +19,8 @@ interface VideoDisplayProps {
   isRecording: boolean;
   isProcessing: boolean;
   reconnectAttempts: number;
+  piServiceConnected?: boolean | null;
+  recordingDuration?: number;
   children?: React.ReactNode;
 }
 
@@ -38,8 +40,15 @@ export const VideoDisplay = ({
   isRecording,
   isProcessing,
   reconnectAttempts,
+  piServiceConnected,
+  recordingDuration = 0,
   children
 }: VideoDisplayProps) => {
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
   return (
     <div className="aspect-video bg-gray-900 rounded-lg border border-gray-600 flex items-center justify-center relative overflow-hidden">
       {/* Webcam video element */}
@@ -64,13 +73,32 @@ export const VideoDisplay = ({
         <>
           {children}
           
-          {/* Connection Status Indicator */}
-          {reconnectAttempts > 0 && (
-            <div className="absolute top-4 left-4 bg-orange-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
-              <Wifi className="w-4 h-4 animate-pulse" />
-              Reconnecting... ({reconnectAttempts}/5)
-            </div>
-          )}
+          {/* Status Indicators */}
+          <div className="absolute top-4 left-4 flex flex-col gap-2">
+            {/* Reconnection Status */}
+            {reconnectAttempts > 0 && (
+              <div className="bg-orange-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                <Wifi className="w-4 h-4 animate-pulse" />
+                Reconnecting... ({reconnectAttempts}/5)
+              </div>
+            )}
+            
+            {/* Pi Recording Service Status */}
+            {cameraSource === 'network' && piServiceConnected === false && (
+              <div className="bg-red-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
+                <Video className="w-4 h-4" />
+                Recording service offline
+              </div>
+            )}
+            
+            {/* Recording Duration */}
+            {isRecording && recordingDuration > 0 && (
+              <div className="bg-red-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2 animate-pulse">
+                <div className="w-2 h-2 bg-white rounded-full" />
+                REC {formatDuration(recordingDuration)}
+              </div>
+            )}
+          </div>
           
           {/* Timestamp */}
           <div className="absolute bottom-4 right-4 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm">

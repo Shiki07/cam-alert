@@ -72,6 +72,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
       return [];
     }
   });
+  const [piServiceConnected, setPiServiceConnected] = useState<boolean | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -371,6 +372,16 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         return;
       }
 
+      // Check Pi service connection first
+      if (piServiceConnected === false) {
+        toast({
+          title: "Recording service unavailable",
+          description: "The Pi recording service on port 3002 is not accessible. Make sure the service is running and port 3002 is forwarded.",
+          variant: "destructive"
+        });
+        return;
+      }
+
       // Get Pi URL from camera config (assumes Pi service runs on same host as camera)
       const cameraUrl = new URL(networkCamera.currentConfig.url);
       const piUrl = `http://${cameraUrl.hostname}:3002`;
@@ -578,6 +589,30 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     }
   }, [networkCamera.isConnected, networkCamera.connectionError, cameraSource, isConnected, toast, onConnectionChange]);
 
+  // Test Pi service connectivity when network camera is connected
+  useEffect(() => {
+    if (cameraSource === 'network' && networkCamera.currentConfig && isConnected) {
+      const testPiService = async () => {
+        const cameraUrl = new URL(networkCamera.currentConfig!.url);
+        const piUrl = `http://${cameraUrl.hostname}:3002`;
+        const result = await piRecording.testConnection(piUrl);
+        console.log('Pi service connectivity test:', result);
+        setPiServiceConnected(result.connected);
+        
+        if (!result.connected) {
+          toast({
+            title: "Recording service not available",
+            description: "The Pi recording service on port 3002 is not accessible. Recording functionality will be limited to snapshots only.",
+            variant: "destructive"
+          });
+        }
+      };
+      testPiService();
+    } else if (cameraSource === 'webcam') {
+      setPiServiceConnected(null); // Not applicable for webcam
+    }
+  }, [cameraSource, networkCamera.currentConfig, isConnected, piRecording, toast]);
+
   // Expose snapshot method to parent via ref
   useImperativeHandle(ref, () => ({
     takeSnapshot: handleSnapshot
@@ -638,6 +673,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
           isProcessing={cameraSource === 'network' ? piRecording.isProcessing : recording.isProcessing}
           reconnectAttempts={networkCamera.reconnectAttempts}
+          piServiceConnected={piServiceConnected}
+          recordingDuration={piRecording.recordingDuration}
         >
           <CameraOverlays
             isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
