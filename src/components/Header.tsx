@@ -30,7 +30,7 @@ const Header = () => {
                 <span className="text-amber-200 text-sm font-medium">🚧 Under Construction</span>
               </div>
               <div className="px-3 py-1 bg-red-600/20 border border-red-600/30 rounded-md">
-                <span className="text-red-200 text-sm font-medium">⚠️ VPN Not Supported</span>
+                <span className="text-red-200 text-sm font-medium">⚠️ VPN Not Supported for Raspberry Pi</span>
               </div>
             </div>
           </div>
