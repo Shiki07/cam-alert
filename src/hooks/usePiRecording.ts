@@ -42,8 +42,8 @@ export const usePiRecording = () => {
     setIsProcessing(true);
 
     try {
-      // Generate unique recording ID
-      const recordingId = `pi_rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Generate proper UUID for database
+      const recordingId = crypto.randomUUID();
       
       console.log('Starting Pi recording:', { recordingId, ...options });
 
