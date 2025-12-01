@@ -86,135 +86,196 @@ async function startRecording(
   console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
   console.log(`Video path: ${videoPath || 'default'}`);
   
-  // Add timeout controller - 60 seconds for FFmpeg startup
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  // First: Quick connectivity check (5 second timeout)
+  const healthCheck = new AbortController();
+  const healthTimeout = setTimeout(() => healthCheck.abort(), 5000);
   
   try {
-    const response = await fetch(`${piUrl}/recording/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        recording_id: recordingId,
-        stream_url: streamUrl,
-        quality,
-        motion_triggered: motionTriggered,
-        video_path: videoPath
-      }),
-      signal: controller.signal
+    console.log('Checking Pi service connectivity...');
+    const healthResponse = await fetch(`${piUrl}/health`, {
+      signal: healthCheck.signal
     });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Pi recording start failed (${response.status}): ${error}`);
+    clearTimeout(healthTimeout);
+    
+    if (!healthResponse.ok) {
+      throw new Error(`Pi service unreachable (status ${healthResponse.status})`);
     }
-
-    const result = await response.json();
-    console.log('Recording started on Pi:', result);
-
-  // Save initial metadata to Supabase
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { error: dbError } = await supabase
-    .from('recordings')
-    .insert({
-      id: recordingId,
-      user_id: userId,
-      filename: result.filename,
-      file_type: 'video',
-      storage_type: 'local',
-      file_path: `/pi/${result.filename}`,
-      motion_detected: motionTriggered,
-      pi_sync_status: 'recording'
-    });
-
-  if (dbError) {
-    console.error('Database error:', dbError);
-    // Don't fail the request if DB insert fails - recording is still active
-  }
-
-  return new Response(
-    JSON.stringify({ success: true, ...result }),
-    { 
-      status: 200, 
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-    }
-  );
+    console.log('✓ Pi service is reachable');
   } catch (error: any) {
-    clearTimeout(timeoutId);
-    
+    clearTimeout(healthTimeout);
     if (error.name === 'AbortError') {
-      console.error('Pi recording start timed out after 60 seconds');
-      throw new Error('Pi service timeout - FFmpeg startup exceeded 60 seconds. Check Pi resources or use lower quality setting.');
+      throw new Error('Cannot reach Pi service (timeout after 5s). Check: 1) Port 3002 is forwarded in router, 2) DuckDNS is configured correctly, 3) Pi is online');
+    }
+    throw new Error(`Cannot reach Pi service: ${error.message}`);
+  }
+  
+  // Second: Start recording with retry logic
+  const maxRetries = 2;
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      console.log(`Retry attempt ${attempt}/${maxRetries}...`);
+      await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
     }
     
-    throw error;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s per attempt
+    
+    try {
+      console.log(`Sending start request to Pi (attempt ${attempt + 1})...`);
+      const response = await fetch(`${piUrl}/recording/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recording_id: recordingId,
+          stream_url: streamUrl,
+          quality,
+          motion_triggered: motionTriggered,
+          video_path: videoPath
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Pi service error (${response.status}): ${error}`);
+      }
+
+      const result = await response.json();
+      console.log('✓ Recording started on Pi:', result);
+
+      // Save initial metadata to Supabase
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { error: dbError } = await supabase
+        .from('recordings')
+        .insert({
+          id: recordingId,
+          user_id: userId,
+          filename: result.filename,
+          file_type: 'video',
+          storage_type: 'local',
+          file_path: `/pi/${result.filename}`,
+          motion_detected: motionTriggered,
+          pi_sync_status: 'recording'
+        });
+
+      if (dbError) {
+        console.error('Database error:', dbError);
+        // Don't fail the request if DB insert fails - recording is still active
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, ...result }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
+      
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      lastError = error;
+      
+      if (error.name === 'AbortError') {
+        console.error(`Start request timed out (attempt ${attempt + 1})`);
+        if (attempt === maxRetries) {
+          throw new Error('Pi service not responding to start request after 3 attempts. Recording service may be offline.');
+        }
+        continue; // Retry
+      }
+      
+      // Non-timeout errors don't retry
+      throw error;
+    }
   }
+  
+  throw lastError || new Error('Failed to start recording after all retries');
 }
 
 async function stopRecording(piUrl: string, recordingId: string, userId: string): Promise<Response> {
   console.log(`Stopping recording ${recordingId} on Pi at ${piUrl}`);
   
-  // Add timeout controller - 30 seconds for stop operation
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  // Retry logic for stop (stop is critical)
+  const maxRetries = 2;
+  let lastError: any;
   
-  try {
-    const response = await fetch(`${piUrl}/recording/stop`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recording_id: recordingId }),
-      signal: controller.signal
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Pi recording stop failed (${response.status}): ${error}`);
-    }
-
-    const result = await response.json();
-    console.log('Recording stopped:', result);
-
-  // Update metadata in Supabase
-  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
-  const { error: dbError } = await supabase
-    .from('recordings')
-    .update({
-      file_size: result.file_size,
-      duration_seconds: result.duration_seconds,
-      pi_sync_status: 'completed',
-      pi_synced_at: new Date().toISOString()
-    })
-    .eq('id', recordingId)
-    .eq('user_id', userId);
-
-  if (dbError) {
-    console.error('Database update error:', dbError);
-  }
-
-  return new Response(
-    JSON.stringify({ success: true, ...result }),
-    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-  );
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    
-    if (error.name === 'AbortError') {
-      console.error('Pi recording stop timed out after 30 seconds');
-      throw new Error('Pi stop timeout - recording may still be active on Pi. Check Pi service manually.');
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      console.log(`Stop retry attempt ${attempt}/${maxRetries}...`);
+      await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
     }
     
-    throw error;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s per attempt (Pi stop can take 6s)
+    
+    try {
+      console.log(`Sending stop request to Pi (attempt ${attempt + 1})...`);
+      const response = await fetch(`${piUrl}/recording/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recording_id: recordingId }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Pi stop failed (${response.status}): ${error}`);
+      }
+
+      const result = await response.json();
+      console.log('✓ Recording stopped:', result);
+
+      // Update metadata in Supabase
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { error: dbError } = await supabase
+        .from('recordings')
+        .update({
+          file_size: result.file_size,
+          duration_seconds: result.duration_seconds,
+          pi_sync_status: 'completed',
+          pi_synced_at: new Date().toISOString()
+        })
+        .eq('id', recordingId)
+        .eq('user_id', userId);
+
+      if (dbError) {
+        console.error('Database update error:', dbError);
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, ...result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+      
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      lastError = error;
+      
+      if (error.name === 'AbortError') {
+        console.error(`Stop request timed out (attempt ${attempt + 1})`);
+        if (attempt === maxRetries) {
+          throw new Error('Pi service not responding to stop request. Recording may still be active on Pi.');
+        }
+        continue; // Retry
+      }
+      
+      // Non-timeout errors don't retry
+      throw error;
+    }
   }
+  
+  throw lastError || new Error('Failed to stop recording after all retries');
 }
 
 async function getStatus(piUrl: string, recordingId: string): Promise<Response> {

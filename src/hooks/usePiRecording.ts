@@ -46,6 +46,12 @@ export const usePiRecording = () => {
       const recordingId = crypto.randomUUID();
       
       console.log('Starting Pi recording:', { recordingId, ...options });
+      
+      // Show connecting feedback
+      toast({
+        title: "Connecting to Pi...",
+        description: "Checking if Pi recording service is reachable"
+      });
 
       // Check if Pi URL is local (same network)
       const isLocalNetwork = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(options.piUrl);
@@ -138,17 +144,23 @@ export const usePiRecording = () => {
 
       toast({
         title: "Recording started",
-        description: `Recording on Raspberry Pi to ${result.filename}`
+        description: `Pi is now recording to ${result.filename}`,
+        duration: 3000
       });
 
       return recordingId;
 
     } catch (error) {
       console.error('Error starting Pi recording:', error);
+      
+      const errorMessage = error instanceof Error ? error.message : "Could not start recording on Pi";
+      const isNetworkError = errorMessage.includes('Cannot reach') || errorMessage.includes('timeout') || errorMessage.includes('not responding');
+      
       toast({
-        title: "Recording failed",
-        description: error instanceof Error ? error.message : "Could not start recording on Pi",
-        variant: "destructive"
+        title: isNetworkError ? "Cannot reach Pi" : "Recording failed",
+        description: errorMessage,
+        variant: "destructive",
+        duration: 6000
       });
       setIsRecording(false);
       setCurrentRecordingId(null);
@@ -173,7 +185,7 @@ export const usePiRecording = () => {
     // Show immediate feedback
     toast({
       title: "Stopping recording...",
-      description: "Please wait while we stop the recording"
+      description: "Please wait, this may take a few seconds"
     });
 
     // Clear duration interval
