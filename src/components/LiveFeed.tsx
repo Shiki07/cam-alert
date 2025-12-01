@@ -1,12 +1,12 @@
 import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Camera } from 'lucide-react';
 import { VideoDisplay } from './VideoDisplay';
-import { CameraSourceSelector } from './CameraSourceSelector';
+import { CameraSourceSelector, CameraSource } from './CameraSourceSelector';
 import { CameraOverlays } from './CameraOverlays';
 import { CameraInfo } from './CameraInfo';
 import { useRecording } from '@/hooks/useRecording';
 import { usePiRecording } from '@/hooks/usePiRecording';
-import { useNetworkCamera } from '@/hooks/useNetworkCamera';
+import { useNetworkCamera, NetworkCameraConfig } from '@/hooks/useNetworkCamera';
 import { useConnectionMonitor } from '@/hooks/useConnectionMonitor';
 import { useEnhancedMotionDetection } from '@/hooks/useEnhancedMotionDetection';
 import { useImageMotionDetection } from '@/hooks/useImageMotionDetection';
