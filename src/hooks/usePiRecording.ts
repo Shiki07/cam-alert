@@ -304,10 +304,28 @@ export const usePiRecording = () => {
     }
   }, [currentRecordingId]);
 
+  // Cache for successful connection tests (60 seconds)
+  const connectionCache = useRef<{
+    url: string;
+    result: { connected: boolean; service?: any };
+    timestamp: number;
+  } | null>(null);
+
   const testConnection = useCallback(async (piUrl: string, localIp?: string) => {
     try {
       // Use edge function to test connection (bypasses HTTPS mixed content blocking)
       const testUrl = localIp ? `http://${localIp}:3002` : piUrl;
+      
+      // Check cache for successful results (60 second TTL)
+      const now = Date.now();
+      if (connectionCache.current && 
+          connectionCache.current.url === testUrl && 
+          connectionCache.current.result.connected &&
+          (now - connectionCache.current.timestamp) < 60000) {
+        console.log('Using cached Pi service connection result (valid for', Math.floor((60000 - (now - connectionCache.current.timestamp)) / 1000), 'more seconds)');
+        return connectionCache.current.result;
+      }
+
       console.log('Testing Pi recording service via edge function:', testUrl);
 
       const { data, error } = await supabase.functions.invoke('test-pi-connection', {
@@ -328,7 +346,16 @@ export const usePiRecording = () => {
       }
 
       console.log('✓ Pi recording service accessible:', testUrl);
-      return { connected: true, service: data.healthData };
+      const result = { connected: true, service: data.healthData };
+      
+      // Cache successful result
+      connectionCache.current = {
+        url: testUrl,
+        result,
+        timestamp: now
+      };
+      
+      return result;
 
     } catch (error) {
       console.error('Pi recording service connection test failed:', error);

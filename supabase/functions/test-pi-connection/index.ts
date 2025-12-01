@@ -37,7 +37,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Test the Pi health endpoint from the cloud
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 second timeout (Pi service may be slow)
+    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 second timeout (handles cold starts better with retry)
 
     try {
       const response = await fetch(`${normalizedEndpoint}/health`, {
@@ -87,7 +87,7 @@ const handler = async (req: Request): Promise<Response> => {
       let reachable = false;
 
       if (fetchError.name === 'AbortError') {
-        errorMessage = 'Connection timeout (20 seconds) - Port 3002 may not be forwarded or Pi service not running';
+        errorMessage = 'Connection timeout (12 seconds) - Port 3002 may not be forwarded or Pi service not running';
       } else if (fetchError.message.includes('fetch')) {
         errorMessage = 'Cannot reach Pi service on port 3002 - Verify: 1) Port 3002 is forwarded in router, 2) Pi service is running (npm start in pi-service folder), 3) Firewall allows port 3002';
       } else {
