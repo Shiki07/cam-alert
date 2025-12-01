@@ -171,6 +171,8 @@ export const CameraGrid = ({
           onShowSettings={() => setSettingsOpen(true)}
           storageUsedPercent={storageUsedPercent}
           storageWarningLevel={storageWarningLevel}
+          liveFeedRef={liveFeedRef}
+          piServiceConnected={liveFeedRef?.current?.piServiceConnected}
         />
         
         <UnifiedMotionDetection 

@@ -13,6 +13,8 @@ interface CameraControlsProps {
   storageType?: 'cloud' | 'local';
   storageUsedPercent?: number;
   storageWarningLevel?: 'safe' | 'warning' | 'danger' | 'critical';
+  liveFeedRef?: React.RefObject<any>;
+  piServiceConnected?: boolean | null;
 }
 
 export const CameraControls = ({ 
@@ -24,9 +26,43 @@ export const CameraControls = ({
   onShowSettings,
   storageType = 'cloud',
   storageUsedPercent = 0,
-  storageWarningLevel = 'safe'
+  storageWarningLevel = 'safe',
+  liveFeedRef,
+  piServiceConnected
 }: CameraControlsProps) => {
   const { toast } = useToast();
+
+  // Use LiveFeed's actual recording state if available for accurate status
+  const actualIsRecording = liveFeedRef?.current?.isRecording ?? isRecording;
+
+  const handleToggleRecording = async () => {
+    // Check if Pi service is unavailable before attempting network camera recording
+    if (piServiceConnected === false && !actualIsRecording) {
+      toast({
+        title: "Recording service unavailable",
+        description: "The Pi recording service is not accessible. Make sure the service is running on port 3002 and the port is forwarded.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Use LiveFeed's unified recording logic if available
+    if (liveFeedRef?.current?.toggleRecording) {
+      try {
+        await liveFeedRef.current.toggleRecording();
+      } catch (error) {
+        console.error('Recording toggle failed:', error);
+        toast({
+          title: "Recording failed",
+          description: error instanceof Error ? error.message : "Failed to toggle recording",
+          variant: "destructive"
+        });
+      }
+    } else {
+      // Fallback to the old prop-based method
+      onToggleRecording();
+    }
+  };
 
   const handleSnapshot = () => {
     if (!isConnected) {
@@ -114,17 +150,27 @@ export const CameraControls = ({
           )}
         </div>
 
+        {/* Pi Service Status Warning (for network cameras) */}
+        {piServiceConnected === false && (
+          <div className="flex items-center gap-2 p-2 bg-orange-500/20 rounded border border-orange-500/30">
+            <WifiOff className="w-4 h-4 text-orange-500" />
+            <span className="text-xs text-orange-400">
+              Pi recording service unavailable (port 3002)
+            </span>
+          </div>
+        )}
+
         {/* Record Button */}
         <Button
-          onClick={onToggleRecording}
+          onClick={handleToggleRecording}
           disabled={!isConnected}
           className={`w-full py-3 font-medium transition-all ${
-            isRecording 
+            actualIsRecording 
               ? 'bg-red-600 hover:bg-red-700 text-white' 
               : 'bg-green-600 hover:bg-green-700 text-white'
           }`}
         >
-          {isRecording ? (
+          {actualIsRecording ? (
             <>
               <Square className="w-4 h-4 mr-2" />
               Stop Recording
@@ -142,9 +188,9 @@ export const CameraControls = ({
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Status:</span>
             <span className={`text-sm font-medium ${
-              isRecording ? 'text-red-400' : isConnected ? 'text-green-400' : 'text-muted-foreground'
+              actualIsRecording ? 'text-red-400' : isConnected ? 'text-green-400' : 'text-muted-foreground'
             }`}>
-              {isRecording ? 'Recording' : isConnected ? 'Ready' : 'Offline'}
+              {actualIsRecording ? 'Recording' : isConnected ? 'Ready' : 'Offline'}
             </span>
           </div>
           <div className="flex justify-between items-center">
