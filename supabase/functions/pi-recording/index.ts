@@ -86,9 +86,9 @@ async function startRecording(
   console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
   console.log(`Video path: ${videoPath || 'default'}`);
   
-  // Add timeout controller - 30 seconds should be enough for Pi to respond
+  // Add timeout controller - 45 seconds for slower Pi startup
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   
   try {
     const response = await fetch(`${piUrl}/recording/start`, {
@@ -148,8 +148,8 @@ async function startRecording(
     clearTimeout(timeoutId);
     
     if (error.name === 'AbortError') {
-      console.error('Pi recording start timed out after 30 seconds');
-      throw new Error('Pi service timeout - check if Pi recording service is responding');
+      console.error('Pi recording start timed out after 45 seconds');
+      throw new Error('Pi service timeout - FFmpeg may be slow to start. Check Pi resources.');
     }
     
     throw error;

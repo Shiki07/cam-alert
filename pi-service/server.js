@@ -195,7 +195,16 @@ app.post('/recording/start', async (req, res) => {
       motion_triggered
     });
 
-    // Handle FFmpeg output
+    // Send response immediately (async FFmpeg startup)
+    res.json({
+      success: true,
+      message: 'Recording started',
+      recording_id,
+      filename,
+      started_at: new Date().toISOString()
+    });
+
+    // Handle FFmpeg output (async after response sent)
     ffmpeg.stdout.on('data', (data) => {
       console.log(`FFmpeg stdout: ${data}`);
     });
@@ -216,14 +225,6 @@ app.post('/recording/start', async (req, res) => {
         console.error(`Recording ${recording_id} ended with error code ${code}`);
       }
       activeRecordings.delete(recording_id);
-    });
-
-    res.json({
-      success: true,
-      message: 'Recording started',
-      recording_id,
-      filename,
-      started_at: new Date().toISOString()
     });
 
   } catch (error) {
