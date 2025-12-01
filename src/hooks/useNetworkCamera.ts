@@ -24,6 +24,7 @@ export const useNetworkCamera = () => {
   const heartbeatRef = useRef<NodeJS.Timeout | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const isActiveRef = useRef(false);
+  const isConnectingRef = useRef(false); // Lock to prevent overlapping connections
   const fetchControllerRef = useRef<AbortController | null>(null);
   const lastFrameTimeRef = useRef<number>(Date.now());
   const frameCountRef = useRef<number>(0);
@@ -96,13 +97,14 @@ export const useNetworkCamera = () => {
     
     // Mark stream as inactive
     isActiveRef.current = false;
+    isConnectingRef.current = false;
     
-    // Cancel any pending fetch operations
+    // Cancel any pending fetch operations gracefully
     if (fetchControllerRef.current) {
       try {
         fetchControllerRef.current.abort();
       } catch (error) {
-        console.log('useNetworkCamera: Error aborting fetch:', error);
+        // Ignore abort errors during cleanup
       }
       fetchControllerRef.current = null;
     }
@@ -182,11 +184,18 @@ export const useNetworkCamera = () => {
     console.log('useNetworkCamera: Config:', config);
     console.log('useNetworkCamera: Quality setting:', config.quality);
     
+    // Prevent overlapping connection attempts
+    if (isConnectingRef.current) {
+      console.log('useNetworkCamera: Connection already in progress, ignoring duplicate request');
+      return;
+    }
+    
     // Clean up any existing connections
     cleanupStream();
     
-    // Mark stream as active
+    // Mark stream as active and connecting
     isActiveRef.current = true;
+    isConnectingRef.current = true;
     
     setIsConnecting(true);
     setConnectionError(null);
@@ -295,6 +304,7 @@ export const useNetworkCamera = () => {
       setIsConnected(false);
       setIsConnecting(false);
       isActiveRef.current = false;
+      isConnectingRef.current = false;
     }
   }, [isConnecting, isConnected, cleanupStream, getProxiedUrl]);
 
@@ -325,12 +335,6 @@ export const useNetworkCamera = () => {
 
       console.log('useNetworkCamera: Using fetch to bypass browser OpaqueResponseBlocking...');
       
-      // Add timeout to prevent hanging connections
-      const fetchTimeout = setTimeout(() => {
-        console.log('useNetworkCamera: Fetch timeout, aborting connection');
-        controller.abort();
-      }, 30000); // 30 second timeout
-      
       try {
         // Get current session for authentication
         const { data: { session } } = await supabase.auth.getSession();
@@ -350,8 +354,6 @@ export const useNetworkCamera = () => {
           },
           credentials: 'omit' // Omit cookies but keep authorization header
         });
-        
-        clearTimeout(fetchTimeout);
 
       if (!response.ok) {
         let details = '';
@@ -413,10 +415,11 @@ export const useNetworkCamera = () => {
                         connectToMJPEGStream(imgElement, config);
                       }
                     }, delay);
-                  } else {
+                   } else {
                     console.log('useNetworkCamera: Max reconnection attempts reached');
                     setIsConnected(false);
                     setConnectionError('Camera connection failed after multiple attempts');
+                    isConnectingRef.current = false;
                   }
                 } else {
                   // Natural stream cycling - immediate seamless restart
@@ -508,6 +511,7 @@ export const useNetworkCamera = () => {
                     setIsConnecting(false);
                     setReconnectAttempts(0);
                     connectionAgeRef.current = now;
+                    isConnectingRef.current = false; // Connection established
                   }
                 } else {
                   skippedFrames++;
@@ -564,6 +568,7 @@ export const useNetworkCamera = () => {
             setConnectionError('Fetch-based stream processing failed. Your camera is confirmed working, but there may be a temporary connectivity issue.');
             setIsConnected(false);
             isActiveRef.current = false;
+            isConnectingRef.current = false;
           }
         });
 
@@ -598,8 +603,8 @@ export const useNetworkCamera = () => {
       }
 
       } catch (error) {
-        clearTimeout(fetchTimeout);
         console.error('useNetworkCamera: Fetch-based connection failed:', error);
+        isConnectingRef.current = false;
 
         // If cloud proxy cannot reach LAN, try DuckDNS fallback on port 8000 automatically
         const msg = (error instanceof Error ? error.message : String(error)) || '';
@@ -667,6 +672,7 @@ export const useNetworkCamera = () => {
           setIsConnected(false);
           setIsConnecting(false);
           isActiveRef.current = false;
+          isConnectingRef.current = false;
         }
       }
     } catch (error) {
@@ -675,6 +681,7 @@ export const useNetworkCamera = () => {
       setIsConnected(false);
       setIsConnecting(false);
       isActiveRef.current = false;
+      isConnectingRef.current = false;
     }
   }, [getProxiedUrl, reconnectAttempts, startOverlappingConnection]);
 
