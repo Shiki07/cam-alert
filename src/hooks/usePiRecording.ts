@@ -46,12 +46,6 @@ export const usePiRecording = () => {
       const recordingId = crypto.randomUUID();
       
       console.log('Starting Pi recording:', { recordingId, ...options });
-      
-      // Show connecting feedback
-      toast({
-        title: "Connecting to Pi...",
-        description: "Checking if Pi recording service is reachable"
-      });
 
       // Check if Pi URL is local (same network)
       const isLocalNetwork = /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/.test(options.piUrl);
@@ -100,34 +94,23 @@ export const usePiRecording = () => {
       } else {
         // Use edge function (external access, requires port forwarding)
         console.log('Using edge function (external access, requires port 3002 forwarding)');
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('pi-recording', {
-            body: {
-              action: 'start',
-              pi_url: options.piUrl,
-              recording_id: recordingId,
-              stream_url: options.streamUrl,
-              quality: options.quality,
-              motion_triggered: options.motionTriggered || false,
-              video_path: options.videoPath
-            }
-          });
+        const { data, error } = await supabase.functions.invoke('pi-recording', {
+          body: {
+            action: 'start',
+            pi_url: options.piUrl,
+            recording_id: recordingId,
+            stream_url: options.streamUrl,
+            quality: options.quality,
+            motion_triggered: options.motionTriggered || false,
+            video_path: options.videoPath
+          }
+        });
 
-          if (error) {
-            console.error('Edge function error:', error);
-            throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
-          }
-          
-          if (!data?.success) {
-            throw new Error(data?.error || 'Failed to start recording');
-          }
-          
-          result = data;
-        } catch (funcError) {
-          console.error('Failed to invoke edge function:', funcError);
-          throw new Error(`Could not connect to recording service. Please check: 1) Port 3002 is forwarded, 2) DuckDNS is configured correctly, 3) Pi service is running`);
+        if (error) throw error;
+        if (!data?.success) {
+          throw new Error(data?.error || 'Failed to start recording');
         }
+        result = data;
       }
 
       console.log('Pi recording started:', result);
@@ -144,23 +127,17 @@ export const usePiRecording = () => {
 
       toast({
         title: "Recording started",
-        description: `Pi is now recording to ${result.filename}`,
-        duration: 3000
+        description: `Recording on Raspberry Pi to ${result.filename}`
       });
 
       return recordingId;
 
     } catch (error) {
       console.error('Error starting Pi recording:', error);
-      
-      const errorMessage = error instanceof Error ? error.message : "Could not start recording on Pi";
-      const isNetworkError = errorMessage.includes('Cannot reach') || errorMessage.includes('timeout') || errorMessage.includes('not responding');
-      
       toast({
-        title: isNetworkError ? "Cannot reach Pi" : "Recording failed",
-        description: errorMessage,
-        variant: "destructive",
-        duration: 6000
+        title: "Recording failed",
+        description: error instanceof Error ? error.message : "Could not start recording on Pi",
+        variant: "destructive"
       });
       setIsRecording(false);
       setCurrentRecordingId(null);
@@ -185,7 +162,7 @@ export const usePiRecording = () => {
     // Show immediate feedback
     toast({
       title: "Stopping recording...",
-      description: "Please wait, this may take a few seconds"
+      description: "Please wait while we stop the recording"
     });
 
     // Clear duration interval
@@ -253,30 +230,19 @@ export const usePiRecording = () => {
       } else {
         // Use edge function (external access)
         console.log('Using edge function (external access)');
-        
-        try {
-          const { data, error } = await supabase.functions.invoke('pi-recording', {
-            body: {
-              action: 'stop',
-              pi_url: piUrl,
-              recording_id: currentRecordingId
-            }
-          });
+        const { data, error } = await supabase.functions.invoke('pi-recording', {
+          body: {
+            action: 'stop',
+            pi_url: piUrl,
+            recording_id: currentRecordingId
+          }
+        });
 
-          if (error) {
-            console.error('Edge function error:', error);
-            throw new Error(`Edge function failed: ${error.message || JSON.stringify(error)}`);
-          }
-          
-          if (!data?.success) {
-            throw new Error(data?.error || 'Failed to stop recording');
-          }
-          
-          result = data;
-        } catch (funcError) {
-          console.error('Failed to invoke edge function:', funcError);
-          throw new Error(`Could not connect to recording service. Recording may still be active on Pi.`);
+        if (error) throw error;
+        if (!data?.success) {
+          throw new Error(data?.error || 'Failed to stop recording');
         }
+        result = data;
       }
 
       console.log('Pi recording stopped:', result);
@@ -344,36 +310,25 @@ export const usePiRecording = () => {
       const testUrl = localIp ? `http://${localIp}:3002` : piUrl;
       console.log('Testing Pi recording service via edge function:', testUrl);
 
-      try {
-        const { data, error } = await supabase.functions.invoke('test-pi-connection', {
-          body: { pi_endpoint: testUrl }
-        });
+      const { data, error } = await supabase.functions.invoke('test-pi-connection', {
+        body: { pi_endpoint: testUrl }
+      });
 
-        if (error) {
-          console.error('Edge function error:', error);
-          return { 
-            connected: false, 
-            error: `Edge function error: ${error.message || 'Could not reach edge function'}` 
-          };
-        }
+      if (error) {
+        console.error('Edge function error:', error);
+        return { connected: false, error: error.message };
+      }
 
-        // Edge function returns success/reachable, not connected
-        if (!data?.success) {
-          return { 
-            connected: false, 
-            error: data?.error || 'Pi service not reachable. Check port 3002 forwarding and DuckDNS.'
-          };
-        }
-
-        console.log('✓ Pi recording service accessible:', testUrl);
-        return { connected: true, service: data.healthData };
-      } catch (funcError) {
-        console.error('Failed to invoke test-pi-connection:', funcError);
-        return {
-          connected: false,
-          error: 'Could not connect to testing service. Check your network connection.'
+      // Edge function returns success/reachable, not connected
+      if (!data?.success) {
+        return { 
+          connected: false, 
+          error: data?.error || 'Pi service not reachable'
         };
       }
+
+      console.log('✓ Pi recording service accessible:', testUrl);
+      return { connected: true, service: data.healthData };
 
     } catch (error) {
       console.error('Pi recording service connection test failed:', error);

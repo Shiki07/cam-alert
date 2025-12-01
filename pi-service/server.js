@@ -130,8 +130,6 @@ app.get('/recordings', async (req, res) => {
 
 // Start recording endpoint
 app.post('/recording/start', async (req, res) => {
-  const startTime = Date.now();
-  
   try {
     const { recording_id, stream_url, quality = 'medium', motion_triggered = false, video_path } = req.body;
 
@@ -153,9 +151,10 @@ app.post('/recording/start', async (req, res) => {
     const filename = `${prefix}pi_${timestamp}.mp4`;
     const filepath = path.join(videosDir, filename);
 
-    console.log(`[${Date.now() - startTime}ms] Starting recording: ${recording_id}`);
+    console.log(`Starting recording: ${recording_id}`);
     console.log(`Stream URL: ${stream_url}`);
     console.log(`Output file: ${filepath}`);
+    console.log(`Video path: ${videosDir}`);
     console.log(`Quality: ${quality}`);
 
     // FFmpeg parameters based on quality
@@ -182,10 +181,11 @@ app.post('/recording/start', async (req, res) => {
       filepath
     ];
 
-    console.log(`[${Date.now() - startTime}ms] Spawning FFmpeg...`);
+    console.log('FFmpeg command:', 'ffmpeg', ffmpegArgs.join(' '));
+
     const ffmpeg = spawn('ffmpeg', ffmpegArgs);
 
-    // Store recording info immediately
+    // Store recording info
     activeRecordings.set(recording_id, {
       process: ffmpeg,
       filename,
@@ -194,8 +194,6 @@ app.post('/recording/start', async (req, res) => {
       quality,
       motion_triggered
     });
-    
-    console.log(`[${Date.now() - startTime}ms] FFmpeg spawned, sending immediate response`);
 
     // Send response immediately (async FFmpeg startup)
     res.json({
@@ -212,15 +210,12 @@ app.post('/recording/start', async (req, res) => {
     });
 
     ffmpeg.stderr.on('data', (data) => {
-      // FFmpeg outputs progress to stderr (don't log every frame)
-      const output = data.toString();
-      if (output.includes('error') || output.includes('Error')) {
-        console.error(`FFmpeg error for ${recording_id}: ${output}`);
-      }
+      // FFmpeg outputs progress to stderr
+      console.log(`FFmpeg: ${data}`);
     });
 
     ffmpeg.on('error', (error) => {
-      console.error(`FFmpeg spawn error for ${recording_id}:`, error);
+      console.error(`FFmpeg error for ${recording_id}:`, error);
       activeRecordings.delete(recording_id);
     });
 
@@ -243,8 +238,6 @@ app.post('/recording/start', async (req, res) => {
 
 // Stop recording endpoint
 app.post('/recording/stop', async (req, res) => {
-  const stopStartTime = Date.now();
-  
   try {
     const { recording_id } = req.body;
 
@@ -258,53 +251,49 @@ app.post('/recording/stop', async (req, res) => {
       return res.status(404).json({ error: 'Recording not found or already stopped' });
     }
 
-    console.log(`[0ms] Stopping recording: ${recording_id}`);
+    console.log(`Stopping recording: ${recording_id}`);
 
-    // Send SIGINT for graceful FFmpeg shutdown
-    console.log(`[${Date.now() - stopStartTime}ms] Sending SIGINT to FFmpeg...`);
+    // Step 1: Send SIGINT for graceful FFmpeg shutdown
+    console.log('Sending SIGINT to FFmpeg process...');
     recording.process.kill('SIGINT');
     
-    // Wait for FFmpeg to exit gracefully (max 3 seconds - reduced from 5)
+    // Step 2: Wait for FFmpeg to exit gracefully (max 5 seconds)
     const exitPromise = new Promise((resolve) => {
-      const exitHandler = () => {
-        console.log(`[${Date.now() - stopStartTime}ms] FFmpeg exited gracefully`);
+      recording.process.on('exit', () => {
+        console.log('FFmpeg exited gracefully');
         resolve(true);
-      };
-      recording.process.on('exit', exitHandler);
+      });
       setTimeout(() => {
-        recording.process.removeListener('exit', exitHandler);
-        console.log(`[${Date.now() - stopStartTime}ms] FFmpeg graceful exit timeout`);
+        console.log('FFmpeg graceful exit timeout');
         resolve(false);
-      }, 3000);
+      }, 5000);
     });
     
     const exitedGracefully = await exitPromise;
     
-    // If still running, force kill with SIGKILL
+    // Step 3: If still running, force kill with SIGKILL
     if (!exitedGracefully && !recording.process.killed) {
-      console.log(`[${Date.now() - stopStartTime}ms] Forcing SIGKILL`);
+      console.log('FFmpeg did not stop gracefully, forcing SIGKILL');
       recording.process.kill('SIGKILL');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    // Wait for file system to flush
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Step 4: Wait an additional moment for file system to flush
+    await new Promise(resolve => setTimeout(resolve, 500));
 
-    // Get file stats
+    // Check if file exists and get stats
     let fileSize = 0;
     let duration = 0;
     try {
       const stats = await fs.stat(recording.filepath);
       fileSize = stats.size;
       duration = Math.round((Date.now() - recording.startTime) / 1000);
-      console.log(`[${Date.now() - stopStartTime}ms] File: ${fileSize} bytes, ${duration}s duration`);
+      console.log(`Recording file stats: ${fileSize} bytes, ${duration} seconds`);
     } catch (error) {
       console.warn('Could not get file stats:', error);
     }
 
     activeRecordings.delete(recording_id);
-    
-    console.log(`[${Date.now() - stopStartTime}ms] Stop operation complete`);
 
     res.json({
       success: true,
