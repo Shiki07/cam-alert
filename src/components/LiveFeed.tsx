@@ -39,6 +39,11 @@ interface LiveFeedProps {
 
 export interface LiveFeedHandle {
   takeSnapshot: () => void;
+  toggleRecording: () => Promise<void>;
+  startRecording: () => Promise<void>;
+  stopRecording: () => Promise<void>;
+  isRecording: boolean;
+  piServiceConnected: boolean | null;
 }
 
 export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({ 
@@ -692,7 +697,28 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
 
   // Expose snapshot method to parent via ref
   useImperativeHandle(ref, () => ({
-    takeSnapshot: handleSnapshot
+    takeSnapshot: handleSnapshot,
+    toggleRecording: handleRecordingToggle,
+    startRecording: async () => {
+      if (cameraSource === 'network' && !piRecording.isRecording) {
+        await handleRecordingToggle();
+      } else if (cameraSource === 'webcam' && !recording.isRecording) {
+        await handleRecordingToggle();
+      }
+    },
+    stopRecording: async () => {
+      if (cameraSource === 'network' && piRecording.isRecording) {
+        await handleRecordingToggle();
+      } else if (cameraSource === 'webcam' && recording.isRecording) {
+        await handleRecordingToggle();
+      }
+    },
+    get isRecording() {
+      return cameraSource === 'network' ? piRecording.isRecording : recording.isRecording;
+    },
+    get piServiceConnected() {
+      return piServiceConnected;
+    }
   }));
 
   return (
