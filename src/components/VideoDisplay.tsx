@@ -19,6 +19,7 @@ interface VideoDisplayProps {
   isRecording: boolean;
   isProcessing: boolean;
   reconnectAttempts: number;
+  isReconnecting?: boolean;
   piServiceConnected?: boolean | null;
   recordingDuration?: number;
   children?: React.ReactNode;
@@ -40,6 +41,7 @@ export const VideoDisplay = ({
   isRecording,
   isProcessing,
   reconnectAttempts,
+  isReconnecting = false,
   piServiceConnected,
   recordingDuration = 0,
   children
@@ -76,10 +78,10 @@ export const VideoDisplay = ({
           {/* Status Indicators */}
           <div className="absolute top-4 left-4 flex flex-col gap-2">
             {/* Reconnection Status */}
-            {reconnectAttempts > 0 && (
+            {(reconnectAttempts > 0 || isReconnecting) && (
               <div className="bg-orange-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
                 <Wifi className="w-4 h-4 animate-pulse" />
-                Reconnecting... ({reconnectAttempts}/5)
+                {isReconnecting ? `Reconnecting... (${reconnectAttempts}/10)` : `Reconnected after ${reconnectAttempts} attempts`}
               </div>
             )}
             
