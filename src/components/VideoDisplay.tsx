@@ -74,7 +74,7 @@ export const VideoDisplay = ({
           {children}
           
           {/* Status Indicators */}
-          <div className="absolute top-4 left-4 flex flex-col gap-2">
+          <div className="absolute top-16 left-4 flex flex-col gap-2 z-10">
             {/* Reconnection Status */}
             {reconnectAttempts > 0 && (
               <div className="bg-orange-600 bg-opacity-90 text-white px-3 py-1 rounded-full text-sm flex items-center gap-2">
