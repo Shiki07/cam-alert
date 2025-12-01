@@ -166,11 +166,15 @@ app.post('/recording/start', async (req, res) => {
 
     const preset = qualityPresets[quality] || qualityPresets.medium;
 
+    // Use local stream URL to prevent feed freezing (FFmpeg connects to localhost:8000)
+    const localStreamUrl = 'http://localhost:8000/stream.mjpg';
+    console.log(`Using local stream for recording: ${localStreamUrl}`);
+    
     // FFmpeg command to capture from MJPEG stream
     const ffmpegArgs = [
       '-f', 'mjpeg',
       '-r', preset.fps.toString(),
-      '-i', stream_url,
+      '-i', localStreamUrl,
       '-c:v', 'libx264',
       '-preset', 'ultrafast',
       '-b:v', preset.bitrate,
@@ -257,29 +261,28 @@ app.post('/recording/stop', async (req, res) => {
     console.log('Sending SIGINT to FFmpeg process...');
     recording.process.kill('SIGINT');
     
-    // Step 2: Wait for FFmpeg to exit gracefully (max 5 seconds)
+    // Step 2: Wait for FFmpeg to exit gracefully (max 2 seconds - optimized)
     const exitPromise = new Promise((resolve) => {
       recording.process.on('exit', () => {
         console.log('FFmpeg exited gracefully');
         resolve(true);
       });
       setTimeout(() => {
-        console.log('FFmpeg graceful exit timeout');
+        console.log('FFmpeg graceful exit timeout, forcing stop');
         resolve(false);
-      }, 5000);
+      }, 2000);
     });
     
     const exitedGracefully = await exitPromise;
     
     // Step 3: If still running, force kill with SIGKILL
     if (!exitedGracefully && !recording.process.killed) {
-      console.log('FFmpeg did not stop gracefully, forcing SIGKILL');
+      console.log('Forcing SIGKILL immediately');
       recording.process.kill('SIGKILL');
-      await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    // Step 4: Wait an additional moment for file system to flush
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Step 4: Brief wait for file system to flush (optimized)
+    await new Promise(resolve => setTimeout(resolve, 200));
 
     // Check if file exists and get stats
     let fileSize = 0;
