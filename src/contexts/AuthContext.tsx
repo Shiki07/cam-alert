@@ -136,7 +136,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         return { error: { message: 'Please enter a valid full name' } };
       }
 
-      const redirectUrl = `${window.location.origin}/`;
+      // Redirect to /auth to handle the verification callback
+      const redirectUrl = `${window.location.origin}/auth`;
       
       const { error } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
