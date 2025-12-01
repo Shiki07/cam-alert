@@ -184,7 +184,7 @@ export const usePiRecording = () => {
         console.log('Using direct Pi service call (local network)');
         
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
         try {
           const response = await fetch(`${piUrl}/recording/stop`, {

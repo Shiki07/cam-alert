@@ -670,11 +670,11 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
 
         // Set up auto-reconnect if disconnected
         if (!result.connected && !reconnectInterval) {
-          console.log('Pi recording service disconnected - starting auto-reconnect monitor (every 15 seconds)');
+          console.log('Pi recording service disconnected - starting auto-reconnect monitor (every 30 seconds)');
           reconnectInterval = setInterval(() => {
             console.log('Auto-reconnect: checking Pi recording service...');
             testPiService();
-          }, 15000); // Check every 15 seconds
+          }, 30000); // Check every 30 seconds
         } else if (result.connected && reconnectInterval) {
           // Connected - stop monitoring
           clearInterval(reconnectInterval);
