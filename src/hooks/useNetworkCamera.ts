@@ -184,12 +184,6 @@ export const useNetworkCamera = () => {
     console.log('useNetworkCamera: Config:', config);
     console.log('useNetworkCamera: Quality setting:', config.quality);
     
-    // Prevent overlapping connection attempts
-    if (isConnectingRef.current) {
-      console.log('useNetworkCamera: Connection already in progress, ignoring duplicate request');
-      return;
-    }
-    
     // Clean up any existing connections
     cleanupStream();
     
