@@ -608,77 +608,90 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   useEffect(() => {
     let reconnectInterval: NodeJS.Timeout | null = null;
     let wasDisconnected = false;
+    let testInProgress = false;
 
     if (cameraSource === 'network' && networkCamera.currentConfig && isConnected) {
       const testPiService = async () => {
-        const cameraUrl = new URL(networkCamera.currentConfig!.url);
-        
-        // For external hostnames (like DuckDNS), try to detect local IP
-        let localIp: string | undefined;
-        
-        if (cameraUrl.hostname.match(/^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./)) {
-          // Camera URL already uses local IP
-          localIp = cameraUrl.hostname;
+        // Prevent overlapping test requests
+        if (testInProgress) {
+          console.log('Pi service test already in progress, skipping...');
+          return;
         }
-        
-        // First, try the public URL (for DuckDNS or external hostnames)
-        // This works from the cloud edge function
-        const publicUrl = `http://${cameraUrl.hostname}:3002`;
-        console.log('Testing Pi recording service via public URL:', publicUrl);
-        const result = await piRecording.testConnection(publicUrl, undefined);
-        
-        // If public URL succeeded, we're done
-        if (result.connected) {
-          console.log('✓ Pi recording service accessible via public URL');
-        } else if (cameraUrl.hostname.match(/\.duckdns\.org$|\.ddns\./)) {
-          // Public URL failed for DuckDNS - try local IP as fallback (only works on same network)
-          console.log('Public URL failed, trying local network detection...');
-          const savedPiIp = localStorage.getItem('pi_local_ip');
-          if (savedPiIp) {
-            localIp = savedPiIp;
-            console.log('Trying cached local IP:', localIp);
-            const localResult = await piRecording.testConnection(`http://${localIp}:3002`, undefined);
-            if (localResult.connected) {
-              console.log('✓ Pi recording service accessible via local IP');
-              // Update result to use local connection
-              Object.assign(result, localResult);
+
+        testInProgress = true;
+        try {
+          const cameraUrl = new URL(networkCamera.currentConfig!.url);
+          
+          // For external hostnames (like DuckDNS), try to detect local IP
+          let localIp: string | undefined;
+          
+          if (cameraUrl.hostname.match(/^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[01])\./)) {
+            // Camera URL already uses local IP
+            localIp = cameraUrl.hostname;
+          }
+          
+          // First, try the public URL (for DuckDNS or external hostnames)
+          // This works from the cloud edge function
+          const publicUrl = `http://${cameraUrl.hostname}:3002`;
+          console.log('Testing Pi recording service via public URL:', publicUrl);
+          const result = await piRecording.testConnection(publicUrl, undefined);
+          
+          // If public URL succeeded, we're done
+          if (result.connected) {
+            console.log('✓ Pi recording service accessible via public URL');
+          } else if (cameraUrl.hostname.match(/\.duckdns\.org$|\.ddns\./)) {
+            // Public URL failed for DuckDNS - try local IP as fallback (only works on same network)
+            console.log('Public URL failed, trying local network detection...');
+            const savedPiIp = localStorage.getItem('pi_local_ip');
+            if (savedPiIp) {
+              localIp = savedPiIp;
+              console.log('Trying cached local IP:', localIp);
+              const localResult = await piRecording.testConnection(`http://${localIp}:3002`, undefined);
+              if (localResult.connected) {
+                console.log('✓ Pi recording service accessible via local IP');
+                // Update result to use local connection
+                Object.assign(result, localResult);
+              }
             }
           }
-        }
-        console.log('Pi service connectivity test:', result);
-        
-        // Check if this is a reconnection after being disconnected
-        const isReconnecting = wasDisconnected && result.connected;
-        
-        setPiServiceConnected(result.connected);
-        
-        // Store the local IP if connection succeeded
-        if (result.connected && localIp) {
-          setDetectedPiIp(localIp);
-          console.log('Pi service accessible at local IP:', localIp);
-        } else if (!result.connected) {
-          console.warn('Pi recording service not accessible on port 3002 - recording will be limited to snapshots');
-          wasDisconnected = true;
-        }
+          console.log('Pi service connectivity test:', result);
+          
+          // Check if this is a reconnection after being disconnected
+          const isReconnecting = wasDisconnected && result.connected;
+          
+          setPiServiceConnected(result.connected);
+          
+          // Store the local IP if connection succeeded
+          if (result.connected && localIp) {
+            setDetectedPiIp(localIp);
+            console.log('Pi service accessible at local IP:', localIp);
+          } else if (!result.connected) {
+            console.warn('Pi recording service not accessible on port 3002 - recording will be limited to snapshots');
+            wasDisconnected = true;
+          }
 
-        // Reset disconnected flag on successful reconnection
-        // Note: Not showing toast notification because health check doesn't verify recording endpoints exist
-        if (isReconnecting) {
-          console.log('✓ Pi recording service auto-reconnected successfully');
-          wasDisconnected = false;
-        }
+          // Reset disconnected flag on successful reconnection
+          // Note: Not showing toast notification because health check doesn't verify recording endpoints exist
+          if (isReconnecting) {
+            console.log('✓ Pi recording service auto-reconnected successfully');
+            wasDisconnected = false;
+          }
 
-        // Set up auto-reconnect if disconnected
-        if (!result.connected && !reconnectInterval) {
-          console.log('Pi recording service disconnected - starting auto-reconnect monitor (every 15 seconds)');
-          reconnectInterval = setInterval(() => {
-            console.log('Auto-reconnect: checking Pi recording service...');
-            testPiService();
-          }, 15000); // Check every 15 seconds
-        } else if (result.connected && reconnectInterval) {
-          // Connected - stop monitoring
-          clearInterval(reconnectInterval);
-          reconnectInterval = null;
+          // Set up auto-reconnect if disconnected, otherwise stop polling
+          if (!result.connected && !reconnectInterval) {
+            console.log('Pi recording service disconnected - starting auto-reconnect monitor (every 30 seconds)');
+            reconnectInterval = setInterval(() => {
+              console.log('Auto-reconnect: checking Pi recording service...');
+              testPiService();
+            }, 30000); // Check every 30 seconds when disconnected
+          } else if (result.connected && reconnectInterval) {
+            // Connected - stop monitoring
+            console.log('Pi service connected - stopping reconnect monitor');
+            clearInterval(reconnectInterval);
+            reconnectInterval = null;
+          }
+        } finally {
+          testInProgress = false;
         }
       };
 
