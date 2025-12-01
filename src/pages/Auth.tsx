@@ -20,6 +20,8 @@ const Auth = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [showEmailSent, setShowEmailSent] = useState(false);
+  const [showResendForm, setShowResendForm] = useState(false);
+  const [resendEmail, setResendEmail] = useState('');
   const [verificationStatus, setVerificationStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [verificationError, setVerificationError] = useState('');
   
@@ -172,20 +174,31 @@ const Auth = () => {
   };
 
   const handleResend = async () => {
+    // Use resendEmail if available (from resend form), otherwise use email (from signup flow)
+    const targetEmail = (resendEmail || email).toLowerCase().trim();
+    
+    if (!targetEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
     setIsLoading(true);
     setError('');
     try {
       const { error } = await supabase.auth.resend({
         type: 'signup',
-        email: email.toLowerCase().trim(),
+        email: targetEmail,
         options: { emailRedirectTo: `${window.location.origin}/auth` }
       } as any);
       if (error) {
         setError(error.message || 'Could not resend verification email. Please try again.');
       } else {
+        setShowResendForm(false);
+        setShowEmailSent(true);
+        setEmail(targetEmail);
         toast({
-          title: 'Verification email resent',
-          description: `We’ve resent the verification link to ${email}.`,
+          title: 'Verification email sent',
+          description: `We've sent a verification link to ${targetEmail}. Check your inbox and spam folder.`,
         });
       }
     } catch (err: any) {
@@ -257,8 +270,7 @@ const Auth = () => {
               onClick={() => {
                 setVerificationStatus('idle');
                 setVerificationError('');
-                setShowEmailSent(true);
-                // Clear URL params
+                setShowResendForm(true);
                 window.history.replaceState(null, '', '/auth');
               }}
             >
@@ -271,6 +283,61 @@ const Auth = () => {
                 setVerificationStatus('idle');
                 setVerificationError('');
                 window.history.replaceState(null, '', '/auth');
+              }}
+            >
+              Back to Sign In
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show resend email form
+  if (showResendForm) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+              <Mail className="w-6 h-6 text-white" />
+            </div>
+            <CardTitle className="text-white">Resend Verification Email</CardTitle>
+            <CardDescription className="text-gray-300">
+              Enter your email address to receive a new verification link
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={(e) => { e.preventDefault(); handleResend(); }} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="resend-email" className="text-gray-300">Email</Label>
+                <Input
+                  id="resend-email"
+                  type="email"
+                  placeholder="your.email@example.com"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  required
+                  className="bg-gray-700 border-gray-600 text-white placeholder-gray-400"
+                />
+              </div>
+              {error && (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? 'Sending...' : 'Send Verification Email'}
+              </Button>
+            </form>
+          </CardContent>
+          <CardFooter>
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => {
+                setShowResendForm(false);
+                setError('');
               }}
             >
               Back to Sign In
@@ -303,7 +370,7 @@ const Auth = () => {
                 </AlertDescription>
               </Alert>
               <p className="text-sm text-gray-400">
-                Didn't receive the email? Check your spam folder or try signing up again.
+                Didn't receive the email? Check your spam folder or click resend below.
               </p>
             </div>
           </CardContent>
