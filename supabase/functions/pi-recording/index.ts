@@ -83,12 +83,13 @@ async function startRecording(
   videoPath: string | undefined,
   userId: string
 ): Promise<Response> {
-  console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
-  console.log(`Video path: ${videoPath || 'default'}`);
+  const startTime = Date.now();
+  console.log(`[${recordingId}] Starting recording on Pi at ${piUrl}`);
+  console.log(`[${recordingId}] Video path: ${videoPath || 'default'}, quality: ${quality}`);
   
-  // Add timeout controller - 45 seconds for slower Pi startup
+  // Add timeout controller - 20 seconds (optimized)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   
   try {
     const response = await fetch(`${piUrl}/recording/start`, {
@@ -105,6 +106,8 @@ async function startRecording(
     });
 
     clearTimeout(timeoutId);
+    const elapsedMs = Date.now() - startTime;
+    console.log(`[${recordingId}] Pi response received in ${elapsedMs}ms`);
 
     if (!response.ok) {
       const error = await response.text();
@@ -112,7 +115,7 @@ async function startRecording(
     }
 
     const result = await response.json();
-    console.log('Recording started on Pi:', result);
+    console.log(`[${recordingId}] Recording started successfully:`, result);
 
   // Save initial metadata to Supabase
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -146,12 +149,14 @@ async function startRecording(
   );
   } catch (error: any) {
     clearTimeout(timeoutId);
+    const elapsedMs = Date.now() - startTime;
     
     if (error.name === 'AbortError') {
-      console.error('Pi recording start timed out after 45 seconds');
-      throw new Error('Pi service timeout - FFmpeg may be slow to start. Check Pi resources.');
+      console.error(`[${recordingId}] Pi recording start timed out after 20 seconds`);
+      throw new Error('Pi service timeout (20s). Check Pi connectivity and FFmpeg installation.');
     }
     
+    console.error(`[${recordingId}] Recording start failed after ${elapsedMs}ms:`, error);
     throw error;
   }
 }
