@@ -1,17 +1,19 @@
-import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
-import { useRecording } from "@/hooks/useRecording";
-import { usePiRecording } from "@/hooks/usePiRecording";
-import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
-import { useImageMotionDetection } from "@/hooks/useImageMotionDetection";
-import { useMotionNotification } from "@/hooks/useMotionNotification";
-import { useNetworkCamera, NetworkCameraConfig } from "@/hooks/useNetworkCamera";
-import { useConnectionMonitor } from "@/hooks/useConnectionMonitor";
-import { CameraSourceSelector, CameraSource } from "@/components/CameraSourceSelector";
-import { VideoDisplay } from "@/components/VideoDisplay";
-import { CameraStatus } from "@/components/CameraStatus";
-import { CameraOverlays } from "@/components/CameraOverlays";
-import { CameraInfo } from "@/components/CameraInfo";
-import { useToast } from "@/components/ui/use-toast";
+import React, { useState, useRef, useCallback, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Camera } from 'lucide-react';
+import { VideoDisplay } from './VideoDisplay';
+import { CameraSourceSelector } from './CameraSourceSelector';
+import { CameraOverlays } from './CameraOverlays';
+import { CameraInfo } from './CameraInfo';
+import { useRecording } from '@/hooks/useRecording';
+import { usePiRecording } from '@/hooks/usePiRecording';
+import { useNetworkCamera } from '@/hooks/useNetworkCamera';
+import { useConnectionMonitor } from '@/hooks/useConnectionMonitor';
+import { useEnhancedMotionDetection } from '@/hooks/useEnhancedMotionDetection';
+import { useImageMotionDetection } from '@/hooks/useImageMotionDetection';
+import { useMotionNotification } from '@/hooks/useMotionNotification';
+import { useToast } from "@/hooks/use-toast";
+import { CameraStatus } from './CameraStatus';
+import { useAutoReconnect } from '@/hooks/useAutoReconnect';
 
 interface LiveFeedProps {
   isRecording: boolean;
@@ -99,6 +101,31 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     cameraSource === 'network' ? networkCamera.currentConfig?.url : undefined,
     isConnected
   );
+
+  // Auto-reconnect for camera disconnections with exponential backoff
+  const autoReconnect = useAutoReconnect({
+    enabled: true,
+    maxAttempts: 10,
+    baseDelay: 2000, // Start with 2 seconds
+    maxDelay: 60000, // Cap at 1 minute
+    connectionCheckInterval: 5000, // Check every 5 seconds
+    checkConnection: () => {
+      if (cameraSource === 'webcam') {
+        return !!streamRef.current && streamRef.current.active;
+      } else if (cameraSource === 'network') {
+        return networkCamera.isConnected;
+      }
+      return false;
+    },
+    onReconnect: async () => {
+      console.log('Auto-reconnect: Attempting to reconnect camera...');
+      if (cameraSource === 'webcam') {
+        await startWebcam();
+      } else if (cameraSource === 'network' && networkCamera.currentConfig) {
+        await handleConnectNetworkCamera(networkCamera.currentConfig);
+      }
+    },
+  });
 
   const motionNotification = useMotionNotification({
     email: notificationEmail,
@@ -755,7 +782,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
             cameraSource={cameraSource}
             connectionQuality={connectionMonitor.status.connectionQuality}
             latency={connectionMonitor.status.latency}
-            reconnectAttempts={networkCamera.reconnectAttempts}
+            reconnectAttempts={autoReconnect.attempts}
           />
         </div>
         
