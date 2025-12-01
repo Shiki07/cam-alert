@@ -86,9 +86,9 @@ async function startRecording(
   console.log(`Starting recording ${recordingId} on Pi at ${piUrl}`);
   console.log(`Video path: ${videoPath || 'default'}`);
   
-  // Add timeout controller - 60 seconds for FFmpeg startup
+  // Add timeout controller - 45 seconds for slower Pi startup
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
   
   try {
     const response = await fetch(`${piUrl}/recording/start`, {
@@ -148,8 +148,8 @@ async function startRecording(
     clearTimeout(timeoutId);
     
     if (error.name === 'AbortError') {
-      console.error('Pi recording start timed out after 60 seconds');
-      throw new Error('Pi service timeout - FFmpeg startup exceeded 60 seconds. Check Pi resources or use lower quality setting.');
+      console.error('Pi recording start timed out after 45 seconds');
+      throw new Error('Pi service timeout - FFmpeg may be slow to start. Check Pi resources.');
     }
     
     throw error;
@@ -159,9 +159,9 @@ async function startRecording(
 async function stopRecording(piUrl: string, recordingId: string, userId: string): Promise<Response> {
   console.log(`Stopping recording ${recordingId} on Pi at ${piUrl}`);
   
-  // Add timeout controller - 30 seconds for stop operation
+  // Add timeout controller - 15 seconds for stop operation
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
   
   try {
     const response = await fetch(`${piUrl}/recording/stop`, {
@@ -209,8 +209,8 @@ async function stopRecording(piUrl: string, recordingId: string, userId: string)
     clearTimeout(timeoutId);
     
     if (error.name === 'AbortError') {
-      console.error('Pi recording stop timed out after 30 seconds');
-      throw new Error('Pi stop timeout - recording may still be active on Pi. Check Pi service manually.');
+      console.error('Pi recording stop timed out after 15 seconds');
+      throw new Error('Pi stop timeout - recording may still be active on Pi');
     }
     
     throw error;
