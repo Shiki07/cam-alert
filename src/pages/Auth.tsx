@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { Camera, Mail, CheckCircle } from 'lucide-react';
+import { Camera, Mail, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
@@ -20,16 +20,90 @@ const Auth = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [showEmailSent, setShowEmailSent] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
+  const [verificationError, setVerificationError] = useState('');
   
   const { signUp, signIn, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
+  // Handle email verification callback - process tokens from URL
   useEffect(() => {
-    if (user) {
+    const handleAuthCallback = async () => {
+      // Check for error in URL params (from Supabase redirect)
+      const errorParam = searchParams.get('error');
+      const errorDescription = searchParams.get('error_description');
+      
+      if (errorParam) {
+        console.log('Auth error from URL:', errorParam, errorDescription);
+        setVerificationStatus('error');
+        if (errorDescription?.includes('expired') || errorDescription?.includes('invalid')) {
+          setVerificationError('This verification link has expired or already been used. Please request a new one.');
+        } else {
+          setVerificationError(errorDescription || 'Verification failed. Please try again.');
+        }
+        return;
+      }
+
+      // Check for hash fragment with tokens (Supabase sends tokens in URL hash)
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const type = hashParams.get('type');
+
+      if (accessToken && refreshToken) {
+        console.log('Processing auth callback with tokens, type:', type);
+        setVerificationStatus('processing');
+        
+        try {
+          // Set the session from the tokens
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+
+          if (error) {
+            console.error('Error setting session:', error);
+            setVerificationStatus('error');
+            setVerificationError(error.message || 'Failed to verify your account. Please try again.');
+            return;
+          }
+
+          if (data.session) {
+            console.log('Session set successfully, user verified');
+            setVerificationStatus('success');
+            
+            // Clear the hash from URL
+            window.history.replaceState(null, '', window.location.pathname);
+            
+            toast({
+              title: "Email verified!",
+              description: "Your account has been verified. Redirecting to your dashboard...",
+            });
+            
+            // Short delay to show success message, then redirect
+            setTimeout(() => {
+              navigate('/');
+            }, 1500);
+          }
+        } catch (err) {
+          console.error('Error processing auth callback:', err);
+          setVerificationStatus('error');
+          setVerificationError('An unexpected error occurred during verification.');
+        }
+      }
+    };
+
+    handleAuthCallback();
+  }, [searchParams, navigate, toast]);
+
+  // Redirect authenticated users to home
+  useEffect(() => {
+    if (user && verificationStatus === 'idle') {
       navigate('/');
     }
-  }, [user, navigate]);
+  }, [user, navigate, verificationStatus]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,7 +178,7 @@ const Auth = () => {
       const { error } = await supabase.auth.resend({
         type: 'signup',
         email: email.toLowerCase().trim(),
-        options: { emailRedirectTo: `${window.location.origin}/` }
+        options: { emailRedirectTo: `${window.location.origin}/auth` }
       } as any);
       if (error) {
         setError(error.message || 'Could not resend verification email. Please try again.');
@@ -119,6 +193,93 @@ const Auth = () => {
     }
     setIsLoading(false);
   };
+
+  // Show verification processing state
+  if (verificationStatus === 'processing') {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-white animate-spin" />
+            </div>
+            <CardTitle className="text-white">Verifying Your Account</CardTitle>
+            <CardDescription className="text-gray-300">
+              Please wait while we verify your email...
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show verification success state
+  if (verificationStatus === 'success') {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-green-600 rounded-full flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-white" />
+            </div>
+            <CardTitle className="text-white">Email Verified!</CardTitle>
+            <CardDescription className="text-gray-300">
+              Your account has been verified successfully. Redirecting...
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show verification error state
+  if (verificationStatus === 'error') {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-gray-800 border-gray-700">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 w-12 h-12 bg-red-600 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-6 h-6 text-white" />
+            </div>
+            <CardTitle className="text-white">Verification Failed</CardTitle>
+            <CardDescription className="text-gray-300">
+              {verificationError}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-center">
+            <p className="text-sm text-gray-400 mb-4">
+              The verification link may have expired or already been used. You can request a new verification email.
+            </p>
+          </CardContent>
+          <CardFooter className="flex flex-col gap-3">
+            <Button 
+              className="w-full"
+              onClick={() => {
+                setVerificationStatus('idle');
+                setVerificationError('');
+                setShowEmailSent(true);
+                // Clear URL params
+                window.history.replaceState(null, '', '/auth');
+              }}
+            >
+              Request New Verification Email
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={() => {
+                setVerificationStatus('idle');
+                setVerificationError('');
+                window.history.replaceState(null, '', '/auth');
+              }}
+            >
+              Back to Sign In
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
 
   if (showEmailSent) {
     return (
