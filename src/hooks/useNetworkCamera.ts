@@ -197,12 +197,18 @@ export const useNetworkCamera = () => {
       console.log('useNetworkCamera: videoRef.current:', videoRef.current);
       console.log('useNetworkCamera: videoRef:', videoRef);
       
-      // Minimal delay for DOM readiness
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait for DOM to be ready with retry logic
+      let retries = 0;
+      const maxRetries = 10;
+      while (!videoRef.current && retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        retries++;
+        console.log(`useNetworkCamera: Waiting for video element... (${retries}/${maxRetries})`);
+      }
       
       if (!videoRef.current) {
-        console.error('useNetworkCamera: Video element not available - videoRef.current is null');
-        throw new Error('Video element not available');
+        console.error('useNetworkCamera: Video element not available after waiting - videoRef.current is null');
+        throw new Error('Video element not available. Please try connecting again.');
       }
 
       const element = videoRef.current;
