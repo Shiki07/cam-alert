@@ -52,22 +52,18 @@ export const useImageMotionDetection = (config: ImageMotionDetectionConfig) => {
     }
   }, [config.scheduleEnabled, config.startHour, config.endHour]);
 
-  // Downscale factor for performance - process at 1/4 resolution
-  const DOWNSCALE_FACTOR = 4;
-  
   const initializeCanvas = useCallback((img: HTMLImageElement) => {
     if (!canvasRef.current) {
       canvasRef.current = document.createElement('canvas');
-      contextRef.current = canvasRef.current.getContext('2d', { willReadFrequently: true });
+      contextRef.current = canvasRef.current.getContext('2d');
     }
     
     const canvas = canvasRef.current;
     const context = contextRef.current;
     
     if (canvas && context && img.naturalWidth && img.naturalHeight) {
-      // Use downscaled dimensions for better performance
-      canvas.width = Math.floor(img.naturalWidth / DOWNSCALE_FACTOR);
-      canvas.height = Math.floor(img.naturalHeight / DOWNSCALE_FACTOR);
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
       return { canvas, context };
     }
     
@@ -85,29 +81,23 @@ export const useImageMotionDetection = (config: ImageMotionDetectionConfig) => {
     const current = currentFrame.data;
     const previous = previousFrame.data;
     let changedPixels = 0;
-    let sampledPixels = 0;
     
     // Apply noise reduction if enabled
     const noiseThreshold = config.noiseReduction ? 15 : 5;
-    const sensitivityThreshold = Math.max(noiseThreshold, 255 - (config.sensitivity * 2.55));
     
-    // Sample every 4th pixel for even better performance (combined with downscaling)
-    const sampleStep = 4;
-    
-    for (let i = 0; i < current.length; i += 4 * sampleStep) {
-      sampledPixels++;
+    for (let i = 0; i < current.length; i += 4) {
       const currentGray = (current[i] + current[i + 1] + current[i + 2]) / 3;
       const previousGray = (previous[i] + previous[i + 1] + previous[i + 2]) / 3;
       
       const difference = Math.abs(currentGray - previousGray);
+      const sensitivityThreshold = Math.max(noiseThreshold, 255 - (config.sensitivity * 2.55));
       
       if (difference > sensitivityThreshold) {
         changedPixels++;
       }
     }
     
-    // Return based on sampled pixels, not total
-    return sampledPixels > 0 ? changedPixels : 0;
+    return changedPixels;
   }, [config.sensitivity, config.noiseReduction]);
 
   const saveMotionEvent = useCallback(async (motionLevel: number, detected: boolean) => {
@@ -235,10 +225,10 @@ export const useImageMotionDetection = (config: ImageMotionDetectionConfig) => {
     setIsDetecting(true);
     imageRef.current = imgElement;
     
-    // Process frames every 1500ms - lighter on CPU while still detecting motion
+    // Start detection interval - less frequent to improve performance
     detectionIntervalRef.current = setInterval(() => {
       processFrame();
-    }, 1500);
+    }, 1000); // Check every 1000ms for motion
   }, [config.enabled, isDetecting, processFrame]);
 
   const stopDetection = useCallback(() => {

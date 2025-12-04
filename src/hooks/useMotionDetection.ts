@@ -24,22 +24,18 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
   
   const { toast } = useToast();
 
-  // Downscale factor for performance - process at 1/4 resolution
-  const DOWNSCALE_FACTOR = 4;
-  
   const initializeCanvas = useCallback((video: HTMLVideoElement) => {
     if (!canvasRef.current) {
       canvasRef.current = document.createElement('canvas');
-      contextRef.current = canvasRef.current.getContext('2d', { willReadFrequently: true });
+      contextRef.current = canvasRef.current.getContext('2d');
     }
     
     const canvas = canvasRef.current;
     const context = contextRef.current;
     
     if (canvas && context) {
-      // Use downscaled dimensions for better performance
-      canvas.width = Math.floor(video.videoWidth / DOWNSCALE_FACTOR);
-      canvas.height = Math.floor(video.videoHeight / DOWNSCALE_FACTOR);
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       return { canvas, context };
     }
     
@@ -50,26 +46,23 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
     const current = currentFrame.data;
     const previous = previousFrame.data;
     let changedPixels = 0;
-    let sampledPixels = 0;
     
-    const sensitivityThreshold = 255 - (config.sensitivity * 2.55);
-    
-    // Sample every 4th pixel for better performance (combined with downscaling)
-    const sampleStep = 4;
-    
-    for (let i = 0; i < current.length; i += 4 * sampleStep) {
-      sampledPixels++;
+    // Compare frames pixel by pixel
+    for (let i = 0; i < current.length; i += 4) {
       const currentGray = (current[i] + current[i + 1] + current[i + 2]) / 3;
       const previousGray = (previous[i] + previous[i + 1] + previous[i + 2]) / 3;
       
       const difference = Math.abs(currentGray - previousGray);
+      
+      // Adjust sensitivity (higher sensitivity = lower threshold for change)
+      const sensitivityThreshold = 255 - (config.sensitivity * 2.55);
       
       if (difference > sensitivityThreshold) {
         changedPixels++;
       }
     }
     
-    return sampledPixels > 0 ? changedPixels : 0;
+    return changedPixels;
   }, [config.sensitivity]);
 
   const processFrame = useCallback((video: HTMLVideoElement) => {
@@ -130,10 +123,10 @@ export const useMotionDetection = (config: MotionDetectionConfig) => {
     console.log('Starting motion detection');
     setIsDetecting(true);
     
-    // Process frames every 500ms (2 FPS) - much lighter on CPU
+    // Process frames every 200ms (5 FPS for motion detection)
     detectionIntervalRef.current = setInterval(() => {
       processFrame(video);
-    }, 500);
+    }, 200);
   }, [config.enabled, isDetecting, processFrame]);
 
   const stopDetection = useCallback(() => {
