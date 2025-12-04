@@ -164,9 +164,9 @@ async function startRecording(
 async function stopRecording(piUrl: string, recordingId: string, userId: string): Promise<Response> {
   console.log(`Stopping recording ${recordingId} on Pi at ${piUrl}`);
   
-  // Add timeout controller - 15 seconds for stop operation
+  // Add timeout controller - 30 seconds for stop operation (FFmpeg needs time to finalize)
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
   
   try {
     const response = await fetch(`${piUrl}/recording/stop`, {
@@ -214,7 +214,7 @@ async function stopRecording(piUrl: string, recordingId: string, userId: string)
     clearTimeout(timeoutId);
     
     if (error.name === 'AbortError') {
-      console.error('Pi recording stop timed out after 15 seconds');
+      console.error('Pi recording stop timed out after 30 seconds');
       throw new Error('Pi stop timeout - recording may still be active on Pi');
     }
     
