@@ -19,11 +19,13 @@ export interface RecordingOptions {
 export const useRecording = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
   const { user } = useAuth();
   const { toast } = useToast();
   const { saveFileToDirectory } = useDirectoryPicker();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const startRecording = useCallback(async (stream: MediaStream, options: RecordingOptions) => {
     if (!user) {
@@ -75,6 +77,13 @@ export const useRecording = () => {
       mediaRecorderRef.current = mediaRecorder;
       mediaRecorder.start(1000);
       setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration counter
+      const startTime = Date.now();
+      durationIntervalRef.current = setInterval(() => {
+        setRecordingDuration(Math.floor((Date.now() - startTime) / 1000));
+      }, 1000);
       
       toast({
         title: "Recording started",
@@ -92,8 +101,15 @@ export const useRecording = () => {
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
+      // Clear duration interval
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+        durationIntervalRef.current = null;
+      }
+      
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setRecordingDuration(0);
     }
   }, [isRecording]);
 
@@ -363,6 +379,7 @@ export const useRecording = () => {
   return {
     isRecording,
     isProcessing,
+    recordingDuration,
     startRecording,
     stopRecording,
     takeSnapshot

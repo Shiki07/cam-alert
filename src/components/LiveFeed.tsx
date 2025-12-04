@@ -790,7 +790,7 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           isProcessing={cameraSource === 'network' ? piRecording.isProcessing : recording.isProcessing}
           reconnectAttempts={networkCamera.reconnectAttempts}
           piServiceConnected={piServiceConnected}
-          recordingDuration={piRecording.recordingDuration}
+          recordingDuration={cameraSource === 'network' ? piRecording.recordingDuration : recording.recordingDuration}
         >
           <CameraOverlays
             isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
