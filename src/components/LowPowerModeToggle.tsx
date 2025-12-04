@@ -3,6 +3,12 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Battery, Zap } from 'lucide-react';
 import { usePerformance } from '@/contexts/PerformanceContext';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface LowPowerModeToggleProps {
   compact?: boolean;
@@ -13,18 +19,34 @@ export const LowPowerModeToggle: React.FC<LowPowerModeToggleProps> = ({ compact 
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2">
-        {settings.lowPowerMode ? (
-          <Battery className="h-4 w-4 text-green-500" />
-        ) : (
-          <Zap className="h-4 w-4 text-yellow-500" />
-        )}
-        <Switch
-          checked={settings.lowPowerMode}
-          onCheckedChange={toggleLowPowerMode}
-          aria-label="Toggle low power mode"
-        />
-      </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2 cursor-pointer">
+              {settings.lowPowerMode ? (
+                <Battery className="h-4 w-4 text-green-500" />
+              ) : (
+                <Zap className="h-4 w-4 text-yellow-500" />
+              )}
+              <Switch
+                checked={settings.lowPowerMode}
+                onCheckedChange={toggleLowPowerMode}
+                aria-label="Toggle low power mode"
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" className="max-w-xs">
+            <p className="font-medium">
+              {settings.lowPowerMode ? 'Low Power Mode On' : 'Normal Mode'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {settings.lowPowerMode 
+                ? 'Reduced CPU usage with slower motion detection. Good for battery-powered devices.'
+                : 'Full performance mode. Enable Low Power Mode if your device fans are running loud.'}
+            </p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
