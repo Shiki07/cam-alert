@@ -9,7 +9,23 @@ interface ConnectionStatus {
   latency: number | null;
 }
 
-export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true) => {
+interface ConnectionMonitorOptions {
+  checkInterval?: number; // ms between checks (default: 15000)
+  stopOnStable?: boolean; // stop checking after stable connection (default: true)
+  stableThreshold?: number; // consecutive successes to consider stable (default: 3)
+}
+
+export const useConnectionMonitor = (
+  targetUrl?: string, 
+  enabled: boolean = true,
+  options: ConnectionMonitorOptions = {}
+) => {
+  const {
+    checkInterval = 15000,
+    stopOnStable = true,
+    stableThreshold = 3
+  } = options;
+
   const [status, setStatus] = useState<ConnectionStatus>({
     isConnected: false,
     lastPingTime: null,
@@ -19,8 +35,12 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
   });
 
   const [autoReconnect, setAutoReconnect] = useState(true);
+  const [isMonitoringActive, setIsMonitoringActive] = useState(false);
+  
   const intervalRef = useRef<NodeJS.Timeout>();
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
+  const consecutiveSuccessesRef = useRef(0);
+  const isStableRef = useRef(false);
 
   const ping = useCallback(async (): Promise<{ success: boolean; latency: number }> => {
     if (!targetUrl && !navigator.onLine) {
@@ -31,11 +51,10 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
     
     try {
       if (targetUrl) {
-        // For network cameras, try to fetch the stream
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
         
-        const response = await fetch(targetUrl, {
+        await fetch(targetUrl, {
           method: 'HEAD',
           mode: 'no-cors',
           signal: controller.signal
@@ -45,11 +64,10 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
         const latency = Date.now() - startTime;
         return { success: true, latency };
       } else {
-        // For webcam, just check online status
         const latency = Date.now() - startTime;
         return { success: navigator.onLine, latency };
       }
-    } catch (error) {
+    } catch {
       const latency = Date.now() - startTime;
       return { success: false, latency };
     }
@@ -69,6 +87,18 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
     }));
   }, []);
 
+  const stopMonitoring = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = undefined;
+    }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = undefined;
+    }
+    setIsMonitoringActive(false);
+  }, []);
+
   const attemptReconnect = useCallback(() => {
     if (!autoReconnect) return;
 
@@ -84,7 +114,9 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
       if (result.success) {
         updateConnectionStatus(true, result.latency);
         setStatus(prev => ({ ...prev, reconnectAttempts: 0 }));
+        consecutiveSuccessesRef.current++;
       } else {
+        consecutiveSuccessesRef.current = 0;
         attemptReconnect();
       }
     }, backoffDelay);
@@ -92,39 +124,76 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
 
   const startMonitoring = useCallback(() => {
     if (!enabled) return;
+    
+    // Reset stability tracking
+    consecutiveSuccessesRef.current = 0;
+    isStableRef.current = false;
+    setIsMonitoringActive(true);
 
-    intervalRef.current = setInterval(async () => {
+    const checkConnection = async () => {
       const result = await ping();
       
       if (result.success) {
         updateConnectionStatus(true, result.latency);
+        consecutiveSuccessesRef.current++;
+        
+        // Stop polling if connection is stable and stopOnStable is enabled
+        if (stopOnStable && consecutiveSuccessesRef.current >= stableThreshold) {
+          console.log('Connection stable, stopping active monitoring');
+          isStableRef.current = true;
+          stopMonitoring();
+        }
+        
         if (status.reconnectAttempts > 0) {
           setStatus(prev => ({ ...prev, reconnectAttempts: 0 }));
         }
       } else {
+        consecutiveSuccessesRef.current = 0;
+        isStableRef.current = false;
         updateConnectionStatus(false);
         if (status.isConnected && autoReconnect) {
           attemptReconnect();
         }
       }
-    }, 5000); // Check every 5 seconds
-  }, [enabled, ping, updateConnectionStatus, status.isConnected, status.reconnectAttempts, autoReconnect, attemptReconnect]);
+    };
 
-  const stopMonitoring = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = undefined;
-    }
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = undefined;
-    }
-  }, []);
+    // Initial check
+    checkConnection();
+    
+    // Set up interval
+    intervalRef.current = setInterval(checkConnection, checkInterval);
+  }, [enabled, ping, updateConnectionStatus, status.isConnected, status.reconnectAttempts, autoReconnect, attemptReconnect, checkInterval, stopOnStable, stableThreshold, stopMonitoring]);
 
   const forceReconnect = useCallback(() => {
+    isStableRef.current = false;
+    consecutiveSuccessesRef.current = 0;
     setStatus(prev => ({ ...prev, reconnectAttempts: 0 }));
     attemptReconnect();
   }, [attemptReconnect]);
+
+  // Resume monitoring if connection was lost (detected via online/offline events)
+  useEffect(() => {
+    const handleOffline = () => {
+      consecutiveSuccessesRef.current = 0;
+      isStableRef.current = false;
+      updateConnectionStatus(false);
+    };
+
+    const handleOnline = () => {
+      // Resume monitoring when back online
+      if (enabled && !isMonitoringActive) {
+        startMonitoring();
+      }
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [enabled, isMonitoringActive, startMonitoring, updateConnectionStatus]);
 
   useEffect(() => {
     if (enabled) {
@@ -136,18 +205,13 @@ export const useConnectionMonitor = (targetUrl?: string, enabled: boolean = true
     return stopMonitoring;
   }, [enabled, startMonitoring, stopMonitoring]);
 
-  useEffect(() => {
-    return () => {
-      stopMonitoring();
-    };
-  }, [stopMonitoring]);
-
   return {
     status,
     autoReconnect,
     setAutoReconnect,
     forceReconnect,
     startMonitoring,
-    stopMonitoring
+    stopMonitoring,
+    isStable: isStableRef.current
   };
 };

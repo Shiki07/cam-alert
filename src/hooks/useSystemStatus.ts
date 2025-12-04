@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -8,42 +8,41 @@ interface SystemStatusData {
   storageUsed: number; // in MB
   storageTotal: number; // in MB
   lastEventTime: Date | null;
-  uptime: number; // in seconds
   totalRecordings: number;
 }
 
 export const useSystemStatus = () => {
   const { user } = useAuth();
+  const sessionStartRef = useRef(Date.now());
+  
   const [status, setStatus] = useState<SystemStatusData>({
-    isConnected: true, // We'll track this based on camera connectivity
+    isConnected: true,
     motionEventsToday: 0,
     storageUsed: 0,
-    storageTotal: 1024, // Default 1GB limit
+    storageTotal: 1024,
     lastEventTime: null,
-    uptime: 0,
     totalRecordings: 0,
   });
   const [loading, setLoading] = useState(true);
 
-  // Track uptime
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStatus(prev => ({ ...prev, uptime: prev.uptime + 1 }));
-    }, 1000);
-
-    return () => clearInterval(interval);
+  // Compute uptime on-demand instead of updating state every second
+  const uptime = useMemo(() => {
+    return Math.floor((Date.now() - sessionStartRef.current) / 1000);
   }, []);
 
-  // Fetch system status from database
-  const fetchSystemStatus = async () => {
+  // Get uptime as a function to always get current value
+  const getUptime = useCallback(() => {
+    return Math.floor((Date.now() - sessionStartRef.current) / 1000);
+  }, []);
+
+  const fetchSystemStatus = useCallback(async () => {
     if (!user) return;
 
     try {
       setLoading(true);
       
-      // Add timeout and retry logic for network stability
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
       const { data, error } = await supabase
         .from('recordings')
@@ -55,7 +54,6 @@ export const useSystemStatus = () => {
 
       if (error) {
         console.error('Error fetching system status:', error);
-        // Don't return early on error, use cached data
         return;
       }
 
@@ -67,18 +65,15 @@ export const useSystemStatus = () => {
       let lastEventTime: Date | null = null;
 
       data?.forEach(record => {
-        // Calculate storage used (convert bytes to MB)
         if (record.file_size) {
           storageUsed += record.file_size / (1024 * 1024);
         }
 
-        // Count motion events today
         const recordDate = new Date(record.recorded_at);
         if (record.motion_detected && recordDate >= todayStart) {
           motionEventsToday++;
         }
 
-        // Track latest event
         if (!lastEventTime || recordDate > lastEventTime) {
           lastEventTime = recordDate;
         }
@@ -97,9 +92,8 @@ export const useSystemStatus = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  // Initial fetch and periodic updates
   useEffect(() => {
     if (user) {
       fetchSystemStatus();
@@ -108,21 +102,21 @@ export const useSystemStatus = () => {
       const interval = setInterval(fetchSystemStatus, 30000);
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [user, fetchSystemStatus]);
 
-  // Update connection status based on external factors
-  const updateConnectionStatus = (connected: boolean) => {
+  const updateConnectionStatus = useCallback((connected: boolean) => {
     setStatus(prev => ({ ...prev, isConnected: connected }));
-  };
+  }, []);
 
-  // Manually refresh status
-  const refreshStatus = () => {
+  const refreshStatus = useCallback(() => {
     fetchSystemStatus();
-  };
+  }, [fetchSystemStatus]);
 
   return {
     status,
     loading,
+    uptime, // Static snapshot for initial render
+    getUptime, // Function to get current uptime on-demand
     updateConnectionStatus,
     refreshStatus,
   };

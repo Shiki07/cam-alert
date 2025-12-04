@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { LogOut, User, Github } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { LowPowerModeToggle } from './LowPowerModeToggle';
 
 const Header = () => {
   const { user, signOut } = useAuth();
@@ -31,6 +32,7 @@ const Header = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <LowPowerModeToggle compact />
           <div className="flex items-center gap-2 text-gray-300">
             <User className="w-4 h-4" />
             <span className="text-sm">{user.email}</span>

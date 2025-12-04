@@ -4,15 +4,15 @@ import { Progress } from "@/components/ui/progress";
 import { Activity, HardDrive, Wifi, Camera, Clock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSystemStatus } from "@/hooks/useSystemStatus";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface SystemStatusProps {
-  // Optional connection status override from camera components
   cameraConnected?: boolean;
 }
 
 export const SystemStatus = ({ cameraConnected }: SystemStatusProps) => {
-  const { status, loading, updateConnectionStatus, refreshStatus } = useSystemStatus();
+  const { status, loading, getUptime, updateConnectionStatus, refreshStatus } = useSystemStatus();
+  const [displayUptime, setDisplayUptime] = useState(0);
 
   // Update connection status based on camera connectivity
   useEffect(() => {
@@ -20,6 +20,15 @@ export const SystemStatus = ({ cameraConnected }: SystemStatusProps) => {
       updateConnectionStatus(cameraConnected);
     }
   }, [cameraConnected, updateConnectionStatus]);
+
+  // Update uptime display every 60 seconds (not every second)
+  useEffect(() => {
+    setDisplayUptime(getUptime());
+    const interval = setInterval(() => {
+      setDisplayUptime(getUptime());
+    }, 60000); // Update every minute instead of every second
+    return () => clearInterval(interval);
+  }, [getUptime]);
 
   const formatUptime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -148,7 +157,7 @@ export const SystemStatus = ({ cameraConnected }: SystemStatusProps) => {
         {/* System Uptime */}
         <div className="flex items-center justify-between">
           <span className="text-gray-300">Session Time</span>
-          <span className="text-sm text-gray-400">{formatUptime(status.uptime)}</span>
+          <span className="text-sm text-gray-400">{formatUptime(displayUptime)}</span>
         </div>
       </CardContent>
     </Card>
