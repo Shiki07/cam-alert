@@ -128,6 +128,21 @@ const Index = () => {
             <RecordingHistory />
           </div>
         </div>
+        
+        {/* Support Footer */}
+        <footer className="border-t border-border/40 py-6 mt-8">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-muted-foreground text-sm">
+              Need help? Contact support at{" "}
+              <a 
+                href="mailto:support@rpicamalert.xyz" 
+                className="text-primary hover:underline"
+              >
+                support@rpicamalert.xyz
+              </a>
+            </p>
+          </div>
+        </footer>
       </div>
     </AuthGuard>
   );
