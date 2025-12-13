@@ -132,11 +132,11 @@ const Index = () => {
         {/* Support Footer */}
         <footer className="border-t border-border/40 py-6 mt-8">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-muted-foreground text-sm">
+            <p className="text-gray-400 text-sm">
               Need help? Contact support at{" "}
               <a 
                 href="mailto:support@rpicamalert.xyz" 
-                className="text-primary hover:underline"
+                className="text-blue-400 hover:text-blue-300 hover:underline"
               >
                 support@rpicamalert.xyz
               </a>
