@@ -83,7 +83,7 @@ const Index = () => {
                 href="https://camerastream.live" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary hover:text-primary/80 hover:underline"
+                className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
               >
                 camerastream.live
               </a>
