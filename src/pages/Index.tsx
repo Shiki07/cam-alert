@@ -77,13 +77,13 @@ const Index = () => {
         {/* Top Banner */}
         <div className="bg-muted/50 border-b border-border/40 py-3">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-gray-400 text-sm">
+            <p className="text-muted-foreground text-sm">
               Want control for more cameras? Visit{" "}
               <a 
                 href="https://camerastream.live" 
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline"
+                className="text-primary hover:text-primary/80 hover:underline"
               >
                 camerastream.live
               </a>
