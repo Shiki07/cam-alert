@@ -75,7 +75,7 @@ const Index = () => {
         <Header />
         
         {/* Top Banner */}
-        <div className="bg-muted/50 border-b border-border/40 py-3">
+        <div className="py-3">
           <div className="container mx-auto px-4 text-center">
             <p className="text-muted-foreground text-sm">
               Want control for more cameras? Visit{" "}
