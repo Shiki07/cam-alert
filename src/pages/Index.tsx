@@ -74,6 +74,23 @@ const Index = () => {
       <div className="min-h-screen bg-gray-900">
         <Header />
         
+        {/* Top Banner */}
+        <div className="bg-muted/50 border-b border-border/40 py-3">
+          <div className="container mx-auto px-4 text-center">
+            <p className="text-gray-400 text-sm">
+              Want control for more cameras? Visit{" "}
+              <a 
+                href="https://camerastream.live" 
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-400 hover:text-blue-300 hover:underline"
+              >
+                camerastream.live
+              </a>
+            </p>
+          </div>
+        </div>
+        
         <div className="container mx-auto px-4 py-8">
           <CameraGrid
             isRecording={isRecording}
@@ -131,18 +148,7 @@ const Index = () => {
         
         {/* Support Footer */}
         <footer className="border-t border-border/40 py-6 mt-8">
-          <div className="container mx-auto px-4 text-center space-y-2">
-            <p className="text-gray-400 text-sm">
-              Want control for more cameras? Visit{" "}
-              <a 
-                href="https://camerastream.live" 
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-400 hover:text-blue-300 hover:underline"
-              >
-                camerastream.live
-              </a>
-            </p>
+          <div className="container mx-auto px-4 text-center">
             <p className="text-gray-400 text-sm">
               Need help? Contact support at{" "}
               <a 
