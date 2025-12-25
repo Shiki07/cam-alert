@@ -386,7 +386,39 @@ export const useNetworkCamera = () => {
           60;                                 // ~16-17 FPS high
 
 
+        // Stall detection - restart if no frames for too long
+        const STALL_TIMEOUT_MS = 8000; // 8 seconds without new frames = stalled
+        let stallCheckInterval: NodeJS.Timeout | null = null;
+        
+        const startStallDetection = () => {
+          if (stallCheckInterval) clearInterval(stallCheckInterval);
+          stallCheckInterval = setInterval(() => {
+            const timeSinceLastFrame = Date.now() - lastFrameTimeRef.current;
+            if (isActiveRef.current && isConnected && timeSinceLastFrame > STALL_TIMEOUT_MS) {
+              console.log(`useNetworkCamera: Stream stalled (${timeSinceLastFrame}ms since last frame), restarting...`);
+              if (stallCheckInterval) clearInterval(stallCheckInterval);
+              
+              // Abort current read and restart
+              if (fetchControllerRef.current) {
+                fetchControllerRef.current.abort();
+              }
+              
+              // Seamless restart
+              if (isActiveRef.current) {
+                setTimeout(() => {
+                  if (isActiveRef.current) {
+                    startOverlappingConnection(imgElement, config);
+                  }
+                }, 100);
+              }
+            }
+          }, 2000); // Check every 2 seconds
+        };
+
         const processStream = async () => {
+          // Start stall detection once connected
+          startStallDetection();
+          
           while (isActiveRef.current) {
             try {
               const { done, value } = await reader.read();
@@ -396,6 +428,9 @@ export const useNetworkCamera = () => {
                 const framesProcessed = frameCountRef.current;
                 
                 console.log(`useNetworkCamera: Stream ended. Age: ${connectionAge}ms, Frames: ${framesProcessed}, Skipped: ${skippedFrames}`);
+                
+                // Clear stall detection
+                if (stallCheckInterval) clearInterval(stallCheckInterval);
                 
                 // Distinguish between natural cycling and actual errors
                 if (connectionAge < 10000 && framesProcessed < 5) { // Less than 10s and very few frames = error
@@ -521,6 +556,9 @@ export const useNetworkCamera = () => {
               }
               
             } catch (readError: any) {
+              // Clear stall detection on error
+              if (stallCheckInterval) clearInterval(stallCheckInterval);
+              
               if (readError.name === 'AbortError') {
                 console.log('useNetworkCamera: Stream read aborted');
                 break;
@@ -528,6 +566,9 @@ export const useNetworkCamera = () => {
               throw readError;
             }
           }
+          
+          // Cleanup stall detection when loop exits
+          if (stallCheckInterval) clearInterval(stallCheckInterval);
         };
 
         readerRef.current = reader;
