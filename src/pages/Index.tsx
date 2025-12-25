@@ -77,7 +77,7 @@ const Index = () => {
         {/* Top Banner */}
         <div className="py-3">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-muted-foreground text-base">
+            <p className="text-muted-foreground text-sm">
               Want control for more cameras? Visit{" "}
               <a 
                 href="https://camerastream.live" 
