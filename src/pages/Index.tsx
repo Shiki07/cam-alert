@@ -74,10 +74,10 @@ const Index = () => {
       <div className="min-h-screen bg-gray-900">
         <Header />
         
-        {/* Top Banner */}
-        <div className="py-3">
+        {/* Top Banner - Hidden on mobile for space */}
+        <div className="py-2 sm:py-3 hidden sm:block">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-muted-foreground text-sm">
+            <p className="text-muted-foreground text-xs sm:text-sm">
               Want control for more cameras? Visit{" "}
               <a 
                 href="https://camerastream.live" 
@@ -91,7 +91,7 @@ const Index = () => {
           </div>
         </div>
         
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
           <CameraGrid
             isRecording={isRecording}
             onRecordingChange={setIsRecording}
@@ -141,16 +141,16 @@ const Index = () => {
           />
           
           {/* Recording History - Full width */}
-          <div className="lg:col-span-3 mt-6">
+          <div className="lg:col-span-3 mt-4 sm:mt-6">
             <RecordingHistory />
           </div>
         </div>
         
         {/* Support Footer */}
-        <footer className="border-t border-border/40 py-6 mt-8">
+        <footer className="border-t border-border/40 py-4 sm:py-6 mt-6 sm:mt-8">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-gray-400 text-sm">
-              Need help? Contact support at{" "}
+            <p className="text-gray-400 text-xs sm:text-sm">
+              Need help?{" "}
               <a 
                 href="mailto:support@rpicamalert.xyz" 
                 className="text-blue-400 hover:text-blue-300 hover:underline"
