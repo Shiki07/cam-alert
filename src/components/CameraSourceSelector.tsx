@@ -313,9 +313,10 @@ export const CameraSourceSelector = ({
             <div className="space-y-2">
               {networkCameras.map((camera, index) => (
                 <div key={index} className="space-y-2">
-                  <div className="bg-gray-700 rounded-lg p-3 flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
+                  <div className="bg-gray-700 rounded-lg p-3 space-y-3">
+                    {/* Camera info row */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-white font-medium">{camera.name}</span>
                         <span className="text-xs bg-gray-600 text-gray-300 px-2 py-1 rounded">
                           {camera.type.toUpperCase()}
@@ -327,55 +328,58 @@ export const CameraSourceSelector = ({
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-gray-400 mt-1">{camera.url}</div>
+                      
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => runDiagnostics(camera, index)}
+                          disabled={runningDiagnostics.has(index)}
+                          className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
+                          title="Run detailed diagnostics"
+                        >
+                          <Stethoscope className="w-4 h-4" />
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleTestConnection(camera, index)}
+                          disabled={testingConnections.has(index)}
+                          className="border-gray-600 text-gray-300 hover:bg-gray-600"
+                          title="Test camera connection"
+                        >
+                          {testingConnections.has(index) ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <TestTube className="w-4 h-4" />
+                          )}
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          onClick={() => handleConnectCamera(camera, index)}
+                          disabled={connectingCameras.has(index)}
+                          className="bg-blue-600 hover:bg-blue-700"
+                        >
+                          {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
+                        </Button>
+                        
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onRemoveNetworkCamera(index)}
+                          className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
+                          title="Remove camera"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                     
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => runDiagnostics(camera, index)}
-                        disabled={runningDiagnostics.has(index)}
-                        className="border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white"
-                        title="Run detailed diagnostics"
-                      >
-                        <Stethoscope className="w-4 h-4" />
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleTestConnection(camera, index)}
-                        disabled={testingConnections.has(index)}
-                        className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                        title="Test camera connection"
-                      >
-                        {testingConnections.has(index) ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <TestTube className="w-4 h-4" />
-                        )}
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        onClick={() => handleConnectCamera(camera, index)}
-                        disabled={connectingCameras.has(index)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        {connectingCameras.has(index) ? 'Connecting...' : 'Connect'}
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onRemoveNetworkCamera(index)}
-                        className="border-red-600 text-red-400 hover:bg-red-600 hover:text-white"
-                        title="Remove camera"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {/* URL on separate line with word wrap */}
+                    <div className="text-xs text-gray-400 break-all">{camera.url}</div>
                   </div>
                   
                   {/* Diagnostics Results */}
