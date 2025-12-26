@@ -11,6 +11,7 @@ import { VideoDisplay } from "@/components/VideoDisplay";
 import { CameraStatus } from "@/components/CameraStatus";
 import { CameraOverlays } from "@/components/CameraOverlays";
 import { CameraInfo } from "@/components/CameraInfo";
+import { StreamRelayControls } from "@/components/StreamRelayControls";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -847,6 +848,14 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
           />
         )}
       </div>
+
+      {/* Stream Relay Controls - for sharing webcam to phone */}
+      {cameraSource === 'webcam' && (
+        <StreamRelayControls 
+          videoRef={videoRef}
+          isConnected={isConnected}
+        />
+      )}
     </div>
   );
 });
