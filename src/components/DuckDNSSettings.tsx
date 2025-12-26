@@ -196,7 +196,7 @@ export const DuckDNSSettings = () => {
                 {currentIP && (
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4 text-green-400" />
-                    <span className="text-gray-300">Current IP: {currentIP}</span>
+                    <span className="text-gray-300">Current IP: ••••••••••</span>
                   </div>
                 )}
                 
