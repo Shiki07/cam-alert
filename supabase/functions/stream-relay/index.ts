@@ -41,38 +41,36 @@ serve(async (req) => {
     jwt = tokenParam;
   }
 
-  // Verify JWT for actions that modify data
+  // Verify JWT for ALL actions - authentication required
   let authenticatedUserId: string | null = null;
   
-  if (action !== 'pull') {
-    // push, stop, list-rooms, cleanup all require authentication
-    if (!jwt) {
-      console.warn('Stream relay: No authentication token provided');
-      return new Response(
-        JSON.stringify({ error: 'Authentication required' }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(jwt);
-    
-    if (authError || !user) {
-      console.warn('Stream relay: Invalid or expired token');
-      return new Response(
-        JSON.stringify({ error: 'Invalid or expired token' }),
-        { 
-          status: 401, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-    
-    authenticatedUserId = user.id;
-    console.log(`Stream relay: Authenticated user ${user.id.substring(0, 8)}...`);
+  // ALL actions require authentication for privacy-focused security
+  if (!jwt) {
+    console.warn('Stream relay: No authentication token provided');
+    return new Response(
+      JSON.stringify({ error: 'Authentication required' }),
+      { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
   }
+
+  const { data: { user }, error: authError } = await supabaseAuth.auth.getUser(jwt);
+  
+  if (authError || !user) {
+    console.warn('Stream relay: Invalid or expired token');
+    return new Response(
+      JSON.stringify({ error: 'Invalid or expired token' }),
+      { 
+        status: 401, 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      }
+    );
+  }
+  
+  authenticatedUserId = user.id;
+  console.log(`Stream relay: Authenticated user ${user.id.substring(0, 8)}...`);
 
   try {
     // ==========================================
@@ -149,7 +147,7 @@ serve(async (req) => {
     // ==========================================
     // ACTION: pull
     // Viewer fetches the latest frame (GET request)
-    // PUBLIC: No authentication required for viewing shared streams
+    // AUTHENTICATED: Only stream host can view their own streams
     // ==========================================
     if (action === 'pull') {
       if (!roomId) {
@@ -159,9 +157,10 @@ serve(async (req) => {
         });
       }
 
+      // Fetch frame with host_id for authorization check
       const { data, error } = await supabaseAdmin
         .from('relay_frames')
-        .select('frame, host_name, updated_at')
+        .select('frame, host_name, updated_at, host_id')
         .eq('room_id', roomId)
         .maybeSingle();
 
@@ -170,6 +169,16 @@ serve(async (req) => {
       if (!data) {
         return new Response(JSON.stringify({ error: 'Stream not found or ended' }), {
           status: 404,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // SECURITY: Only allow the stream host to view their own stream
+      // For a privacy-focused app, streams are private by default
+      if (data.host_id !== authenticatedUserId) {
+        console.warn(`Stream relay: Unauthorized access attempt to room by user ${authenticatedUserId?.substring(0, 8)}...`);
+        return new Response(JSON.stringify({ error: 'Unauthorized - you do not have access to this stream' }), {
+          status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

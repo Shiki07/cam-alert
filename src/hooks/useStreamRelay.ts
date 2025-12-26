@@ -235,7 +235,7 @@ interface UseStreamViewerProps {
   enabled?: boolean;
 }
 
-type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'error' | 'ended';
+type StreamStatus = 'idle' | 'connecting' | 'streaming' | 'error' | 'ended' | 'unauthorized';
 
 export const useStreamViewer = ({ roomId, enabled = true }: UseStreamViewerProps) => {
   const [frameUrl, setFrameUrl] = useState<string | null>(null);
@@ -245,17 +245,36 @@ export const useStreamViewer = ({ roomId, enabled = true }: UseStreamViewerProps
 
   const pullIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Pull is public - no authentication required for viewing shared streams
+  // Pull now requires authentication for privacy-focused security
   const pullFrame = useCallback(async () => {
     if (!roomId) return;
 
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        setStatus('unauthorized');
+        return;
+      }
+
       const response = await fetch(
-        `${EDGE_FUNCTION_URL}?action=pull&roomId=${encodeURIComponent(roomId)}`
+        `${EDGE_FUNCTION_URL}?action=pull&roomId=${encodeURIComponent(roomId)}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` },
+        }
       );
       
       if (response.status === 404) {
         setStatus('ended');
+        return;
+      }
+      
+      if (response.status === 401) {
+        setStatus('unauthorized');
+        return;
+      }
+      
+      if (response.status === 403) {
+        setStatus('unauthorized');
         return;
       }
       
