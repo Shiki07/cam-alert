@@ -198,7 +198,7 @@ serve(async (req) => {
 
     // Check rate limit
     if (!checkRateLimit(user.id)) {
-      console.warn(`Camera proxy: Rate limit exceeded for user: ${user.id}`);
+      console.warn(`Camera proxy: Rate limit exceeded for user: ${user.id.substring(0, 8)}...`);
       return new Response(
         JSON.stringify({ error: 'Rate limit exceeded' }),
         { 
@@ -262,7 +262,11 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Camera proxy: Proxying request to ${targetUrl} for user ${user.id}`);
+    // SECURITY: Sanitize logs - truncate user ID and mask sensitive URL parts
+    const sanitizedUserId = user.id.substring(0, 8) + '...';
+    const urlObj = new URL(targetUrl);
+    const sanitizedHost = urlObj.hostname.split('.').slice(-2).join('.');
+    console.log(`Camera proxy: Proxying request to *.${sanitizedHost} for user ${sanitizedUserId}`);
 
     // Enhanced connectivity test with more detailed diagnostics
     try {
@@ -273,7 +277,7 @@ serve(async (req) => {
       try {
         const dnsTest = await fetch(`https://dns.google/resolve?name=${urlObj.hostname}&type=A`);
         const dnsResult = await dnsTest.json();
-        console.log(`Camera proxy: DNS lookup result:`, dnsResult);
+        console.log(`Camera proxy: DNS lookup status:`, dnsResult.Status === 0 ? 'OK' : 'FAILED');
         
         if (dnsResult.Status !== 0) {
           console.warn(`Camera proxy: DNS resolution failed for ${urlObj.hostname}`);

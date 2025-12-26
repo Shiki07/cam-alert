@@ -107,7 +107,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Check rate limit
     if (!checkRateLimit(user.id)) {
-      console.warn(`Rate limit exceeded for user: ${user.id}`);
+      console.warn(`Rate limit exceeded for user: ${user.id.substring(0, 8)}...`);
       return new Response(
         JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
         { 
@@ -226,7 +226,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error(`Email sending failed: ${emailResponse.error.message}`);
     }
     
-    console.log(`Motion alert email sent successfully for user: ${user.id}, email ID: ${emailResponse.data?.id}`);
+    // SECURITY: Truncate user ID in logs
+    console.log(`Motion alert email sent successfully for user: ${user.id.substring(0, 8)}..., email ID: ${emailResponse.data?.id}`);
     
     if (attachmentData) {
       console.log('Email sent WITH embedded image');
