@@ -14,6 +14,7 @@ import { CameraInfo } from "@/components/CameraInfo";
 import { StreamRelayControls } from "@/components/StreamRelayControls";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { sanitizeCameraConfigForStorage, SanitizedCameraConfig } from "@/utils/secureStorage";
 
 interface LiveFeedProps {
   isRecording: boolean;
@@ -589,11 +590,15 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     }
   }, [storageKey]);
 
-  // Save network cameras to localStorage whenever they change
+  // SECURITY: Save network cameras to localStorage WITHOUT passwords
   useEffect(() => {
     if (!networkCamerasLoaded) return;
     try {
-      localStorage.setItem(storageKey, JSON.stringify(networkCameras));
+      // Sanitize configs to remove passwords before storing
+      const sanitizedConfigs: SanitizedCameraConfig[] = networkCameras.map(
+        cam => sanitizeCameraConfigForStorage(cam)
+      );
+      localStorage.setItem(storageKey, JSON.stringify(sanitizedConfigs));
     } catch (e) {
       console.warn('Failed to persist network cameras to storage.', e);
     }

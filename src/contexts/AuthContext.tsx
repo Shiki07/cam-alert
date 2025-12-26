@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { clearSensitiveStorage } from '@/utils/secureStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -176,9 +177,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
+      // Get user ID before clearing for user-specific cleanup
+      const userId = user?.id;
+      
       // SECURITY: Clear local state immediately
       setUser(null);
       setSession(null);
+      
+      // SECURITY: Clear all sensitive data from localStorage
+      clearSensitiveStorage(userId);
       
       await supabase.auth.signOut();
     } catch (error) {

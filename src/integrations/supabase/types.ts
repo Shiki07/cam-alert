@@ -98,23 +98,38 @@ export type Database = {
       profiles: {
         Row: {
           created_at: string
+          duckdns_domain: string | null
+          duckdns_enabled: boolean | null
+          duckdns_manual_ip: string | null
           email: string
+          email_notifications_enabled: boolean | null
           full_name: string | null
           id: string
+          notification_email: string | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          duckdns_domain?: string | null
+          duckdns_enabled?: boolean | null
+          duckdns_manual_ip?: string | null
           email: string
+          email_notifications_enabled?: boolean | null
           full_name?: string | null
           id: string
+          notification_email?: string | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          duckdns_domain?: string | null
+          duckdns_enabled?: boolean | null
+          duckdns_manual_ip?: string | null
           email?: string
+          email_notifications_enabled?: boolean | null
           full_name?: string | null
           id?: string
+          notification_email?: string | null
           updated_at?: string
         }
         Relationships: []

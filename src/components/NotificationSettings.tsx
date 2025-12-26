@@ -3,10 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useMotionNotification } from "@/hooks/useMotionNotification";
-import { Bell } from "lucide-react";
+import { useUserPreferences } from "@/hooks/useUserPreferences";
+import { Bell, Loader2 } from "lucide-react";
+import { getStorageItem, setStorageItem } from "@/utils/secureStorage";
 
 interface NotificationSettingsProps {
   emailEnabled: boolean;
@@ -21,20 +23,22 @@ export const NotificationSettings = ({
   onEmailChange,
   currentEmail = ""
 }: NotificationSettingsProps) => {
+  const { preferences, savePreferences, isLoading: prefsLoading } = useUserPreferences();
   const [email, setEmail] = useState(currentEmail);
   const [isLoading, setIsLoading] = useState(false);
-  const [systemAlerts, setSystemAlerts] = useState(() => {
-    try {
-      const saved = localStorage.getItem('cameraSystemAlerts');
-      return saved ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
+  // System alerts is non-sensitive UI preference, can stay in localStorage
+  const [systemAlerts, setSystemAlerts] = useState(() => 
+    getStorageItem('cameraSystemAlerts', true)
+  );
   const { toast } = useToast();
 
-  // Allow email functionality in all environments
-  const isRestrictedEnvironment = false;
+  // Sync email from preferences when loaded
+  useEffect(() => {
+    if (preferences.notification_email && !email) {
+      setEmail(preferences.notification_email);
+      onEmailChange?.(preferences.notification_email);
+    }
+  }, [preferences.notification_email, email, onEmailChange]);
 
   const motionNotification = useMotionNotification({
     email: email,
@@ -60,22 +64,30 @@ export const NotificationSettings = ({
     setIsLoading(true);
     
     try {
-      // Only try to save to localStorage if not in restricted environment
-      if (!isRestrictedEnvironment) {
-        localStorage.setItem('cameraNotificationEmail', email);
-      }
-      
-      toast({
-        title: "Settings Saved",
-        description: isRestrictedEnvironment 
-          ? "Settings updated (localStorage not available in preview)" 
-          : "Your notification preferences have been updated",
+      // SECURITY: Save email to database instead of localStorage
+      const success = await savePreferences({
+        notification_email: email,
+        email_notifications_enabled: emailEnabled,
       });
+      
+      if (success) {
+        toast({
+          title: "Settings Saved",
+          description: "Your notification preferences have been saved securely",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save settings. Please try again.",
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
       toast({
-        title: "Settings Saved",
-        description: "Settings updated in memory (localStorage restricted)",
+        title: "Error",
+        description: "Failed to save settings",
+        variant: "destructive",
       });
     }
     
@@ -104,37 +116,31 @@ export const NotificationSettings = ({
     setIsLoading(true);
     
     try {
-      // In restricted environments, show a demo message
-      if (isRestrictedEnvironment) {
-        // Simulate a delay
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        toast({
-          title: "Test Email Demo",
-          description: `In the full app, a test motion alert would be sent to ${email}. Email functionality is restricted in preview mode.`,
-        });
-      } else {
-        // Send a real test motion alert
-        await motionNotification.sendMotionAlert(undefined, 85.5);
-        
-        toast({
-          title: "Test Email Sent",
-          description: `Test motion alert sent to ${email}`,
-        });
-      }
+      await motionNotification.sendMotionAlert(undefined, 85.5);
+      
+      toast({
+        title: "Test Email Sent",
+        description: `Test motion alert sent to ${email}`,
+      });
     } catch (error) {
       console.error('Error sending test email:', error);
       toast({
-        title: isRestrictedEnvironment ? "Test Email Demo" : "Test Failed",
-        description: isRestrictedEnvironment 
-          ? `Demo: Test email would be sent to ${email}` 
-          : "Failed to send test email. Please check your settings.",
-        variant: isRestrictedEnvironment ? "default" : "destructive",
+        title: "Test Failed",
+        description: "Failed to send test email. Please check your settings.",
+        variant: "destructive",
       });
     }
     
     setIsLoading(false);
   };
+
+  if (prefsLoading) {
+    return (
+      <div className="bg-gray-800 rounded-lg border border-gray-700 p-6 flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
@@ -190,11 +196,8 @@ export const NotificationSettings = ({
                 checked={systemAlerts}
                 onCheckedChange={(checked) => {
                   setSystemAlerts(checked);
-                  try {
-                    localStorage.setItem('cameraSystemAlerts', JSON.stringify(checked));
-                  } catch (error) {
-                    console.error('Failed to save system alerts setting:', error);
-                  }
+                  // System alerts toggle is non-sensitive, can stay in localStorage
+                  setStorageItem('cameraSystemAlerts', checked);
                 }}
                 disabled={!emailEnabled} 
               />
@@ -222,12 +225,9 @@ export const NotificationSettings = ({
         </div>
 
         {/* Status Display */}
-        <div className={`${isRestrictedEnvironment ? 'bg-blue-600 border-blue-600' : 'bg-green-600 border-green-600'} bg-opacity-20 border rounded p-3 mt-4`}>
-          <p className={`${isRestrictedEnvironment ? 'text-blue-200' : 'text-green-200'} text-sm`}>
-            {isRestrictedEnvironment 
-              ? "📧 Preview mode: Email functionality is simulated. Full functionality available in deployed app."
-              : "✅ Email notifications are ready! Motion alerts will be sent with screenshots when motion is detected."
-            }
+        <div className="bg-green-600 bg-opacity-20 border border-green-600 rounded p-3 mt-4">
+          <p className="text-green-200 text-sm">
+            ✅ Email notifications are ready! Motion alerts will be sent with screenshots when motion is detected.
           </p>
         </div>
       </div>

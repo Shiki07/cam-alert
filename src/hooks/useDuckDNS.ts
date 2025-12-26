@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface DuckDNSConfig {
   domain: string;
@@ -8,30 +9,13 @@ export interface DuckDNSConfig {
 }
 
 export const useDuckDNS = () => {
-  const [config, setConfig] = useState<DuckDNSConfig>(() => {
-    try {
-      const saved = localStorage.getItem('duckdns-config');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return {
-          domain: parsed.domain || '',
-          enabled: parsed.enabled || false,
-          manualIP: parsed.manualIP || ''
-        };
-      }
-      return {
-        domain: '',
-        enabled: false,
-        manualIP: ''
-      };
-    } catch {
-      return {
-        domain: '',
-        enabled: false,
-        manualIP: ''
-      };
-    }
+  const { user } = useAuth();
+  const [config, setConfig] = useState<DuckDNSConfig>({
+    domain: '',
+    enabled: false,
+    manualIP: ''
   });
+  const [isLoadingConfig, setIsLoadingConfig] = useState(true);
 
   const [currentIP, setCurrentIP] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -40,10 +24,44 @@ export const useDuckDNS = () => {
   const [updatePromise, setUpdatePromise] = useState<Promise<boolean> | null>(null);
   const [lastKnownIP, setLastKnownIP] = useState<string | null>(null);
 
+  // Load config from database
+  useEffect(() => {
+    const loadConfig = async () => {
+      if (!user?.id) {
+        setIsLoadingConfig(false);
+        return;
+      }
+
+      try {
+        const { data, error: fetchError } = await supabase
+          .from('profiles')
+          .select('duckdns_domain, duckdns_enabled, duckdns_manual_ip')
+          .eq('id', user.id)
+          .single();
+
+        if (fetchError) {
+          console.error('Error loading DuckDNS config:', fetchError);
+        } else if (data) {
+          setConfig({
+            domain: data.duckdns_domain || '',
+            enabled: data.duckdns_enabled || false,
+            manualIP: data.duckdns_manual_ip || ''
+          });
+        }
+      } catch (e) {
+        console.error('Error loading DuckDNS config:', e);
+      } finally {
+        setIsLoadingConfig(false);
+      }
+    };
+
+    loadConfig();
+  }, [user?.id]);
+
   const getCurrentIP = useCallback(async (): Promise<string | null> => {
     // If manual IP override is set, use it instead of auto-detection
     if (config.manualIP && config.manualIP.trim()) {
-      console.log(`Using manual IP override: ${config.manualIP}`);
+      console.log('Using manual IP override');
       return config.manualIP.trim();
     }
 
@@ -56,9 +74,6 @@ export const useDuckDNS = () => {
 
     for (const service of ipServices) {
       try {
-        console.log(`Trying IP service: ${service}`);
-        
-        // Create a manual timeout for better browser compatibility
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         
@@ -75,18 +90,14 @@ export const useDuckDNS = () => {
         
         if (response.ok) {
           const ip = (await response.text()).trim();
-          console.log(`Successfully got IP from ${service}: ${ip}`);
           
           // Basic IP validation
           if (ip && /^(\d{1,3}\.){3}\d{1,3}$/.test(ip)) {
             return ip;
-          } else {
-            console.log(`Invalid IP format from ${service}: ${ip}`);
-            continue;
           }
         }
       } catch (error) {
-        console.log(`Failed to get IP from ${service}:`, error);
+        console.log(`Failed to get IP from service:`, error);
         continue;
       }
     }
@@ -113,15 +124,13 @@ export const useDuckDNS = () => {
       setError(null);
 
       try {
-        console.log(`Updating DuckDNS via Edge Function for domain: ${config.domain} with IP: ${ip}`);
+        console.log('Updating DuckDNS via Edge Function');
         
         const { data: { session } } = await supabase.auth.getSession();
         if (!session?.access_token) {
           throw new Error('Authentication required for DuckDNS update. Please log in.');
         }
 
-        console.log('Calling DuckDNS update function...');
-        
         // Retry invoke to handle transient network/routing issues
         let data: any = null;
         let functionError: any = null;
@@ -144,10 +153,8 @@ export const useDuckDNS = () => {
           break;
         }
 
-
         if (functionError) {
           console.error('DuckDNS function error:', functionError);
-          // Handle different types of function errors
           if (functionError.message?.includes('FunctionsFetchError') || functionError.message?.includes('Failed to fetch')) {
             throw new Error('Network connection failed. Please check your internet connection and try again.');
           } else if (functionError.message?.includes('timeout')) {
@@ -155,14 +162,14 @@ export const useDuckDNS = () => {
           } else if (functionError.message?.includes('401') || functionError.message?.includes('Unauthorized')) {
             throw new Error('Authentication failed. Please log in again.');
           } else if (functionError.message?.includes('non-2xx status code')) {
-            throw new Error('DuckDNS API temporarily unavailable. DNS lookup may be failing. Will retry automatically.');
+            throw new Error('DuckDNS API temporarily unavailable. Will retry automatically.');
           } else {
             throw new Error(`Service error: ${functionError.message || 'Unknown error'}`);
           }
         }
 
         if (data?.success) {
-          console.log('DuckDNS: Successfully updated IP to', ip);
+          console.log('DuckDNS: Successfully updated IP');
           setLastUpdate(new Date());
           setError(null);
           return true;
@@ -170,7 +177,6 @@ export const useDuckDNS = () => {
           const errorMsg = data?.error || 'Unknown error occurred';
           console.error('DuckDNS update failed:', errorMsg);
           
-          // Provide more helpful error messages
           if (errorMsg.includes('token not configured')) {
             setError('DuckDNS token not configured. Please save your token in settings first.');
           } else if (errorMsg.includes('Invalid domain')) {
@@ -186,7 +192,6 @@ export const useDuckDNS = () => {
         console.error('DuckDNS update error:', error);
         let errorMsg = error instanceof Error ? error.message : 'Update failed';
         
-        // Provide more helpful error messages
         if (errorMsg.includes('Authentication required')) {
           errorMsg = 'Please log in to update DuckDNS';
         } else if (errorMsg.includes('temporarily unavailable')) {
@@ -207,13 +212,11 @@ export const useDuckDNS = () => {
 
   const checkAndUpdateIP = useCallback(async (): Promise<void> => {
     if (!config.enabled) {
-      console.log('DuckDNS: Service disabled, skipping IP check');
       return;
     }
 
     try {
       setError(null);
-      console.log('DuckDNS: Starting IP check...');
       const newIP = await getCurrentIP();
       
       if (!newIP) {
@@ -221,19 +224,16 @@ export const useDuckDNS = () => {
         return;
       }
 
-      console.log('DuckDNS: Current IP detected:', newIP);
       setCurrentIP(newIP);
 
       if (!lastUpdate || newIP !== lastKnownIP) {
-        console.log('DuckDNS: IP changed or first run, updating...', { previous: lastKnownIP, new: newIP });
+        console.log('DuckDNS: IP changed or first run, updating...');
         
         const success = await updateDuckDNS(newIP);
         if (success) {
-          setLastKnownIP(newIP); // Store the IP we just updated
-          console.log('DuckDNS: Update successful');
+          setLastKnownIP(newIP);
           // Force DNS cache refresh by triggering diagnostics after a delay
           setTimeout(async () => {
-            console.log('DuckDNS: Triggering camera diagnostics to clear DNS cache...');
             try {
               const domain = config.domain.includes('.duckdns.org') 
                 ? config.domain 
@@ -243,33 +243,42 @@ export const useDuckDNS = () => {
                 const cameraUrl = `http://${domain}:${port}`;
                 try {
                   await supabase.functions.invoke('camera-diagnostics', { body: { url: cameraUrl } });
-                  console.log(`DuckDNS: Camera diagnostics completed after IP update on port ${port}`);
                 } catch (e) {
-                  console.log(`DuckDNS: Failed to trigger diagnostics on port ${port}:`, e);
+                  console.log(`Failed to trigger diagnostics on port ${port}:`, e);
                 }
               }
             } catch (error) {
-              console.log('DuckDNS: Failed to trigger diagnostics:', error);
+              console.log('Failed to trigger diagnostics:', error);
             }
-          }, 10000); // Wait 10 seconds for DNS propagation
-        } else {
-          // Error is already set in updateDuckDNS
-          console.log('DuckDNS: Update failed, error already set');
+          }, 10000);
         }
-      } else {
-        console.log('DuckDNS: IP unchanged, no update needed');
       }
     } catch (error) {
       console.error('DuckDNS check error:', error);
       setError(error instanceof Error ? error.message : 'IP check failed');
     }
-  }, [config.enabled, lastKnownIP, lastUpdate, getCurrentIP, updateDuckDNS]);
+  }, [config.enabled, config.domain, lastKnownIP, lastUpdate, getCurrentIP, updateDuckDNS]);
 
-  const updateConfig = useCallback((newConfig: Partial<DuckDNSConfig>) => {
+  // SECURITY: Save config to database instead of localStorage
+  const updateConfig = useCallback(async (newConfig: Partial<DuckDNSConfig>) => {
     const updatedConfig = { ...config, ...newConfig };
     setConfig(updatedConfig);
-    localStorage.setItem('duckdns-config', JSON.stringify(updatedConfig));
-  }, [config]);
+
+    if (!user?.id) return;
+
+    try {
+      await supabase
+        .from('profiles')
+        .update({
+          duckdns_domain: updatedConfig.domain || null,
+          duckdns_enabled: updatedConfig.enabled,
+          duckdns_manual_ip: updatedConfig.manualIP || null,
+        })
+        .eq('id', user.id);
+    } catch (e) {
+      console.error('Error saving DuckDNS config:', e);
+    }
+  }, [config, user?.id]);
 
   const getDuckDNSUrl = useCallback((port: number): string => {
     if (!config.domain || !config.enabled) return '';
@@ -304,7 +313,7 @@ export const useDuckDNS = () => {
   }, [config.domain, config.enabled]);
 
   useEffect(() => {
-    if (!config.enabled) return;
+    if (!config.enabled || isLoadingConfig) return;
 
     // Initial check after 3 seconds  
     const initialTimeout = setTimeout(() => {
@@ -313,7 +322,6 @@ export const useDuckDNS = () => {
 
     // Regular checks every 5 minutes
     const interval = setInterval(() => {
-      // Only run if not currently updating to prevent overlapping calls
       if (!isUpdating && !updatePromise) {
         checkAndUpdateIP();
       }
@@ -323,11 +331,7 @@ export const useDuckDNS = () => {
       clearTimeout(initialTimeout);
       clearInterval(interval);
     };
-  }, [config.enabled, checkAndUpdateIP, isUpdating, updatePromise]);
-
-  useEffect(() => {
-    localStorage.setItem('duckdns-config', JSON.stringify(config));
-  }, [config]);
+  }, [config.enabled, isLoadingConfig, checkAndUpdateIP, isUpdating, updatePromise]);
 
   return {
     config,
@@ -335,6 +339,7 @@ export const useDuckDNS = () => {
     isUpdating,
     lastUpdate,
     error,
+    isLoadingConfig,
     updateConfig,
     checkAndUpdateIP,
     getDuckDNSUrl,
