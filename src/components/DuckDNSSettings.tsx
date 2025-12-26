@@ -157,8 +157,8 @@ export const DuckDNSSettings = () => {
                       Copy
                     </Button>
                   </div>
-                  <code className="text-xs text-blue-300 break-all block">
-                    {getCameraUrlWithDuckDNS(8000)}
+                  <code className="text-xs text-gray-400 break-all block">
+                    http://••••••••.duckdns.org:8000/stream.mjpg
                   </code>
                 </div>
                 <p className="text-xs text-yellow-400">
@@ -196,7 +196,7 @@ export const DuckDNSSettings = () => {
                 {currentIP && (
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4 text-green-400" />
-                    <span className="text-gray-300">Current IP: {currentIP}</span>
+                    <span className="text-gray-300">Current IP: ••••••••••</span>
                   </div>
                 )}
                 
