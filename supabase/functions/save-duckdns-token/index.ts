@@ -93,7 +93,7 @@ serve(async (req) => {
 
     // Check rate limit
     if (!checkRateLimit(user.id)) {
-      console.warn(`Rate limit exceeded for user: ${user.id}`);
+      console.warn(`Rate limit exceeded for user: ${user.id.substring(0, 8)}...`);
       return new Response(
         JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
         { 
@@ -175,7 +175,8 @@ serve(async (req) => {
       );
     }
 
-    console.log(`DuckDNS token updated successfully for user: ${user.id}`);
+    // SECURITY: Truncate user ID in logs
+    console.log(`DuckDNS token updated successfully for user: ${user.id.substring(0, 8)}...`);
     return new Response(
       JSON.stringify({ success: true, message: 'Token saved successfully' }),
       { 

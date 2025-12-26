@@ -227,9 +227,10 @@ export const useNetworkCamera = () => {
         console.log('useNetworkCamera: Using stream URL:', streamUrl);
         console.log('useNetworkCamera: Quality will be handled client-side for MJPEG streams');
         
+        // SECURITY: Do NOT embed credentials in URLs client-side
+        // Credentials are passed via getProxiedUrl which handles them server-side
         if (config.username && config.password) {
-          streamUrl = config.url.replace('://', `://${config.username}:${config.password}@`);
-          console.log('useNetworkCamera: Stream URL with auth (hidden for security)');
+          console.log('useNetworkCamera: Auth credentials will be handled server-side');
         }
 
         // Get the proxied URL with headers
