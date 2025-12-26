@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 const EDGE_FUNCTION_URL = 'https://mlrouwmtqdrlbwhacmic.supabase.co/functions/v1/stream-relay';
 const FRAME_INTERVAL = 100; // ~10 fps for balance between smoothness and bandwidth
@@ -14,6 +15,12 @@ interface ActiveRoom {
   hostName: string;
   createdAt: string;
 }
+
+// Helper to get auth token
+const getAuthToken = async (): Promise<string | null> => {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token || null;
+};
 
 export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
   const [isRelaying, setIsRelaying] = useState(false);
@@ -54,7 +61,7 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
     return canvas.toDataURL('image/jpeg', 0.5); // 50% quality
   }, []);
 
-  // Push frame to relay server
+  // Push frame to relay server with authentication
   const pushFrame = useCallback(async () => {
     const currentRoomId = relayRoomIdRef.current;
     if (!currentRoomId || !isRelayingRef.current || !userId) return;
@@ -63,12 +70,20 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
     if (!frame) return;
 
     try {
+      const token = await getAuthToken();
+      if (!token) {
+        console.error('No auth token available for push');
+        return;
+      }
+
       const response = await fetch(`${EDGE_FUNCTION_URL}?action=push&roomId=${encodeURIComponent(currentRoomId)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           frame,
-          hostId: userId,
           hostName: userName || 'Anonymous',
         }),
       });
@@ -86,6 +101,14 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
   const startRelay = useCallback(async (video: HTMLVideoElement) => {
     if (isRelayingRef.current || !userId) {
       console.log('Cannot start relay: already relaying or no user ID');
+      return null;
+    }
+    
+    // Verify authentication before starting
+    const token = await getAuthToken();
+    if (!token) {
+      console.error('Cannot start relay: not authenticated');
+      setRelayError('Authentication required');
       return null;
     }
     
@@ -119,7 +142,7 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
     return newRoomId;
   }, [userId, pushFrame]);
 
-  // Stop relay
+  // Stop relay with authentication
   const stopRelay = useCallback(async () => {
     console.log('Stopping relay...');
     
@@ -134,8 +157,10 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
     // Notify relay server to delete the room
     if (isRelayingRef.current && currentRoomId) {
       try {
+        const token = await getAuthToken();
         await fetch(`${EDGE_FUNCTION_URL}?action=stop&roomId=${encodeURIComponent(currentRoomId)}`, {
           method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
         });
       } catch (err) {
         console.error('Failed to stop relay:', err);
@@ -150,7 +175,7 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
     canvasRef.current = null;
   }, []);
 
-  // Fetch active rooms for the current user
+  // Fetch active rooms for the current user with authentication
   const fetchActiveRooms = useCallback(async () => {
     if (!userId) {
       setActiveRooms([]);
@@ -159,7 +184,16 @@ export const useStreamRelay = ({ userId, userName }: UseStreamRelayProps) => {
 
     setIsLoadingRooms(true);
     try {
-      const response = await fetch(`${EDGE_FUNCTION_URL}?action=list-rooms&hostId=${encodeURIComponent(userId)}`);
+      const token = await getAuthToken();
+      if (!token) {
+        console.error('No auth token for fetching rooms');
+        setActiveRooms([]);
+        return;
+      }
+
+      const response = await fetch(`${EDGE_FUNCTION_URL}?action=list-rooms`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
       
       if (response.ok) {
         const data = await response.json();
@@ -211,6 +245,7 @@ export const useStreamViewer = ({ roomId, enabled = true }: UseStreamViewerProps
 
   const pullIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Pull is public - no authentication required for viewing shared streams
   const pullFrame = useCallback(async () => {
     if (!roomId) return;
 
