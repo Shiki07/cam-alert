@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,8 +8,10 @@ import { Globe, RefreshCw, CheckCircle, AlertCircle, Wifi, Save, Copy } from 'lu
 import { useDuckDNS } from '@/hooks/useDuckDNS';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 export const DuckDNSSettings = () => {
+  const { user } = useAuth();
   const {
     config,
     currentIP,
@@ -196,7 +197,7 @@ export const DuckDNSSettings = () => {
                 {currentIP && (
                   <div className="flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4 text-green-400" />
-                    <span className="text-gray-300">Current IP: ••••••••••</span>
+                    <span className="text-gray-300">Current IP: {user ? currentIP : '••••••••••'}</span>
                   </div>
                 )}
                 
