@@ -92,29 +92,26 @@ const validateCameraURL = async (url: string): Promise<boolean> => {
     if (hostname.includes('.duckdns.org') || 
         hostname.includes('.no-ip.') || 
         hostname.includes('.ddns.net')) {
-      console.log(`Camera proxy: Allowing dynamic DNS domain: ${hostname}`);
+      console.log(`Camera proxy: Allowing dynamic DNS domain: *.${hostname.split('.').slice(-2).join('.')}`);
       return true;
     }
 
     // Allow private IP ranges for authenticated camera access (local networks)
     if (/^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname)) {
-      console.log(`Camera proxy: Allowing private IP camera: ${hostname}`);
+      console.log(`Camera proxy: Allowing private IP camera: [redacted]`);
       return true;
     }
 
     // Block localhost variations for security
     if (['localhost', '127.0.0.1', '::1'].includes(hostname)) {
-      console.log(`Camera proxy: Blocked localhost: ${hostname}`);
+      console.log(`Camera proxy: Blocked localhost attempt`);
       return false;
     }
 
     // Resolve DNS and ensure public IPs only (prevents DNS rebinding)
     const dnsOk = await resolveAndValidateHost(hostname);
     if (!dnsOk) {
-      console.log(`Camera proxy: DNS validation failed or resolved to private IPs for ${hostname}`);
-      console.log(`  - Protocol: ${urlObj.protocol}`);
-      console.log(`  - Hostname: ${hostname}`);
-      console.log(`  - Port: ${port}`);
+      console.log(`Camera proxy: DNS validation failed or resolved to private IPs`);
       return false;
     }
 
@@ -226,7 +223,7 @@ serve(async (req) => {
 
       // IMPORTANT: Supabase Edge cannot reach private LAN IPs. Return a clear error early.
       if (isLan) {
-        console.warn(`Camera proxy: LAN/private address not reachable from cloud: ${hostname}`);
+        console.warn(`Camera proxy: LAN/private address not reachable from cloud`);
         return new Response(
           JSON.stringify({
             error: 'LAN address not reachable from cloud',
@@ -245,14 +242,7 @@ serve(async (req) => {
 
     if (!(await validateCameraURL(targetUrl))) {
       console.warn(`Camera proxy: Blocked potentially dangerous URL (failed validation)`);
-      try {
-        const urlObj = new URL(targetUrl);
-        console.log(`  - Protocol: ${urlObj.protocol}`);
-        console.log(`  - Hostname: ${urlObj.hostname}`);
-        console.log(`  - Port: ${urlObj.port || (urlObj.protocol === 'https:' ? '443' : '80')}`);
-      } catch (e) {
-        console.log(`  - URL parsing failed: ${e.message}`);
-      }
+      // SECURITY: Do not log URL details
       return new Response(
         JSON.stringify({ error: 'Invalid or blocked URL', code: 'validation_failed' }),
         { 
@@ -271,7 +261,7 @@ serve(async (req) => {
     // Enhanced connectivity test with more detailed diagnostics
     try {
       const urlObj = new URL(targetUrl);
-      console.log(`Camera proxy: Testing connectivity to ${urlObj.hostname}:${urlObj.port || '8000'}`);
+      console.log(`Camera proxy: Testing connectivity to *.${urlObj.hostname.split('.').slice(-2).join('.')}:${urlObj.port || '8000'}`);
       
       // First try a basic DNS lookup using a different method
       try {
@@ -280,7 +270,7 @@ serve(async (req) => {
         console.log(`Camera proxy: DNS lookup status:`, dnsResult.Status === 0 ? 'OK' : 'FAILED');
         
         if (dnsResult.Status !== 0) {
-          console.warn(`Camera proxy: DNS resolution failed for ${urlObj.hostname}`);
+          console.warn(`Camera proxy: DNS resolution failed`);
         }
       } catch (dnsError) {
         console.log(`Camera proxy: DNS lookup failed:`, dnsError.message);
@@ -302,7 +292,7 @@ serve(async (req) => {
         console.log(`Camera proxy: Connectivity test successful - Status: ${testResponse.status}`);
       } catch (testError) {
         clearTimeout(testTimeout);
-        console.log(`Camera proxy: Connectivity test failed for ${urlObj.hostname}:${urlObj.port || '8000'}:`, testError.message);
+        console.log(`Camera proxy: Connectivity test failed:`, testError.message);
         
         // If connectivity test fails, provide detailed error message
         if (testError.name === 'AbortError') {
@@ -318,7 +308,7 @@ serve(async (req) => {
     let lastError: Error | null = null;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      console.log(`Camera proxy: Attempt ${attempt}/${maxRetries} to ${req.method} ${targetUrl}`);
+      console.log(`Camera proxy: Attempt ${attempt}/${maxRetries} to ${req.method} camera stream`);
       
       // Create AbortController for timeout per attempt
       const controller = new AbortController();
@@ -329,7 +319,7 @@ serve(async (req) => {
       }, timeout);
 
       try {
-        console.log(`Camera proxy: Starting fetch to ${targetUrl}`);
+        console.log(`Camera proxy: Starting fetch to camera stream`);
         
         // Proxy the request with improved connection handling for MJPEG streams
         const response = await fetch(targetUrl, {
