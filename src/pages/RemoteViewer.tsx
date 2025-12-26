@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStreamViewer } from '@/hooks/useStreamRelay';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Radio, WifiOff, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Radio, WifiOff, RefreshCw, Lock } from 'lucide-react';
 
 const RemoteViewer: React.FC = () => {
   const { roomId } = useParams<{ roomId: string }>();
@@ -100,6 +100,20 @@ const RemoteViewer: React.FC = () => {
                     <Button onClick={() => navigate('/')} variant="outline">
                       <ArrowLeft className="h-4 w-4 mr-2" />
                       Go to Dashboard
+                    </Button>
+                  </>
+                )}
+                
+                {status === 'unauthorized' && (
+                  <>
+                    <Lock className="h-12 w-12 mb-4 text-yellow-500" />
+                    <p className="text-lg mb-2">Access Denied</p>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      You need to be logged in and have permission to view this stream
+                    </p>
+                    <Button onClick={() => navigate('/auth')} variant="outline">
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Sign In
                     </Button>
                   </>
                 )}
