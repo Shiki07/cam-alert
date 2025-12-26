@@ -12,6 +12,7 @@ import { CameraStatus } from "@/components/CameraStatus";
 import { CameraOverlays } from "@/components/CameraOverlays";
 import { CameraInfo } from "@/components/CameraInfo";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface LiveFeedProps {
   isRecording: boolean;
@@ -69,18 +70,15 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   dateOrganizedFoldersPi = true,
   onConnectionChange
 }, ref) => {
+  const { user } = useAuth();
+  const storageKey = user?.id ? `networkCameras:${user.id}` : 'networkCameras';
+
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cameraSource, setCameraSource] = useState<CameraSource>('webcam');
-  const [networkCameras, setNetworkCameras] = useState<NetworkCameraConfig[]>(() => {
-    try {
-      const saved = localStorage.getItem('networkCameras');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [networkCameras, setNetworkCameras] = useState<NetworkCameraConfig[]>([]);
+  const [networkCamerasLoaded, setNetworkCamerasLoaded] = useState(false);
   const [piServiceConnected, setPiServiceConnected] = useState<boolean | null>(null);
   const [detectedPiIp, setDetectedPiIp] = useState<string | null>(null);
   
@@ -564,10 +562,41 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     };
   }, []);
 
+  // Load network cameras from storage (per-user) and avoid overwriting on storage errors
+  useEffect(() => {
+    let parsed: NetworkCameraConfig[] | null = null;
+
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        parsed = JSON.parse(saved);
+      } else if (storageKey !== 'networkCameras') {
+        // Backward compatibility: migrate legacy key into per-user storage
+        const legacy = localStorage.getItem('networkCameras');
+        if (legacy) {
+          parsed = JSON.parse(legacy);
+          localStorage.setItem(storageKey, JSON.stringify(parsed));
+        }
+      }
+
+      setNetworkCameras(Array.isArray(parsed) ? parsed : []);
+      setNetworkCamerasLoaded(true);
+    } catch (e) {
+      // Critical: do NOT default to [] and then persist it (would look like "random deletion")
+      console.warn('Failed to load saved network cameras; keeping in-memory list only.', e);
+      setNetworkCamerasLoaded(false);
+    }
+  }, [storageKey]);
+
   // Save network cameras to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('networkCameras', JSON.stringify(networkCameras));
-  }, [networkCameras]);
+    if (!networkCamerasLoaded) return;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(networkCameras));
+    } catch (e) {
+      console.warn('Failed to persist network cameras to storage.', e);
+    }
+  }, [networkCameras, networkCamerasLoaded, storageKey]);
 
   // Restart camera when quality changes to apply new settings
   useEffect(() => {
