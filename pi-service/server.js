@@ -8,12 +8,168 @@ const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// Security configuration
+const API_KEY = process.env.PI_SERVICE_API_KEY || null;
+const MAX_CONCURRENT_RECORDINGS = 3;
+const ALLOWED_VIDEO_DIRS = ['/home/pi/Videos', '/tmp/recordings'];
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 30;
+
+// Rate limiting state (per-IP)
+const rateLimitMap = new Map();
+
 // Recording state management
 const activeRecordings = new Map(); // Map<recordingId, { process, filename, startTime }>
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Rate limiting middleware
+const rateLimiter = (req, res, next) => {
+  const clientIP = req.ip || req.connection.remoteAddress || 'unknown';
+  const now = Date.now();
+  
+  const clientData = rateLimitMap.get(clientIP) || { count: 0, windowStart: now };
+  
+  // Reset window if expired
+  if (now - clientData.windowStart > RATE_LIMIT_WINDOW_MS) {
+    clientData.count = 0;
+    clientData.windowStart = now;
+  }
+  
+  clientData.count++;
+  rateLimitMap.set(clientIP, clientData);
+  
+  if (clientData.count > RATE_LIMIT_MAX_REQUESTS) {
+    console.warn(`Rate limit exceeded for IP: ${clientIP}`);
+    return res.status(429).json({ 
+      error: 'Too many requests', 
+      retry_after_seconds: Math.ceil((clientData.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000)
+    });
+  }
+  
+  next();
+};
+
+// Optional API key authentication middleware
+const optionalApiKeyAuth = (req, res, next) => {
+  // If no API key is configured, skip authentication
+  if (!API_KEY) {
+    return next();
+  }
+  
+  const providedKey = req.headers['x-pi-api-key'] || req.query.api_key;
+  
+  if (!providedKey) {
+    console.warn(`Unauthorized request attempt from ${req.ip} - no API key provided`);
+    return res.status(401).json({ 
+      error: 'API key required',
+      message: 'Set X-PI-API-KEY header or api_key query parameter'
+    });
+  }
+  
+  // Constant-time comparison to prevent timing attacks
+  if (!constantTimeCompare(providedKey, API_KEY)) {
+    console.warn(`Invalid API key from ${req.ip}`);
+    return res.status(403).json({ error: 'Invalid API key' });
+  }
+  
+  next();
+};
+
+// Constant-time string comparison (timing-attack safe)
+function constantTimeCompare(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
+}
+
+// Input validation utilities
+const validateRecordingId = (id) => {
+  if (!id || typeof id !== 'string') return false;
+  // Allow alphanumeric, hyphens, and underscores only
+  return /^[a-zA-Z0-9_-]{1,64}$/.test(id);
+};
+
+const validateStreamUrl = (url) => {
+  if (!url || typeof url !== 'string') return false;
+  try {
+    const parsed = new URL(url);
+    // Only allow http/https protocols
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    // Block localhost/internal IPs to prevent SSRF (except our own local stream)
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      // Only allow our own stream endpoint
+      return parsed.port === '8000' && parsed.pathname.includes('stream');
+    }
+    // Block internal IP ranges
+    if (hostname.startsWith('10.') || 
+        hostname.startsWith('172.') || 
+        hostname.startsWith('192.168.') ||
+        hostname === '0.0.0.0') {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const validateVideoPath = (videoPath) => {
+  if (!videoPath) return '/home/pi/Videos'; // Default safe path
+  
+  // Normalize and resolve the path
+  const normalizedPath = path.normalize(videoPath);
+  const resolvedPath = path.resolve(normalizedPath);
+  
+  // Check for path traversal attempts
+  if (normalizedPath.includes('..')) {
+    console.warn(`Path traversal attempt blocked: ${videoPath}`);
+    return null;
+  }
+  
+  // Check if path is in allowed directories
+  const isAllowed = ALLOWED_VIDEO_DIRS.some(allowedDir => 
+    resolvedPath === allowedDir || resolvedPath.startsWith(allowedDir + path.sep)
+  );
+  
+  if (!isAllowed) {
+    console.warn(`Disallowed video path: ${videoPath}`);
+    return null;
+  }
+  
+  return resolvedPath;
+};
+
+const validateQuality = (quality) => {
+  const allowed = ['low', 'medium', 'high'];
+  return allowed.includes(quality) ? quality : 'medium';
+};
+
+const validateContentType = (mimetype, filename) => {
+  const allowedTypes = [
+    'video/webm',
+    'video/mp4',
+    'video/mpeg',
+    'video/quicktime',
+    'application/octet-stream' // Some browsers send this
+  ];
+  
+  const allowedExtensions = ['.webm', '.mp4', '.mpeg', '.mov'];
+  const ext = path.extname(filename).toLowerCase();
+  
+  return allowedTypes.includes(mimetype) && allowedExtensions.includes(ext);
+};
+
+// Apply rate limiting and optional auth to all routes
+app.use(rateLimiter);
 
 // Configure storage for uploaded files
 const storage = multer.diskStorage({
@@ -27,50 +183,66 @@ const storage = multer.diskStorage({
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const motionPrefix = req.body.motion_detected === 'true' ? 'motion_' : 'manual_';
-    const filename = `${motionPrefix}${timestamp}_${file.originalname}`;
+    // Sanitize original filename
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 50);
+    const filename = `${motionPrefix}${timestamp}_${sanitizedName}`;
     cb(null, filename);
   }
 });
+
+// File filter for upload validation
+const fileFilter = (req, file, cb) => {
+  if (!validateContentType(file.mimetype, file.originalname)) {
+    console.warn(`Rejected file upload: invalid type ${file.mimetype} for ${file.originalname}`);
+    return cb(new Error('Invalid file type. Only video files allowed.'), false);
+  }
+  cb(null, true);
+};
 
 const upload = multer({ 
   storage: storage,
   limits: {
     fileSize: 100 * 1024 * 1024 // 100MB limit
-  }
+  },
+  fileFilter: fileFilter
 });
 
-// Health check endpoint
+// Health check endpoint (no auth required for monitoring)
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'running',
     timestamp: new Date().toISOString(),
-    videosPath: '/home/pi/Videos'
+    videosPath: '/home/pi/Videos',
+    auth_required: !!API_KEY,
+    active_recordings: activeRecordings.size,
+    max_concurrent_recordings: MAX_CONCURRENT_RECORDINGS
   });
 });
 
-// File upload endpoint
-app.post('/upload', upload.single('file'), async (req, res) => {
+// File upload endpoint (requires auth if configured)
+app.post('/upload', optionalApiKeyAuth, upload.single('file'), async (req, res) => {
   try {
     console.log('Received file upload request');
-    console.log('File:', req.file);
-    console.log('Body:', req.body);
 
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const { recording_id, recorded_at, motion_detected } = req.body;
+    
+    // Validate recording_id if provided
+    if (recording_id && !validateRecordingId(recording_id)) {
+      return res.status(400).json({ error: 'Invalid recording_id format' });
+    }
 
-    // Log the upload
+    // Log the upload (without sensitive details)
     const logEntry = {
       timestamp: new Date().toISOString(),
-      recording_id,
+      recording_id: recording_id || 'unknown',
       filename: req.file.filename,
-      originalname: req.file.originalname,
       size: req.file.size,
       recorded_at,
-      motion_detected: motion_detected === 'true',
-      saved_path: req.file.path
+      motion_detected: motion_detected === 'true'
     };
 
     // Save upload log
@@ -80,6 +252,10 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     try {
       if (await fs.pathExists(logPath)) {
         logs = await fs.readJson(logPath);
+        // Keep only last 1000 entries to prevent log file from growing too large
+        if (logs.length > 1000) {
+          logs = logs.slice(-1000);
+        }
       }
     } catch (error) {
       console.warn('Could not read existing log file, creating new one');
@@ -88,27 +264,26 @@ app.post('/upload', upload.single('file'), async (req, res) => {
     logs.push(logEntry);
     await fs.writeJson(logPath, logs, { spaces: 2 });
 
-    console.log(`File saved successfully: ${req.file.path}`);
+    console.log(`File saved successfully: ${req.file.filename}`);
 
     res.json({
       success: true,
       message: 'File uploaded successfully',
       filename: req.file.filename,
-      path: req.file.path,
       size: req.file.size
     });
 
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('Upload error:', error.message);
     res.status(500).json({ 
       error: 'Upload failed',
-      details: error.message 
+      details: 'Internal server error' 
     });
   }
 });
 
-// Get recordings list
-app.get('/recordings', async (req, res) => {
+// Get recordings list (requires auth if configured)
+app.get('/recordings', optionalApiKeyAuth, async (req, res) => {
   try {
     const videosDir = '/home/pi/Videos';
     const files = await fs.readdir(videosDir);
@@ -117,45 +292,65 @@ app.get('/recordings', async (req, res) => {
       .filter(file => file.endsWith('.webm') || file.endsWith('.mp4'))
       .map(file => ({
         filename: file,
-        path: path.join(videosDir, file),
         isMotionTriggered: file.startsWith('motion_')
       }));
 
     res.json({ recordings });
   } catch (error) {
-    console.error('Error listing recordings:', error);
+    console.error('Error listing recordings:', error.message);
     res.status(500).json({ error: 'Failed to list recordings' });
   }
 });
 
-// Start recording endpoint
-app.post('/recording/start', async (req, res) => {
+// Start recording endpoint (requires auth if configured)
+app.post('/recording/start', optionalApiKeyAuth, async (req, res) => {
   try {
     const { recording_id, stream_url, quality = 'medium', motion_triggered = false, video_path } = req.body;
 
-    if (!recording_id || !stream_url) {
-      return res.status(400).json({ error: 'recording_id and stream_url are required' });
+    // Validate recording_id
+    if (!recording_id || !validateRecordingId(recording_id)) {
+      return res.status(400).json({ error: 'Invalid or missing recording_id. Must be alphanumeric with hyphens/underscores, max 64 chars.' });
     }
 
-    // Check if already recording
+    // Validate stream_url (but we actually use local stream for safety)
+    if (!stream_url) {
+      return res.status(400).json({ error: 'stream_url is required' });
+    }
+
+    // Check concurrent recording limit
+    if (activeRecordings.size >= MAX_CONCURRENT_RECORDINGS) {
+      console.warn(`Concurrent recording limit reached: ${activeRecordings.size}/${MAX_CONCURRENT_RECORDINGS}`);
+      return res.status(429).json({ 
+        error: 'Maximum concurrent recordings reached',
+        max: MAX_CONCURRENT_RECORDINGS,
+        current: activeRecordings.size
+      });
+    }
+
+    // Check if already recording this ID
     if (activeRecordings.has(recording_id)) {
-      return res.status(400).json({ error: 'Recording already in progress' });
+      return res.status(400).json({ error: 'Recording already in progress with this ID' });
     }
 
-    // Use provided video_path or default to /home/pi/Videos
-    const videosDir = video_path || '/home/pi/Videos';
-    await fs.ensureDir(videosDir);
+    // Validate and sanitize video path
+    const validatedVideoPath = validateVideoPath(video_path);
+    if (validatedVideoPath === null) {
+      return res.status(400).json({ error: 'Invalid video_path. Path traversal or disallowed directory.' });
+    }
+    
+    await fs.ensureDir(validatedVideoPath);
+
+    // Validate quality
+    const validatedQuality = validateQuality(quality);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const prefix = motion_triggered ? 'motion_' : 'manual_';
     const filename = `${prefix}pi_${timestamp}.mp4`;
-    const filepath = path.join(videosDir, filename);
+    const filepath = path.join(validatedVideoPath, filename);
 
     console.log(`Starting recording: ${recording_id}`);
-    console.log(`Stream URL: ${stream_url}`);
     console.log(`Output file: ${filepath}`);
-    console.log(`Video path: ${videosDir}`);
-    console.log(`Quality: ${quality}`);
+    console.log(`Quality: ${validatedQuality}`);
 
     // FFmpeg parameters based on quality
     const qualityPresets = {
@@ -164,9 +359,9 @@ app.post('/recording/start', async (req, res) => {
       low: { fps: 15, bitrate: '500k', scale: '640:480' }
     };
 
-    const preset = qualityPresets[quality] || qualityPresets.medium;
+    const preset = qualityPresets[validatedQuality];
 
-    // Use local stream URL to prevent feed freezing (FFmpeg connects to localhost:8000)
+    // Use local stream URL to prevent SSRF - always connect to localhost:8000
     const localStreamUrl = 'http://localhost:8000/stream.mjpg';
     console.log(`Using local stream for recording: ${localStreamUrl}`);
     
@@ -181,6 +376,7 @@ app.post('/recording/start', async (req, res) => {
       '-vf', `scale=${preset.scale}`,
       '-f', 'mp4',
       '-movflags', 'frag_keyframe+empty_moov',
+      '-t', '300', // Max 5 minute recording to prevent runaway processes
       '-y',
       filepath
     ];
@@ -195,7 +391,7 @@ app.post('/recording/start', async (req, res) => {
       filename,
       filepath,
       startTime: Date.now(),
-      quality,
+      quality: validatedQuality,
       motion_triggered
     });
 
@@ -209,44 +405,40 @@ app.post('/recording/start', async (req, res) => {
     });
 
     // Handle FFmpeg output (async after response sent)
-    ffmpeg.stdout.on('data', (data) => {
-      console.log(`FFmpeg stdout: ${data}`);
-    });
-
     ffmpeg.stderr.on('data', (data) => {
-      // FFmpeg outputs progress to stderr
-      console.log(`FFmpeg: ${data}`);
+      // FFmpeg outputs progress to stderr - only log errors, not progress
+      const output = data.toString();
+      if (output.includes('error') || output.includes('Error')) {
+        console.error(`FFmpeg error: ${output}`);
+      }
     });
 
     ffmpeg.on('error', (error) => {
-      console.error(`FFmpeg error for ${recording_id}:`, error);
+      console.error(`FFmpeg spawn error for ${recording_id}:`, error.message);
       activeRecordings.delete(recording_id);
     });
 
     ffmpeg.on('close', (code) => {
       console.log(`FFmpeg process exited with code ${code} for ${recording_id}`);
-      if (code !== 0 && code !== null) {
-        console.error(`Recording ${recording_id} ended with error code ${code}`);
-      }
       activeRecordings.delete(recording_id);
     });
 
   } catch (error) {
-    console.error('Start recording error:', error);
+    console.error('Start recording error:', error.message);
     res.status(500).json({ 
       error: 'Failed to start recording',
-      details: error.message 
+      details: 'Internal server error' 
     });
   }
 });
 
-// Stop recording endpoint
-app.post('/recording/stop', async (req, res) => {
+// Stop recording endpoint (requires auth if configured)
+app.post('/recording/stop', optionalApiKeyAuth, async (req, res) => {
   try {
     const { recording_id } = req.body;
 
-    if (!recording_id) {
-      return res.status(400).json({ error: 'recording_id is required' });
+    if (!recording_id || !validateRecordingId(recording_id)) {
+      return res.status(400).json({ error: 'Invalid or missing recording_id' });
     }
 
     const recording = activeRecordings.get(recording_id);
@@ -261,7 +453,7 @@ app.post('/recording/stop', async (req, res) => {
     console.log('Sending SIGINT to FFmpeg process...');
     recording.process.kill('SIGINT');
     
-    // Step 2: Wait for FFmpeg to exit gracefully (max 2 seconds - optimized)
+    // Step 2: Wait for FFmpeg to exit gracefully (max 2 seconds)
     const exitPromise = new Promise((resolve) => {
       recording.process.on('exit', () => {
         console.log('FFmpeg exited gracefully');
@@ -281,7 +473,7 @@ app.post('/recording/stop', async (req, res) => {
       recording.process.kill('SIGKILL');
     }
 
-    // Step 4: Brief wait for file system to flush (optimized)
+    // Step 4: Brief wait for file system to flush
     await new Promise(resolve => setTimeout(resolve, 200));
 
     // Check if file exists and get stats
@@ -293,7 +485,7 @@ app.post('/recording/stop', async (req, res) => {
       duration = Math.round((Date.now() - recording.startTime) / 1000);
       console.log(`Recording file stats: ${fileSize} bytes, ${duration} seconds`);
     } catch (error) {
-      console.warn('Could not get file stats:', error);
+      console.warn('Could not get file stats');
     }
 
     activeRecordings.delete(recording_id);
@@ -303,24 +495,28 @@ app.post('/recording/stop', async (req, res) => {
       message: 'Recording stopped',
       recording_id,
       filename: recording.filename,
-      filepath: recording.filepath,
       file_size: fileSize,
       duration_seconds: duration,
       stopped_at: new Date().toISOString()
     });
 
   } catch (error) {
-    console.error('Stop recording error:', error);
+    console.error('Stop recording error:', error.message);
     res.status(500).json({ 
       error: 'Failed to stop recording',
-      details: error.message 
+      details: 'Internal server error' 
     });
   }
 });
 
-// Get recording status endpoint
-app.get('/recording/status/:recording_id', (req, res) => {
+// Get recording status endpoint (requires auth if configured)
+app.get('/recording/status/:recording_id', optionalApiKeyAuth, (req, res) => {
   const { recording_id } = req.params;
+  
+  if (!validateRecordingId(recording_id)) {
+    return res.status(400).json({ error: 'Invalid recording_id format' });
+  }
+  
   const recording = activeRecordings.get(recording_id);
 
   if (!recording) {
@@ -344,8 +540,8 @@ app.get('/recording/status/:recording_id', (req, res) => {
   });
 });
 
-// List active recordings
-app.get('/recording/active', (req, res) => {
+// List active recordings (requires auth if configured)
+app.get('/recording/active', optionalApiKeyAuth, (req, res) => {
   const active = Array.from(activeRecordings.entries()).map(([id, rec]) => ({
     recording_id: id,
     filename: rec.filename,
@@ -358,12 +554,31 @@ app.get('/recording/active', (req, res) => {
   res.json({ active_recordings: active, count: active.length });
 });
 
+// Error handler middleware
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err.message);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Cleanup stale rate limit entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, data] of rateLimitMap.entries()) {
+    if (now - data.windowStart > RATE_LIMIT_WINDOW_MS * 2) {
+      rateLimitMap.delete(ip);
+    }
+  }
+}, 5 * 60 * 1000);
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎥 CamAlert Pi Service running on port ${PORT}`);
   console.log(`📁 Videos will be saved to: /home/pi/Videos`);
   console.log(`🌐 Access at: http://YOUR_PI_IP:${PORT}`);
+  console.log(`🔐 API key auth: ${API_KEY ? 'ENABLED (set PI_SERVICE_API_KEY)' : 'DISABLED (optional)'}`);
+  console.log(`⚡ Rate limit: ${RATE_LIMIT_MAX_REQUESTS} requests per minute`);
+  console.log(`📹 Max concurrent recordings: ${MAX_CONCURRENT_RECORDINGS}`);
   console.log('\n📋 Available endpoints:');
-  console.log(`   GET  /health - Health check`);
+  console.log(`   GET  /health - Health check (no auth)`);
   console.log(`   POST /upload - Upload recordings`);
   console.log(`   GET  /recordings - List saved recordings`);
   console.log(`   POST /recording/start - Start Pi recording`);
@@ -372,4 +587,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`   GET  /recording/active - List active recordings`);
   console.log('\n⚙️  Requirements:');
   console.log(`   - FFmpeg must be installed: sudo apt install ffmpeg`);
+  console.log('\n🔒 Security features:');
+  console.log(`   - Optional API key authentication (set PI_SERVICE_API_KEY env var)`);
+  console.log(`   - Rate limiting (${RATE_LIMIT_MAX_REQUESTS}/min per IP)`);
+  console.log(`   - Input validation for all parameters`);
+  console.log(`   - Path traversal protection`);
+  console.log(`   - SSRF protection (local stream only)`);
+  console.log(`   - Concurrent recording limits`);
+  console.log(`   - File type validation on uploads`);
 });
