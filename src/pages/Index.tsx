@@ -22,7 +22,6 @@ const Index = () => {
     lastMotionTime,
     emailEnabled,
     notificationEmail,
-    storageType,
     quality,
     motionSensitivity,
     motionThreshold,
@@ -38,7 +37,6 @@ const Index = () => {
     
     // Setters
     setIsRecording,
-    setStorageType,
     setQuality,
     setMotionSensitivity,
     setMotionThreshold,
@@ -95,7 +93,6 @@ const Index = () => {
           <CameraGrid
             isRecording={isRecording}
             onRecordingChange={setIsRecording}
-            storageType={storageType}
             quality={quality}
             motionDetectionEnabled={motionDetectionEnabled}
             onMotionDetected={handleMotionDetected}
@@ -106,7 +103,6 @@ const Index = () => {
             scheduleEnabled={scheduleEnabled}
             startHour={startHour}
             endHour={endHour}
-            onStorageTypeChange={setStorageType}
             onQualityChange={setQuality}
             onToggleRecording={toggleRecording}
             motionDetected={motionDetected}

@@ -8,7 +8,6 @@ import { Capacitor } from "@capacitor/core";
 import { getFolderDescription } from "@/utils/folderStructure";
 
 interface FolderSettingsProps {
-  storageType: 'supabase' | 'local';
   onMobileFolderChange?: (folder: string) => void;
   currentMobileFolder?: string;
   dateOrganizedFolders: boolean;
@@ -20,7 +19,6 @@ interface FolderSettingsProps {
 }
 
 export const FolderSettings = ({ 
-  storageType,
   onMobileFolderChange,
   currentMobileFolder,
   dateOrganizedFolders,
@@ -41,10 +39,6 @@ export const FolderSettings = ({
   const isNative = Capacitor.isNativePlatform();
   const isMobile = Capacitor.getPlatform() !== 'web';
   const storedName = getStoredDirectoryName();
-
-  if (storageType !== 'local') {
-    return null;
-  }
 
   const folderExample = getFolderDescription({ 
     dateOrganized: dateOrganizedFolders, 
