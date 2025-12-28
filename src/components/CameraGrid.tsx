@@ -12,7 +12,7 @@ interface CameraGridProps {
   // Live Feed Props
   isRecording: boolean;
   onRecordingChange: (recording: boolean) => void;
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   quality: 'high' | 'medium' | 'low';
   motionDetectionEnabled: boolean;
   onMotionDetected: (detected: boolean) => void;
@@ -44,7 +44,7 @@ interface CameraGridProps {
   storageLimitGB?: number;
 
   // Settings Props
-  onStorageTypeChange: (type: 'cloud' | 'local') => void;
+  onStorageTypeChange: (type: 'supabase' | 'local') => void;
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
   onToggleRecording: () => void;
   motionDetected: boolean;

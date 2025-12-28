@@ -9,8 +9,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 
 interface StorageSettingsProps {
-  storageType: 'cloud' | 'local';
-  onStorageTypeChange: (type: 'cloud' | 'local') => void;
+  storageType: 'supabase' | 'local';
+  onStorageTypeChange: (type: 'supabase' | 'local') => void;
   quality: 'high' | 'medium' | 'low';
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
 }
@@ -98,16 +98,16 @@ export const StorageSettings = ({
           <label className="text-sm text-gray-300 mb-2 block">Storage Location</label>
           <div className="grid grid-cols-2 gap-2">
             <Button
-              variant={storageType === 'cloud' ? 'default' : 'outline'}
-              onClick={() => onStorageTypeChange('cloud')}
+              variant={storageType === 'supabase' ? 'default' : 'outline'}
+              onClick={() => onStorageTypeChange('supabase')}
               className={`flex items-center gap-2 ${
-                storageType === 'cloud' 
+                storageType === 'supabase' 
                   ? 'bg-blue-600 hover:bg-blue-700' 
                   : 'border-gray-600 text-gray-300 hover:bg-gray-700'
               }`}
             >
               <Cloud className="w-4 h-4" />
-              Cloud
+              Supabase
             </Button>
             <Button
               variant={storageType === 'local' ? 'default' : 'outline'}
@@ -151,8 +151,8 @@ export const StorageSettings = ({
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-300">Current:</span>
             <span className="text-gray-400 flex items-center gap-1">
-              {storageType === 'cloud' ? <Cloud className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
-              {storageType === 'cloud' ? 'Your Cloud Storage' : 'Local Storage'}
+              {storageType === 'supabase' ? <Cloud className="w-3 h-3" /> : <HardDrive className="w-3 h-3" />}
+              {storageType === 'supabase' ? 'Supabase Storage' : 'Local Storage'}
             </span>
           </div>
           <div className="flex justify-between items-center">

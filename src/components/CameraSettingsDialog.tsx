@@ -18,8 +18,8 @@ interface CameraSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   
   // Storage Settings
-  storageType: 'cloud' | 'local';
-  onStorageTypeChange: (type: 'cloud' | 'local') => void;
+  storageType: 'supabase' | 'local';
+  onStorageTypeChange: (type: 'supabase' | 'local') => void;
   quality: 'high' | 'medium' | 'low';
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
   

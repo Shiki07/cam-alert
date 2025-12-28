@@ -8,7 +8,7 @@ import { Capacitor } from "@capacitor/core";
 import { getFolderDescription } from "@/utils/folderStructure";
 
 interface FolderSettingsProps {
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   onMobileFolderChange?: (folder: string) => void;
   currentMobileFolder?: string;
   dateOrganizedFolders: boolean;

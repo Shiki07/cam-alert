@@ -29,43 +29,37 @@ export const RecordingHistory = () => {
     enabled: !!user
   });
 
-  const downloadFromCloud = async (recording: any) => {
+  const downloadFromStorage = async (recording: any) => {
     try {
-      console.log('Downloading from cloud:', recording.file_path);
+      console.log('Downloading:', recording.file_path, 'storage_type:', recording.storage_type);
       
-      // Try to use cloud provider if configured
-      const configStr = localStorage.getItem('cloudStorageConfig');
-      if (configStr) {
-        const { CloudStorageFactory } = await import('@/services/cloudStorage/CloudStorageFactory');
+      if (recording.storage_type === 'supabase') {
+        // Download from Supabase Storage
+        const { data, error } = await supabase.storage
+          .from('recordings')
+          .download(recording.file_path);
         
-        const config = JSON.parse(configStr);
-        const provider = CloudStorageFactory.getProvider(config.provider);
+        if (error) throw error;
         
-        if (provider && provider.isConfigured()) {
-          const result = await provider.download(recording.file_path);
-          
-          if (result.success && result.blob) {
-            const url = URL.createObjectURL(result.blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = recording.filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            toast({
-              title: "Download complete",
-              description: `${recording.filename} downloaded successfully`
-            });
-            return;
-          }
-        }
+        const url = URL.createObjectURL(data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = recording.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        toast({
+          title: "Download complete",
+          description: `${recording.filename} downloaded successfully`
+        });
+        return;
       }
       
       toast({
         title: "Download not available",
-        description: "Cloud storage provider not configured",
+        description: "This file was saved locally and is not available for download",
         variant: "destructive"
       });
     } catch (error) {
@@ -80,30 +74,24 @@ export const RecordingHistory = () => {
 
   const viewInBrowser = async (recording: any) => {
     try {
-      if (recording.storage_type !== 'cloud') {
+      if (recording.storage_type !== 'supabase') {
         toast({
           title: "View not available",
-          description: "Can only view cloud-stored files",
+          description: "Can only view Supabase-stored files",
           variant: "destructive"
         });
         return;
       }
 
-      // Try to get public URL from cloud provider if available
-      const configStr = localStorage.getItem('cloudStorageConfig');
-      if (configStr) {
-        const config = JSON.parse(configStr);
-        
-        // For now, we'll download and open in new tab
-        const downloadResult = await downloadFromCloud(recording);
-        return;
-      }
-
-      toast({
-        title: "View not available",
-        description: "Cloud storage provider not configured",
-        variant: "destructive"
-      });
+      // Get a signed URL for the file
+      const { data, error } = await supabase.storage
+        .from('recordings')
+        .createSignedUrl(recording.file_path, 3600); // 1 hour expiry
+      
+      if (error) throw error;
+      
+      // Open in new tab
+      window.open(data.signedUrl, '_blank');
     } catch (error) {
       console.error('View error:', error);
       toast({
@@ -116,22 +104,15 @@ export const RecordingHistory = () => {
 
   const deleteRecording = async (recording: any) => {
     try {
-      if (recording.storage_type === 'cloud') {
-        console.log('Deleting from cloud storage:', recording.file_path);
+      if (recording.storage_type === 'supabase') {
+        console.log('Deleting from Supabase Storage:', recording.file_path);
         
-        // Try to delete using cloud provider
-        const configStr = localStorage.getItem('cloudStorageConfig');
-        if (configStr) {
-          const { CloudStorageFactory } = await import('@/services/cloudStorage/CloudStorageFactory');
-          const config = JSON.parse(configStr);
-          const provider = CloudStorageFactory.getProvider(config.provider);
-          
-          if (provider && provider.isConfigured()) {
-            const result = await provider.delete(recording.file_path);
-            if (!result.success) {
-              console.warn('Cloud deletion warning:', result.error);
-            }
-          }
+        const { error: storageError } = await supabase.storage
+          .from('recordings')
+          .remove([recording.file_path]);
+        
+        if (storageError) {
+          console.warn('Storage deletion warning:', storageError);
         }
       }
       
@@ -169,15 +150,15 @@ export const RecordingHistory = () => {
   };
 
   const getStorageStats = () => {
-    if (!recordings) return { totalFiles: 0, totalSize: 0, cloudFiles: 0, localFiles: 0 };
+    if (!recordings) return { totalFiles: 0, totalSize: 0, supabaseFiles: 0, localFiles: 0 };
     
     return recordings.reduce((stats, recording) => {
       stats.totalFiles++;
       stats.totalSize += recording.file_size || 0;
-      if (recording.storage_type === 'cloud') stats.cloudFiles++;
+      if (recording.storage_type === 'supabase') stats.supabaseFiles++;
       else stats.localFiles++;
       return stats;
-    }, { totalFiles: 0, totalSize: 0, cloudFiles: 0, localFiles: 0 });
+    }, { totalFiles: 0, totalSize: 0, supabaseFiles: 0, localFiles: 0 });
   };
 
   if (isLoading) {
@@ -207,9 +188,9 @@ export const RecordingHistory = () => {
           <div className="bg-gray-700 rounded p-3">
             <div className="flex items-center gap-2 text-blue-400 mb-1">
               <Cloud className="w-4 h-4" />
-              <span>Cloud Storage</span>
+              <span>Supabase Storage</span>
             </div>
-            <div className="text-white font-semibold">{stats.cloudFiles} files</div>
+            <div className="text-white font-semibold">{stats.supabaseFiles} files</div>
           </div>
           <div className="bg-gray-700 rounded p-3">
             <div className="flex items-center gap-2 text-green-400 mb-1">
@@ -243,7 +224,7 @@ export const RecordingHistory = () => {
                   ) : (
                     <Camera className="w-5 h-5 text-green-400" />
                   )}
-                  {recording.storage_type === 'cloud' ? (
+                  {recording.storage_type === 'supabase' ? (
                     <Cloud className="w-4 h-4 text-blue-300" />
                   ) : (
                     <HardDrive className="w-4 h-4 text-green-300" />
@@ -263,13 +244,13 @@ export const RecordingHistory = () => {
                   </div>
                   
                   <div className="text-xs text-gray-500 mt-1">
-                    {recording.storage_type === 'cloud' ? 'Cloud Storage' : 'Local Download'}
+                    {recording.storage_type === 'supabase' ? 'Supabase Storage' : 'Local Download'}
                   </div>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
-                {recording.storage_type === 'cloud' && (
+                {recording.storage_type === 'supabase' && (
                   <>
                     <Button
                       size="sm"
@@ -284,7 +265,7 @@ export const RecordingHistory = () => {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => downloadFromCloud(recording)}
+                      onClick={() => downloadFromStorage(recording)}
                       className="border-gray-600 text-gray-300 hover:bg-gray-600"
                       aria-label="Download file"
                       title="Download file"

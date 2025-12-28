@@ -3,7 +3,7 @@ import React from 'react';
 
 interface CameraOverlaysProps {
   isRecording: boolean;
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   motionDetected: boolean;
   scheduleEnabled: boolean;
   isWithinSchedule: boolean;
@@ -45,7 +45,7 @@ export const CameraOverlays = ({
       {/* Processing Indicator */}
       {isProcessing && (
         <div className="absolute top-16 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-3 py-1 rounded-full text-sm animate-pulse">
-          {storageType === 'cloud' ? 'Uploading to Cloud...' : 'Processing...'}
+          {storageType === 'supabase' ? 'Uploading to Supabase...' : 'Processing...'}
         </div>
       )}
     </>

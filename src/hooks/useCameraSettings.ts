@@ -41,7 +41,7 @@ export const useCameraSettings = () => {
       console.error('Failed to load settings from localStorage:', error);
     }
   }, []);
-  const [storageType, setStorageType] = useState<'cloud' | 'local'>('local');
+  const [storageType, setStorageType] = useState<'supabase' | 'local'>('supabase');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
   const [dateOrganizedFolders, setDateOrganizedFolders] = useState(() => {
     try {
