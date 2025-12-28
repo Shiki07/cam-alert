@@ -19,7 +19,6 @@ import { sanitizeCameraConfigForStorage, SanitizedCameraConfig } from "@/utils/s
 interface LiveFeedProps {
   isRecording: boolean;
   onRecordingChange: (recording: boolean) => void;
-  storageType: 'supabase' | 'local';
   quality: 'high' | 'medium' | 'low';
   motionDetectionEnabled: boolean;
   onMotionDetected: (detected: boolean) => void;
@@ -52,7 +51,6 @@ export interface LiveFeedHandle {
 export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({ 
   isRecording, 
   onRecordingChange, 
-  storageType, 
   quality,
   motionDetectionEnabled,
   onMotionDetected,
@@ -139,7 +137,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         console.log('Auto-starting recording due to webcam motion detection');
         lastRecordingAttemptRef.current = now;
         recording.startRecording(currentStream, {
-          storageType,
           fileType: 'video',
           quality,
           motionDetected: true,
@@ -430,7 +427,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
       onRecordingChange(false);
     } else {
       recording.startRecording(currentStream, {
-        storageType,
         fileType: 'video',
         quality,
         motionDetected: false,
@@ -448,7 +444,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     if (!(currentVideoRef instanceof HTMLVideoElement) && !(currentVideoRef instanceof HTMLImageElement)) return;
     
     recording.takeSnapshot(currentVideoRef, {
-      storageType,
       fileType: 'image',
       quality,
       motionDetected: cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected,
@@ -796,7 +791,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
             scheduleEnabled={scheduleEnabled}
             isWithinSchedule={cameraSource === 'webcam' ? motionDetection.isWithinSchedule : imageMotionDetection.isWithinSchedule}
             currentMotionLevel={cameraSource === 'webcam' ? motionDetection.currentMotionLevel : imageMotionDetection.currentMotionLevel}
-            storageType={storageType}
             emailNotificationsEnabled={emailNotificationsEnabled}
             notificationEmail={notificationEmail}
             isConnected={isConnected}
@@ -829,7 +823,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         >
           <CameraOverlays
             isRecording={cameraSource === 'network' ? piRecording.isRecording : recording.isRecording}
-            storageType={storageType}
             motionDetected={cameraSource === 'webcam' ? motionDetection.motionDetected : imageMotionDetection.motionDetected}
             scheduleEnabled={scheduleEnabled}
             isWithinSchedule={cameraSource === 'webcam' ? motionDetection.isWithinSchedule : imageMotionDetection.isWithinSchedule}
@@ -841,7 +834,6 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         {isConnected && (
           <CameraInfo
             quality={quality}
-            storageType={storageType}
             motionDetectionEnabled={motionDetectionEnabled}
             motionSensitivity={motionSensitivity}
             emailNotificationsEnabled={emailNotificationsEnabled}
