@@ -10,7 +10,7 @@ interface CameraControlsProps {
   isConnected?: boolean;
   onSnapshot?: () => void;
   onShowSettings?: () => void;
-  storageType?: 'cloud' | 'local';
+  storageType?: 'supabase' | 'local';
   storageUsedPercent?: number;
   storageWarningLevel?: 'safe' | 'warning' | 'danger' | 'critical';
   liveFeedRef?: React.RefObject<any>;
@@ -24,7 +24,7 @@ export const CameraControls = ({
   isConnected = false,
   onSnapshot,
   onShowSettings,
-  storageType = 'cloud',
+  storageType = 'supabase',
   storageUsedPercent = 0,
   storageWarningLevel = 'safe',
   liveFeedRef,
@@ -200,7 +200,7 @@ export const CameraControls = ({
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Storage:</span>
             <span className={`text-sm font-medium ${getStorageColor()}`} title="Click Settings to manage storage tier">
-              {storageType === 'cloud' ? '☁️ ' : '💾 '}{getStorageDisplay()}
+              {storageType === 'supabase' ? '☁️ ' : '💾 '}{getStorageDisplay()}
             </span>
           </div>
         </div>

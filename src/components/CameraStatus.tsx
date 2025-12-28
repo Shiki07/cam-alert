@@ -7,7 +7,7 @@ interface CameraStatusProps {
   scheduleEnabled: boolean;
   isWithinSchedule: boolean;
   currentMotionLevel: number;
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   emailNotificationsEnabled: boolean;
   notificationEmail: string;
   isConnected: boolean;
@@ -63,10 +63,10 @@ export const CameraStatus = ({
       {/* Storage Type Indicator */}
       <div className="flex items-center gap-2">
         <span className={`w-2 h-2 rounded-full ${
-          storageType === 'cloud' ? 'bg-blue-500' : 'bg-green-500'
+          storageType === 'supabase' ? 'bg-blue-500' : 'bg-green-500'
         }`}></span>
         <span className="text-xs text-gray-400">
-          {storageType === 'cloud' ? 'Cloud' : 'Local'}
+          {storageType === 'supabase' ? 'Supabase' : 'Local'}
         </span>
       </div>
       

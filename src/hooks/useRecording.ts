@@ -5,11 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useDirectoryPicker } from './useDirectoryPicker';
 import { getRecordingPath } from '@/utils/folderStructure';
-import { CloudStorageFactory } from '@/services/cloudStorage/CloudStorageFactory';
-import type { CloudStorageConfig } from '@/services/cloudStorage/types';
 
 export interface RecordingOptions {
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   fileType: 'video' | 'image';
   quality?: 'high' | 'medium' | 'low';
   motionDetected?: boolean;
@@ -87,7 +85,7 @@ export const useRecording = () => {
       
       toast({
         title: "Recording started",
-        description: `Recording to ${options.storageType} storage`
+        description: `Recording to ${options.storageType === 'supabase' ? 'Supabase' : 'local'} storage`
       });
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -117,8 +115,8 @@ export const useRecording = () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `snapshot_${timestamp}.jpg`;
     
-    if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
+    if (options.storageType === 'supabase') {
+      await saveToSupabase(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
     } else {
       await saveToLocal(blob, filename, 'image', options.motionDetected, options.dateOrganizedFolders);
     }
@@ -247,32 +245,15 @@ export const useRecording = () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `recording_${timestamp}.webm`;
     
-    if (options.storageType === 'cloud') {
-      await saveToCloud(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
+    if (options.storageType === 'supabase') {
+      await saveToSupabase(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
     } else {
       await saveToLocal(blob, filename, 'video', options.motionDetected, options.dateOrganizedFolders);
     }
   };
 
-  const saveToCloud = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean, dateOrganizedFolders?: boolean) => {
+  const saveToSupabase = async (blob: Blob, filename: string, fileType: 'video' | 'image', motionDetected?: boolean, dateOrganizedFolders?: boolean) => {
     try {
-      // Load cloud storage configuration
-      const configStr = localStorage.getItem('cloudStorageConfig');
-      if (!configStr) {
-        throw new Error('No cloud storage configured. Please configure a cloud provider in Settings > Cloud.');
-      }
-
-      const config: CloudStorageConfig = JSON.parse(configStr);
-      const provider = CloudStorageFactory.getProvider(config.provider);
-
-      if (!provider) {
-        throw new Error('Selected cloud provider is not available');
-      }
-
-      if (!provider.isConfigured()) {
-        throw new Error('Cloud provider is not properly configured');
-      }
-
       // Get organized path
       const dateOrganized = dateOrganizedFolders ?? true;
       const folderPath = getRecordingPath({
@@ -281,31 +262,36 @@ export const useRecording = () => {
         motionDetected
       });
 
-      console.log('Uploading to cloud:', { provider: provider.name, path: folderPath, size: blob.size });
+      const filePath = `${folderPath}/${filename}`;
+      console.log('Uploading to Supabase Storage:', { path: filePath, size: blob.size });
 
-      // Upload using the configured provider
-      const uploadResult = await provider.upload(blob, filename, folderPath);
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('recordings')
+        .upload(filePath, blob, {
+          contentType: fileType === 'video' ? 'video/webm' : 'image/jpeg',
+          upsert: false
+        });
 
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed');
+      if (uploadError) {
+        console.error('Supabase Storage error:', uploadError);
+        throw uploadError;
       }
 
       console.log('Upload successful, saving metadata to database');
 
       // Save metadata to database
-      const { data: recording, error: dbError } = await supabase
+      const { error: dbError } = await supabase
         .from('recordings')
         .insert({
           user_id: user!.id,
           filename,
           file_type: fileType,
-          storage_type: 'cloud',
-          file_path: uploadResult.fileId || uploadResult.filePath || filename,
+          storage_type: 'supabase',
+          file_path: uploadData.path,
           file_size: blob.size,
           motion_detected: motionDetected || false
-        })
-        .select()
-        .single();
+        });
 
       if (dbError) {
         console.error('Database error:', dbError);
@@ -313,14 +299,14 @@ export const useRecording = () => {
       }
 
       toast({
-        title: "Saved to cloud",
-        description: `${fileType} saved successfully to ${provider.name}`
+        title: "Saved to Supabase",
+        description: `${fileType} saved securely to cloud storage`
       });
     } catch (error) {
-      console.error('Error saving to cloud:', error);
+      console.error('Error saving to Supabase:', error);
       toast({
-        title: "Cloud save failed",
-        description: error instanceof Error ? error.message : "Could not save to cloud storage",
+        title: "Save failed",
+        description: error instanceof Error ? error.message : "Could not save to storage",
         variant: "destructive"
       });
       throw error;

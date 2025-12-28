@@ -3,7 +3,7 @@ import React from 'react';
 
 interface CameraInfoProps {
   quality: 'high' | 'medium' | 'low';
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   motionDetectionEnabled: boolean;
   motionSensitivity: number;
   emailNotificationsEnabled: boolean;
@@ -39,7 +39,7 @@ export const CameraInfo = ({
           <div className="flex justify-between items-center mb-2">
             <span className="text-gray-300">Storage:</span>
             <span className="text-gray-400">
-              {storageType === 'cloud' ? 'Supabase Cloud' : 'Local Download'}
+              {storageType === 'supabase' ? 'Supabase Storage' : 'Local Download'}
             </span>
           </div>
           <div className="flex justify-between items-center mb-2">

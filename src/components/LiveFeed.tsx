@@ -19,7 +19,7 @@ import { sanitizeCameraConfigForStorage, SanitizedCameraConfig } from "@/utils/s
 interface LiveFeedProps {
   isRecording: boolean;
   onRecordingChange: (recording: boolean) => void;
-  storageType: 'cloud' | 'local';
+  storageType: 'supabase' | 'local';
   quality: 'high' | 'medium' | 'low';
   motionDetectionEnabled: boolean;
   onMotionDetected: (detected: boolean) => void;
