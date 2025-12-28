@@ -41,7 +41,6 @@ export const useCameraSettings = () => {
       console.error('Failed to load settings from localStorage:', error);
     }
   }, []);
-  const [storageType, setStorageType] = useState<'supabase' | 'local'>('supabase');
   const [quality, setQuality] = useState<'high' | 'medium' | 'low'>('medium');
   const [dateOrganizedFolders, setDateOrganizedFolders] = useState(() => {
     try {
@@ -162,7 +161,6 @@ export const useCameraSettings = () => {
     lastMotionTime,
     emailEnabled,
     notificationEmail,
-    storageType,
     quality,
     motionSensitivity,
     motionThreshold,
@@ -180,7 +178,6 @@ export const useCameraSettings = () => {
     
     // Setters
     setIsRecording,
-    setStorageType,
     setQuality,
     setMotionSensitivity,
     setMotionThreshold,

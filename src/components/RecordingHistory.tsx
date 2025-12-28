@@ -1,11 +1,10 @@
 
-import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Video, Camera, Cloud, HardDrive, Download, Trash2, Eye, AlertCircle } from 'lucide-react';
+import { Video, Camera, HardDrive, Trash2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export const RecordingHistory = () => {
@@ -29,93 +28,8 @@ export const RecordingHistory = () => {
     enabled: !!user
   });
 
-  const downloadFromStorage = async (recording: any) => {
-    try {
-      console.log('Downloading:', recording.file_path, 'storage_type:', recording.storage_type);
-      
-      if (recording.storage_type === 'supabase') {
-        // Download from Supabase Storage
-        const { data, error } = await supabase.storage
-          .from('recordings')
-          .download(recording.file_path);
-        
-        if (error) throw error;
-        
-        const url = URL.createObjectURL(data);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = recording.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        toast({
-          title: "Download complete",
-          description: `${recording.filename} downloaded successfully`
-        });
-        return;
-      }
-      
-      toast({
-        title: "Download not available",
-        description: "This file was saved locally and is not available for download",
-        variant: "destructive"
-      });
-    } catch (error) {
-      console.error('Download error:', error);
-      toast({
-        title: "Download failed",
-        description: error instanceof Error ? error.message : "Could not download file",
-        variant: "destructive"
-      });
-    }
-  };
-
-  const viewInBrowser = async (recording: any) => {
-    try {
-      if (recording.storage_type !== 'supabase') {
-        toast({
-          title: "View not available",
-          description: "Can only view Supabase-stored files",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Get a signed URL for the file
-      const { data, error } = await supabase.storage
-        .from('recordings')
-        .createSignedUrl(recording.file_path, 3600); // 1 hour expiry
-      
-      if (error) throw error;
-      
-      // Open in new tab
-      window.open(data.signedUrl, '_blank');
-    } catch (error) {
-      console.error('View error:', error);
-      toast({
-        title: "View failed",
-        description: "Could not open file for viewing",
-        variant: "destructive"
-      });
-    }
-  };
-
   const deleteRecording = async (recording: any) => {
     try {
-      if (recording.storage_type === 'supabase') {
-        console.log('Deleting from Supabase Storage:', recording.file_path);
-        
-        const { error: storageError } = await supabase.storage
-          .from('recordings')
-          .remove([recording.file_path]);
-        
-        if (storageError) {
-          console.warn('Storage deletion warning:', storageError);
-        }
-      }
-      
       const { error: dbError } = await supabase
         .from('recordings')
         .delete()
@@ -129,7 +43,7 @@ export const RecordingHistory = () => {
       refetch();
       toast({
         title: "Recording deleted",
-        description: "Recording removed successfully"
+        description: "Recording metadata removed successfully"
       });
     } catch (error) {
       console.error('Delete error:', error);
@@ -150,15 +64,13 @@ export const RecordingHistory = () => {
   };
 
   const getStorageStats = () => {
-    if (!recordings) return { totalFiles: 0, totalSize: 0, supabaseFiles: 0, localFiles: 0 };
+    if (!recordings) return { totalFiles: 0, totalSize: 0 };
     
     return recordings.reduce((stats, recording) => {
       stats.totalFiles++;
       stats.totalSize += recording.file_size || 0;
-      if (recording.storage_type === 'supabase') stats.supabaseFiles++;
-      else stats.localFiles++;
       return stats;
-    }, { totalFiles: 0, totalSize: 0, supabaseFiles: 0, localFiles: 0 });
+    }, { totalFiles: 0, totalSize: 0 });
   };
 
   if (isLoading) {
@@ -184,21 +96,15 @@ export const RecordingHistory = () => {
         </CardTitle>
         
         {/* Storage Statistics */}
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div className="bg-gray-700 rounded p-3">
-            <div className="flex items-center gap-2 text-blue-400 mb-1">
-              <Cloud className="w-4 h-4" />
-              <span>Supabase Storage</span>
-            </div>
-            <div className="text-white font-semibold">{stats.supabaseFiles} files</div>
+        <div className="bg-gray-700 rounded p-3">
+          <div className="flex items-center gap-2 text-green-400 mb-1">
+            <HardDrive className="w-4 h-4" />
+            <span>Local Storage</span>
           </div>
-          <div className="bg-gray-700 rounded p-3">
-            <div className="flex items-center gap-2 text-green-400 mb-1">
-              <HardDrive className="w-4 h-4" />
-              <span>Local Storage</span>
-            </div>
-            <div className="text-white font-semibold">{stats.localFiles} files</div>
-          </div>
+          <div className="text-white font-semibold">{stats.totalFiles} files</div>
+          <p className="text-xs text-gray-400 mt-1">
+            Files are saved directly to your device
+          </p>
         </div>
       </CardHeader>
       
@@ -224,11 +130,7 @@ export const RecordingHistory = () => {
                   ) : (
                     <Camera className="w-5 h-5 text-green-400" />
                   )}
-                  {recording.storage_type === 'supabase' ? (
-                    <Cloud className="w-4 h-4 text-blue-300" />
-                  ) : (
-                    <HardDrive className="w-4 h-4 text-green-300" />
-                  )}
+                  <HardDrive className="w-4 h-4 text-green-300" />
                   {recording.motion_detected && (
                     <AlertCircle className="w-4 h-4 text-orange-400" />
                   )}
@@ -244,37 +146,12 @@ export const RecordingHistory = () => {
                   </div>
                   
                   <div className="text-xs text-gray-500 mt-1">
-                    {recording.storage_type === 'supabase' ? 'Supabase Storage' : 'Local Download'}
+                    Local Download
                   </div>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
-                {recording.storage_type === 'supabase' && (
-                  <>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => viewInBrowser(recording)}
-                      className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                      aria-label="View in browser"
-                      title="View in browser"
-                    >
-                      <Eye className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => downloadFromStorage(recording)}
-                      className="border-gray-600 text-gray-300 hover:bg-gray-600"
-                      aria-label="Download file"
-                      title="Download file"
-                    >
-                      <Download className="w-4 h-4" />
-                    </Button>
-                  </>
-                )}
-                
                 <Button
                   size="sm"
                   variant="outline"

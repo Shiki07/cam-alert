@@ -1,6 +1,6 @@
 
 import { Button } from "@/components/ui/button";
-import { Camera, Square, Play, CameraIcon, Settings, Wifi, WifiOff } from "lucide-react";
+import { Camera, Square, Play, CameraIcon, Settings, Wifi, WifiOff, HardDrive } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 
 interface CameraControlsProps {
@@ -10,7 +10,6 @@ interface CameraControlsProps {
   isConnected?: boolean;
   onSnapshot?: () => void;
   onShowSettings?: () => void;
-  storageType?: 'supabase' | 'local';
   storageUsedPercent?: number;
   storageWarningLevel?: 'safe' | 'warning' | 'danger' | 'critical';
   liveFeedRef?: React.RefObject<any>;
@@ -24,7 +23,6 @@ export const CameraControls = ({
   isConnected = false,
   onSnapshot,
   onShowSettings,
-  storageType = 'supabase',
   storageUsedPercent = 0,
   storageWarningLevel = 'safe',
   liveFeedRef,
@@ -32,11 +30,9 @@ export const CameraControls = ({
 }: CameraControlsProps) => {
   const { toast } = useToast();
 
-  // Use LiveFeed's actual recording state if available for accurate status
   const actualIsRecording = liveFeedRef?.current?.isRecording ?? isRecording;
 
   const handleToggleRecording = async () => {
-    // Check if Pi service is unavailable before attempting network camera recording
     if (piServiceConnected === false && !actualIsRecording) {
       toast({
         title: "Recording service unavailable",
@@ -46,7 +42,6 @@ export const CameraControls = ({
       return;
     }
 
-    // Use LiveFeed's unified recording logic if available
     if (liveFeedRef?.current?.toggleRecording) {
       try {
         await liveFeedRef.current.toggleRecording();
@@ -59,7 +54,6 @@ export const CameraControls = ({
         });
       }
     } else {
-      // Fallback to the old prop-based method
       onToggleRecording();
     }
   };
@@ -150,7 +144,7 @@ export const CameraControls = ({
           )}
         </div>
 
-        {/* Pi Service Status Warning (for network cameras) */}
+        {/* Pi Service Status Warning */}
         {piServiceConnected === false && (
           <div className="flex items-center gap-2 p-2 bg-orange-500/20 rounded border border-orange-500/30">
             <WifiOff className="w-4 h-4 text-orange-500" />
@@ -200,7 +194,7 @@ export const CameraControls = ({
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Storage:</span>
             <span className={`text-sm font-medium ${getStorageColor()}`} title="Click Settings to manage storage tier">
-              {storageType === 'supabase' ? '☁️ ' : '💾 '}{getStorageDisplay()}
+              <HardDrive className="w-3 h-3 inline mr-1" />{getStorageDisplay()}
             </span>
           </div>
         </div>

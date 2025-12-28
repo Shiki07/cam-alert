@@ -17,8 +17,6 @@ interface CameraSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   
   // Storage Settings
-  storageType: 'supabase' | 'local';
-  onStorageTypeChange: (type: 'supabase' | 'local') => void;
   quality: 'high' | 'medium' | 'low';
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
   
@@ -63,8 +61,6 @@ interface CameraSettingsDialogProps {
 export const CameraSettingsDialog = ({
   open,
   onOpenChange,
-  storageType,
-  onStorageTypeChange,
   quality,
   onQualityChange,
   dateOrganizedFolders,
@@ -120,8 +116,6 @@ export const CameraSettingsDialog = ({
 
           <TabsContent value="storage" className="space-y-4 mt-4">
             <StorageSettings
-              storageType={storageType}
-              onStorageTypeChange={onStorageTypeChange}
               quality={quality}
               onQualityChange={onQualityChange}
             />
@@ -133,7 +127,6 @@ export const CameraSettingsDialog = ({
 
           <TabsContent value="folder" className="space-y-4 mt-4">
             <FolderSettings 
-              storageType={storageType}
               dateOrganizedFolders={dateOrganizedFolders}
               onDateOrganizedToggle={onDateOrganizedToggle}
               piVideoPath={piVideoPath}

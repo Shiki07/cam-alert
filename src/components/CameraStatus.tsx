@@ -7,7 +7,6 @@ interface CameraStatusProps {
   scheduleEnabled: boolean;
   isWithinSchedule: boolean;
   currentMotionLevel: number;
-  storageType: 'supabase' | 'local';
   emailNotificationsEnabled: boolean;
   notificationEmail: string;
   isConnected: boolean;
@@ -23,7 +22,6 @@ export const CameraStatus = ({
   scheduleEnabled,
   isWithinSchedule,
   currentMotionLevel,
-  storageType,
   emailNotificationsEnabled,
   notificationEmail,
   isConnected,
@@ -62,12 +60,8 @@ export const CameraStatus = ({
       
       {/* Storage Type Indicator */}
       <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${
-          storageType === 'supabase' ? 'bg-blue-500' : 'bg-green-500'
-        }`}></span>
-        <span className="text-xs text-gray-400">
-          {storageType === 'supabase' ? 'Supabase' : 'Local'}
-        </span>
+        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+        <span className="text-xs text-gray-400">Local</span>
       </div>
       
       {/* Email Notification Status */}

@@ -12,7 +12,6 @@ interface CameraGridProps {
   // Live Feed Props
   isRecording: boolean;
   onRecordingChange: (recording: boolean) => void;
-  storageType: 'supabase' | 'local';
   quality: 'high' | 'medium' | 'low';
   motionDetectionEnabled: boolean;
   onMotionDetected: (detected: boolean) => void;
@@ -44,7 +43,6 @@ interface CameraGridProps {
   storageLimitGB?: number;
 
   // Settings Props
-  onStorageTypeChange: (type: 'supabase' | 'local') => void;
   onQualityChange: (quality: 'high' | 'medium' | 'low') => void;
   onToggleRecording: () => void;
   motionDetected: boolean;
@@ -70,7 +68,6 @@ interface CameraGridProps {
 export const CameraGrid = ({
   isRecording,
   onRecordingChange,
-  storageType,
   quality,
   motionDetectionEnabled,
   onMotionDetected,
@@ -94,7 +91,6 @@ export const CameraGrid = ({
   storageUsedPercent = 0,
   storageWarningLevel = 'safe',
   storageLimitGB = 5,
-  onStorageTypeChange,
   onQualityChange,
   onToggleRecording,
   motionDetected,
@@ -124,7 +120,6 @@ export const CameraGrid = ({
           ref={liveFeedRef}
           isRecording={isRecording} 
           onRecordingChange={onRecordingChange}
-          storageType={storageType}
           quality={quality}
           motionDetectionEnabled={motionDetectionEnabled}
           onMotionDetected={onMotionDetected}
@@ -155,8 +150,6 @@ export const CameraGrid = ({
         <DuckDNSSettings />
         
         <StorageSettings
-          storageType={storageType}
-          onStorageTypeChange={onStorageTypeChange}
           quality={quality}
           onQualityChange={onQualityChange}
         />
@@ -166,7 +159,6 @@ export const CameraGrid = ({
           onToggleRecording={onToggleRecording}
           quality={quality}
           isConnected={isConnected}
-          storageType={storageType}
           onSnapshot={onSnapshot}
           onShowSettings={() => setSettingsOpen(true)}
           storageUsedPercent={storageUsedPercent}
@@ -211,8 +203,6 @@ export const CameraGrid = ({
       <CameraSettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
-        storageType={storageType}
-        onStorageTypeChange={onStorageTypeChange}
         quality={quality}
         onQualityChange={onQualityChange}
         dateOrganizedFolders={dateOrganizedFolders}
