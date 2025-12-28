@@ -56,6 +56,42 @@ export type Database = {
         }
         Relationships: []
       }
+      cloud_storage_tokens: {
+        Row: {
+          access_token_encrypted: string
+          created_at: string
+          id: string
+          provider: string
+          provider_metadata: Json | null
+          refresh_token_encrypted: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token_encrypted: string
+          created_at?: string
+          id?: string
+          provider: string
+          provider_metadata?: Json | null
+          refresh_token_encrypted?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token_encrypted?: string
+          created_at?: string
+          id?: string
+          provider?: string
+          provider_metadata?: Json | null
+          refresh_token_encrypted?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       motion_events: {
         Row: {
           cleared_at: string | null
