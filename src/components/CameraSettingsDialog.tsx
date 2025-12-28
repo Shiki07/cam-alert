@@ -11,7 +11,6 @@ import { NotificationSettings } from "./NotificationSettings";
 import { UnifiedMotionDetection } from "./UnifiedMotionDetection";
 import { FolderSettings } from "./FolderSettings";
 import { StorageTierSettings } from "./StorageTierSettings";
-import { CloudStorageSettings } from "./CloudStorageSettings";
 
 interface CameraSettingsDialogProps {
   open: boolean;
@@ -111,9 +110,8 @@ export const CameraSettingsDialog = ({
         </DialogHeader>
 
         <Tabs defaultValue="storage" className="w-full">
-          <TabsList className="grid w-full grid-cols-6 bg-secondary">
+          <TabsList className="grid w-full grid-cols-5 bg-secondary">
             <TabsTrigger value="storage">Storage</TabsTrigger>
-            <TabsTrigger value="cloud">Cloud</TabsTrigger>
             <TabsTrigger value="tier">Tier</TabsTrigger>
             <TabsTrigger value="folder">Folder</TabsTrigger>
             <TabsTrigger value="motion">Motion</TabsTrigger>
@@ -127,10 +125,6 @@ export const CameraSettingsDialog = ({
               quality={quality}
               onQualityChange={onQualityChange}
             />
-          </TabsContent>
-
-          <TabsContent value="cloud" className="space-y-4 mt-4">
-            <CloudStorageSettings />
           </TabsContent>
 
           <TabsContent value="tier" className="space-y-4 mt-4">
