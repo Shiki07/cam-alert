@@ -29,7 +29,7 @@ const Header = () => {
           <div className="flex flex-col gap-2">
             <h1 className="text-xl lg:text-2xl font-bold text-white">RPi CamAlert</h1>
             <div className="px-2 py-1 bg-red-600/20 border border-red-600/30 rounded-md">
-              <span className="text-red-200 text-xs font-medium">⚠️ VPN Not Supported</span>
+              <span className="text-red-200 text-xs font-medium">⚠️ VPN Not Supported for Raspberry Pi</span>
             </div>
           </div>
         </div>
@@ -72,7 +72,7 @@ const Header = () => {
           <div className="flex flex-col">
             <h1 className="text-lg font-bold text-white">RPi CamAlert</h1>
             <div className="px-2 py-0.5 bg-red-600/20 border border-red-600/30 rounded text-xs text-red-200 mt-1">
-              ⚠️ VPN Not Supported
+              ⚠️ VPN Not Supported for Pi
             </div>
           </div>
           <div className="flex items-center gap-2">
