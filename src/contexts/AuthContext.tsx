@@ -138,7 +138,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       // Redirect to /auth to handle the verification callback
-      const redirectUrl = `${window.location.origin}/auth`;
+      // Use production domain for email verification links
+      const redirectUrl = window.location.hostname === 'localhost' 
+        ? `${window.location.origin}/auth`
+        : 'https://rpicamalert.xyz/auth';
       
       const { error } = await supabase.auth.signUp({
         email: email.toLowerCase().trim(),
