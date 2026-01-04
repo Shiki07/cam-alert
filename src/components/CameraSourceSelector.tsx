@@ -16,8 +16,8 @@ interface CameraSourceSelectorProps {
   currentSource: CameraSource;
   onSourceChange: (source: CameraSource) => void;
   networkCameras: NetworkCameraConfig[];
-  onAddNetworkCamera: (config: NetworkCameraConfig) => void;
-  onRemoveNetworkCamera: (index: number) => void;
+  onAddNetworkCamera: (config: NetworkCameraConfig) => void | Promise<void>;
+  onRemoveNetworkCamera: (index: number) => void | Promise<void>;
   onConnectNetworkCamera: (config: NetworkCameraConfig) => void;
   onTestConnection: (config: NetworkCameraConfig) => Promise<boolean>;
   selectedNetworkCamera: NetworkCameraConfig | null;
