@@ -75,7 +75,7 @@ const Index = () => {
         {/* Top Banner - Hidden on mobile for space */}
         <div className="py-2 sm:py-3 hidden sm:block">
           <div className="container mx-auto px-4 text-center">
-            <p className="text-muted-foreground text-xs sm:text-sm">
+            <p className="text-muted-foreground text-sm sm:text-base md:text-lg">
               Want control for more cameras? Visit{" "}
               <a 
                 href="https://camerastream.live" 
