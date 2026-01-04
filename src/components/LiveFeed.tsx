@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import { useState, useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from "react";
 import { useRecording } from "@/hooks/useRecording";
 import { usePiRecording } from "@/hooks/usePiRecording";
 import { useEnhancedMotionDetection } from "@/hooks/useEnhancedMotionDetection";
@@ -6,6 +6,7 @@ import { useImageMotionDetection } from "@/hooks/useImageMotionDetection";
 import { useMotionNotification } from "@/hooks/useMotionNotification";
 import { useNetworkCamera, NetworkCameraConfig } from "@/hooks/useNetworkCamera";
 import { useConnectionMonitor } from "@/hooks/useConnectionMonitor";
+import { useCameraCredentials } from "@/hooks/useCameraCredentials";
 import { CameraSourceSelector, CameraSource } from "@/components/CameraSourceSelector";
 import { VideoDisplay } from "@/components/VideoDisplay";
 import { CameraStatus } from "@/components/CameraStatus";
@@ -92,6 +93,9 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
   const recording = useRecording();
   const piRecording = usePiRecording();
   const networkCamera = useNetworkCamera();
+  
+  // Use Supabase-backed camera credentials as primary storage
+  const cameraCredentials = useCameraCredentials();
   
   const connectionMonitor = useConnectionMonitor(
     cameraSource === 'network' ? networkCamera.currentConfig?.url : undefined,
@@ -559,45 +563,156 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
     };
   }, []);
 
-  // Load network cameras from storage (per-user) and avoid overwriting on storage errors
+  // Load network cameras from Supabase (primary) with localStorage as fallback cache
   useEffect(() => {
-    let parsed: NetworkCameraConfig[] | null = null;
-
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        parsed = JSON.parse(saved);
-      } else if (storageKey !== 'networkCameras') {
-        // Backward compatibility: migrate legacy key into per-user storage
-        const legacy = localStorage.getItem('networkCameras');
-        if (legacy) {
-          parsed = JSON.parse(legacy);
-          localStorage.setItem(storageKey, JSON.stringify(parsed));
+    const loadCameras = async () => {
+      // Wait for Supabase credentials to load
+      if (cameraCredentials.isLoading) return;
+      
+      // If Supabase has cameras, use those as the source of truth
+      if (cameraCredentials.credentials.length > 0) {
+        console.log('Loading cameras from Supabase:', cameraCredentials.credentials.length);
+        const camerasFromSupabase: NetworkCameraConfig[] = cameraCredentials.credentials.map(cred => ({
+          name: cred.camera_label,
+          type: 'mjpeg' as const,
+          url: `${cred.scheme}://${cred.host}:${cred.port}${cred.path}`,
+          username: cred.username || undefined,
+          password: cred.password || undefined
+        }));
+        setNetworkCameras(camerasFromSupabase);
+        setNetworkCamerasLoaded(true);
+        
+        // Update localStorage cache
+        try {
+          const sanitizedConfigs: SanitizedCameraConfig[] = camerasFromSupabase.map(
+            cam => sanitizeCameraConfigForStorage(cam)
+          );
+          localStorage.setItem(storageKey, JSON.stringify(sanitizedConfigs));
+        } catch (e) {
+          console.warn('Failed to update localStorage cache', e);
         }
+        return;
       }
+      
+      // Fallback: try loading from localStorage if Supabase is empty
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log('Loading cameras from localStorage fallback:', parsed.length);
+            setNetworkCameras(parsed);
+            
+            // Migrate localStorage cameras to Supabase for persistence
+            for (const cam of parsed) {
+              await cameraCredentials.saveCredential(
+                cam.name,
+                cam.url,
+                cam.username,
+                cam.password
+              );
+            }
+            console.log('Migrated localStorage cameras to Supabase');
+          }
+        } else if (storageKey !== 'networkCameras') {
+          // Backward compatibility: migrate legacy key
+          const legacy = localStorage.getItem('networkCameras');
+          if (legacy) {
+            const parsed = JSON.parse(legacy);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setNetworkCameras(parsed);
+              localStorage.setItem(storageKey, JSON.stringify(parsed));
+              
+              // Migrate to Supabase
+              for (const cam of parsed) {
+                await cameraCredentials.saveCredential(
+                  cam.name,
+                  cam.url,
+                  cam.username,
+                  cam.password
+                );
+              }
+            }
+          }
+        }
+        setNetworkCamerasLoaded(true);
+      } catch (e) {
+        console.warn('Failed to load saved network cameras:', e);
+        setNetworkCamerasLoaded(true); // Still mark as loaded to prevent infinite loop
+      }
+    };
+    
+    loadCameras();
+  }, [cameraCredentials.credentials, cameraCredentials.isLoading, storageKey]);
 
-      setNetworkCameras(Array.isArray(parsed) ? parsed : []);
-      setNetworkCamerasLoaded(true);
-    } catch (e) {
-      // Critical: do NOT default to [] and then persist it (would look like "random deletion")
-      console.warn('Failed to load saved network cameras; keeping in-memory list only.', e);
-      setNetworkCamerasLoaded(false);
+  // Handle adding a new camera - save to Supabase
+  const handleAddNetworkCamera = useCallback(async (config: NetworkCameraConfig) => {
+    // Save to Supabase first (primary storage)
+    const success = await cameraCredentials.saveCredential(
+      config.name,
+      config.url,
+      config.username,
+      config.password
+    );
+    
+    if (success) {
+      // Update local state immediately for responsive UI
+      setNetworkCameras(prev => [...prev, config]);
+      toast({
+        title: "Camera saved",
+        description: `${config.name} has been saved to your account`,
+      });
+    } else {
+      toast({
+        title: "Failed to save camera",
+        description: "Could not save camera to your account. Please try again.",
+        variant: "destructive",
+      });
     }
-  }, [storageKey]);
+  }, [cameraCredentials, toast]);
 
-  // SECURITY: Save network cameras to localStorage WITHOUT passwords
-  useEffect(() => {
-    if (!networkCamerasLoaded) return;
-    try {
-      // Sanitize configs to remove passwords before storing
-      const sanitizedConfigs: SanitizedCameraConfig[] = networkCameras.map(
-        cam => sanitizeCameraConfigForStorage(cam)
-      );
-      localStorage.setItem(storageKey, JSON.stringify(sanitizedConfigs));
-    } catch (e) {
-      console.warn('Failed to persist network cameras to storage.', e);
+  // Handle removing a camera - delete from Supabase
+  const handleRemoveNetworkCamera = useCallback(async (index: number) => {
+    const camera = networkCameras[index];
+    if (!camera) return;
+    
+    // Find the credential by camera label
+    const credential = cameraCredentials.credentials.find(
+      c => c.camera_label === camera.name
+    );
+    
+    if (credential) {
+      const success = await cameraCredentials.deleteCredential(credential.id);
+      if (success) {
+        setNetworkCameras(prev => prev.filter((_, i) => i !== index));
+        
+        // Update localStorage cache
+        try {
+          const updatedCameras = networkCameras.filter((_, i) => i !== index);
+          const sanitizedConfigs: SanitizedCameraConfig[] = updatedCameras.map(
+            cam => sanitizeCameraConfigForStorage(cam)
+          );
+          localStorage.setItem(storageKey, JSON.stringify(sanitizedConfigs));
+        } catch (e) {
+          console.warn('Failed to update localStorage cache', e);
+        }
+        
+        toast({
+          title: "Camera removed",
+          description: `${camera.name} has been removed from your account`,
+        });
+      } else {
+        toast({
+          title: "Failed to remove camera",
+          description: "Could not remove camera from your account. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } else {
+      // Fallback: just remove from local state if not found in Supabase
+      setNetworkCameras(prev => prev.filter((_, i) => i !== index));
     }
-  }, [networkCameras, networkCamerasLoaded, storageKey]);
+  }, [networkCameras, cameraCredentials, storageKey, toast]);
 
   // Restart camera when quality changes to apply new settings
   useEffect(() => {
@@ -771,11 +886,8 @@ export const LiveFeed = forwardRef<LiveFeedHandle, LiveFeedProps>(({
         currentSource={cameraSource}
         onSourceChange={handleSourceChange}
         networkCameras={networkCameras}
-        onAddNetworkCamera={(config) => {
-          console.log('LiveFeed: Adding network camera:', config);
-          setNetworkCameras(prev => [...prev, config]);
-        }}
-        onRemoveNetworkCamera={(index) => setNetworkCameras(prev => prev.filter((_, i) => i !== index))}
+        onAddNetworkCamera={handleAddNetworkCamera}
+        onRemoveNetworkCamera={handleRemoveNetworkCamera}
         onConnectNetworkCamera={handleConnectNetworkCamera}
         onTestConnection={networkCamera.testConnection}
         selectedNetworkCamera={networkCamera.currentConfig}
