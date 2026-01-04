@@ -1,6 +1,6 @@
 # CamAlert - Smart Camera Monitoring System
 
-A powerful web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
+A powerful and open-source web-based camera monitoring system with motion detection, email alerts, and automatic recording storage to your Raspberry Pi's SD card.
 
 📸 Using a Webcam is way easier than using a Raspberry Pi + Camera, but if you wanna tinker with a Pi no one is stopping you.
 
