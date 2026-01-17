@@ -1,9 +1,41 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.50.2';
-import { Resend } from "npm:resend@2.0.0";
 
-const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
+// Resend API for sending emails
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
+
+// Helper to send emails via Resend API directly (avoiding npm: import issues)
+const sendEmail = async (emailData: {
+  from: string;
+  to: string[];
+  subject: string;
+  html: string;
+}): Promise<{ data?: { id: string }; error?: { message: string } }> => {
+  if (!RESEND_API_KEY) {
+    return { error: { message: 'Resend API key not configured' } };
+  }
+  
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(emailData),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      return { error: { message: errorData.message || `HTTP ${response.status}` } };
+    }
+    
+    const data = await response.json();
+    return { data: { id: data.id } };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : 'Unknown error' } };
+  }
+};
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -219,7 +251,7 @@ const handler = async (req: Request): Promise<Response> => {
       console.log('No attachment data provided');
     }
 
-    const emailResponse = await resend.emails.send(emailData);
+    const emailResponse = await sendEmail(emailData);
     
     if (emailResponse.error) {
       console.error('Resend API error:', emailResponse.error);
