@@ -88,7 +88,13 @@ serve(async (req) => {
     }
 
     if (!targetUrl) {
-      targetUrl = 'http://alepava.duckdns.org:8000';
+      return new Response(JSON.stringify({ 
+        error: 'Missing required parameter', 
+        message: 'Please provide a camera URL via the "url" query parameter or in the request body' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
     
     // Authenticate user
