@@ -2,13 +2,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const ALLOWED_ORIGINS = [
+  'https://rpicamalert.xyz',
+  'https://rpi-cam-alert.lovable.app',
+  'https://id-preview--3a2dcd38-f0bd-41cb-8bf3-82eae6d584eb.lovable.app',
+];
+
 const getCorsHeaders = (req: Request) => {
-  const origin = req.headers.get('origin');
+  const origin = req.headers.get('origin') || '';
+  const isAllowed =
+    ALLOWED_ORIGINS.includes(origin) ||
+    /^https:\/\/([a-z0-9-]+\.)*lovable\.app$/i.test(origin) ||
+    /^https:\/\/([a-z0-9-]+\.)*lovableproject\.com$/i.test(origin);
+  const allowOrigin = isAllowed ? origin : ALLOWED_ORIGINS[0];
   return {
-    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, cache-control, pragma, accept',
     'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
-    'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Expose-Headers': 'content-type, content-length'
   };
 };
